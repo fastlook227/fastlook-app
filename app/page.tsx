@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { jsPDF } from 'jspdf'
 import { supabase } from '@/lib/supabase'
 
 export default function Home() {
@@ -511,17 +512,101 @@ export default function Home() {
     return texto
   }
 
-  const descargarTicket = () => {
-    const texto = generarTextoTicket()
-    const blob = new Blob([texto], { type: 'text/plain' })
-    const url = URL.createObjectURL(blob)
+  const cargarImagenBase64 = async (url: string) => {
+    const response = await fetch(url)
+    const blob = await response.blob()
 
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `ticket-fast-look-${Date.now()}.txt`
-    a.click()
+    return new Promise<string>((resolve) => {
+      const reader = new FileReader()
+      reader.onloadend = () => resolve(reader.result as string)
+      reader.readAsDataURL(blob)
+    })
+  }
 
-    URL.revokeObjectURL(url)
+  const descargarTicket = async () => {
+    if (carrito.length === 0) {
+      alert('No hay productos en el ticket')
+      return
+    }
+
+    const altoBase = 120
+    const altoPorProducto = carrito.length * 14
+    const altoTicket = Math.max(180, altoBase + altoPorProducto)
+
+    const doc = new jsPDF({
+      orientation: 'portrait',
+      unit: 'mm',
+      format: [80, altoTicket],
+    })
+
+    let y = 8
+
+    const folio = Date.now().toString().slice(-6)
+    const fecha = new Date().toLocaleString('es-MX')
+
+    const logoUrl = 'https://i.postimg.cc/T1KLqYXb/Chat-GPT-Image-4-dic-2025-11-34-20-p-m.png'
+
+    try {
+      const logoBase64 = await cargarImagenBase64(logoUrl)
+      doc.addImage(logoBase64, 'PNG', 25, y, 30, 30)
+      y += 34
+    } catch (error) {
+      y += 4
+    }
+
+    doc.setFontSize(11)
+    doc.text('FAST LOOK', 40, y, { align: 'center' })
+    y += 5
+
+    doc.setFontSize(8)
+    doc.text('Accesorios para moto', 40, y, { align: 'center' })
+    y += 7
+
+    doc.setFontSize(8)
+    doc.text(`Folio: ${folio}`, 5, y)
+    y += 4
+    doc.text(`Fecha: ${fecha}`, 5, y)
+    y += 4
+    doc.text(`Método de pago: ${metodoPago}`, 5, y)
+    y += 6
+
+    doc.line(5, y, 75, y)
+    y += 5
+
+    carrito.forEach((item) => {
+      const nombre = String(item.nombre || '')
+      const precio = Number(item.precio || 0)
+      const cantidad = Number(item.cantidad || 0)
+      const subtotal = precio * cantidad
+
+      doc.setFontSize(8)
+
+      const nombreCortado =
+        nombre.length > 28 ? nombre.slice(0, 28) + '...' : nombre
+
+      doc.text(nombreCortado, 5, y)
+      y += 4
+
+      doc.text(`${cantidad} x $${precio.toFixed(2)}`, 5, y)
+      doc.text(`$${subtotal.toFixed(2)}`, 75, y, { align: 'right' })
+
+      y += 5
+    })
+
+    doc.line(5, y, 75, y)
+    y += 6
+
+    doc.setFontSize(12)
+    doc.text('TOTAL:', 5, y)
+    doc.text(`$${totalCarrito.toFixed(2)}`, 75, y, { align: 'right' })
+    y += 8
+
+    doc.setFontSize(8)
+    doc.text('Gracias por tu compra', 40, y, { align: 'center' })
+    y += 4
+    doc.text('FAST LOOK', 40, y, { align: 'center' })
+
+    doc.save(`ticket-fastlook-${folio}.pdf`)
   }
 
   const enviarWhatsApp = () => {
