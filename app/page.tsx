@@ -1171,43 +1171,55 @@ export default function Home() {
               Limpiar formulario
             </button>
 
-            <h3>Productos registrados</h3>
+                        <h3>Productos registrados</h3>
 
-            {productos.map((p) => (
-              <div key={p.id} style={styles.card}>
+            <input
+            style={styles.input}
+            placeholder="Buscar en inventario por nombre, código, tipo, ubicación o proveedor..."
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+            />
+
+            <p>
+            Mostrando <b>{productosFiltrados.length}</b> de <b>{productos.length}</b> productos
+            </p>
+
+            {productosFiltrados.map((p) => (
+            <div key={p.id} style={styles.card}>
                 {p.imagen_url && <img src={p.imagen_url} alt={p.nombre} style={styles.image} />}
                 <h3>{p.nombre}</h3>
                 <p><b>Código:</b> {p.codigo}</p>
                 <p><b>Precio:</b> ${p.precio}</p>
                 {usuarioRol === 'Admin' && (
-                  <p><b>Costo:</b> ${p.costo || 0}</p>
+                <p><b>Costo:</b> ${p.costo || 0}</p>
                 )}
                 <p><b>Stock:</b> {p.stock}</p>
                 <p><b>Stock mínimo:</b> {p.stock_minimo || 5}</p>
+
                 <button style={styles.redButton} onClick={() => editarProducto(p)}>
-                  Editar
+                Editar
                 </button>
 
                 <button
-                  style={styles.blackButton}
-                  onClick={() => {
+                style={styles.blackButton}
+                onClick={() => {
                     const cantidad = Number(prompt('¿Cuántas piezas entraron?'))
                     if (!isNaN(cantidad)) entradaStock(p, cantidad)
-                  }}
+                }}
                 >
-                  Entrada de stock
+                Entrada de stock
                 </button>
 
                 <button
-                  style={styles.grayButton}
-                  onClick={() => {
+                style={styles.grayButton}
+                onClick={() => {
                     const nuevoStock = Number(prompt('Nuevo stock total'))
                     if (!isNaN(nuevoStock)) ajustarStock(p, nuevoStock)
-                  }}
+                }}
                 >
-                  Ajustar stock
+                Ajustar stock
                 </button>
-              </div>
+            </div>
             ))}
           </>
         )}
