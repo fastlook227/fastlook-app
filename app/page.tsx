@@ -1065,64 +1065,110 @@ export default function Home() {
           </>
         )}
 
-        {tab === 'venta' && (
+                {tab === 'venta' && (
           <>
             <h2>Generar venta</h2>
 
-            <input style={styles.input} placeholder="Buscar producto para vender..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)} />
+            <div style={styles.ventaLayout}>
+              <div style={styles.productosVenta}>
+                <input
+                  style={styles.input}
+                  placeholder="Buscar producto para vender..."
+                  value={busqueda}
+                  onChange={(e) => setBusqueda(e.target.value)}
+                />
 
-            <select value={metodoPago} onChange={(e) => setMetodoPago(e.target.value)} style={styles.input}>
-              <option value="Efectivo">Efectivo</option>
-              <option value="Transferencia">Transferencia</option>
-              <option value="Tarjeta">Tarjeta</option>
-            </select>
+                <h3>Productos</h3>
 
-            <h3>Productos</h3>
-            {productosFiltrados.map((p) => (
-              <div key={p.id} style={styles.card}>
-                {p.imagen_url && <img src={p.imagen_url} alt={p.nombre} style={styles.image} />}
-                <h3>{p.nombre}</h3>
-                <p><b>Precio:</b> ${p.precio}</p>
-                <p><b>Stock:</b> {p.stock}</p>
-                <button style={styles.redButton} onClick={() => agregarAlCarrito(p)}>
-                  Añadir al ticket
-                </button>
+                {productosFiltrados.map((p) => (
+                  <div key={p.id} style={styles.card}>
+                    {p.imagen_url && (
+                      <img src={p.imagen_url} alt={p.nombre} style={styles.image} />
+                    )}
+
+                    <h3>{p.nombre}</h3>
+                    <p><b>Precio:</b> ${p.precio}</p>
+                    <p><b>Stock:</b> {p.stock}</p>
+
+                    <button style={styles.redButton} onClick={() => agregarAlCarrito(p)}>
+                      Añadir al ticket
+                    </button>
+                  </div>
+                ))}
               </div>
-            ))}
 
-            <h2>Ticket actual</h2>
+              <div style={styles.ticketFijo}>
+                <h2>Ticket actual</h2>
 
-            {carrito.map((item) => (
-              <div key={item.id} style={styles.ticketItem}>
-                <p><b>{item.nombre}</b></p>
-                <p>Precio: ${item.precio}</p>
+                <select
+                  value={metodoPago}
+                  onChange={(e) => setMetodoPago(e.target.value)}
+                  style={styles.input}
+                >
+                  <option value="Efectivo">Efectivo</option>
+                  <option value="Transferencia">Transferencia</option>
+                  <option value="Tarjeta">Tarjeta</option>
+                </select>
 
-                <div style={styles.qtyRow}>
-                  <button style={styles.qtyBtn} onClick={() => disminuirCantidad(item.id)}>-</button>
-                  <input type="number" value={item.cantidad} onChange={(e) => cambiarCantidad(item.id, Number(e.target.value))} style={styles.qtyInput} />
-                  <button style={styles.qtyBtn} onClick={() => aumentarCantidad(item.id)}>+</button>
+                <div style={styles.listaTicket}>
+                  {carrito.length === 0 && (
+                    <p style={{ color: '#666' }}>Aún no hay productos en el ticket.</p>
+                  )}
+
+                  {carrito.map((item) => (
+                    <div key={item.id} style={styles.ticketItem}>
+                      <p><b>{item.nombre}</b></p>
+                      <p>Precio: ${item.precio}</p>
+
+                      <div style={styles.qtyRow}>
+                        <button style={styles.qtyBtn} onClick={() => disminuirCantidad(item.id)}>-</button>
+
+                        <input
+                          type="number"
+                          value={item.cantidad}
+                          onChange={(e) => cambiarCantidad(item.id, Number(e.target.value))}
+                          style={styles.qtyInput}
+                        />
+
+                        <button style={styles.qtyBtn} onClick={() => aumentarCantidad(item.id)}>+</button>
+                      </div>
+
+                      <p>Subtotal: ${Number(item.precio) * item.cantidad}</p>
+
+                      <button style={styles.blackButton} onClick={() => eliminarDelCarrito(item.id)}>
+                        Eliminar
+                      </button>
+                    </div>
+                  ))}
                 </div>
 
-                <p>Subtotal: ${Number(item.precio) * item.cantidad}</p>
+                <div style={styles.ticketBox}>
+                  <h2>Total: ${totalCarrito}</h2>
 
-                <button style={styles.blackButton} onClick={() => eliminarDelCarrito(item.id)}>
-                  Eliminar
+                  {usuarioRol === 'Admin' && (
+                    <p>Ganancia estimada: ${gananciaCarrito}</p>
+                  )}
+
+                  <p>Método de pago: {metodoPago}</p>
+                </div>
+
+                <button style={styles.bigButton} onClick={finalizarVenta}>
+                  Finalizar venta
+                </button>
+
+                <button style={styles.blackButton} onClick={descargarTicket}>
+                  Descargar ticket
+                </button>
+
+                <button style={styles.redButton} onClick={enviarWhatsApp}>
+                  Enviar por WhatsApp
+                </button>
+
+                <button style={styles.grayButton} onClick={cancelarTicket}>
+                  Cancelar ticket
                 </button>
               </div>
-            ))}
-
-            <div style={styles.ticketBox}>
-              <h2>Total: ${totalCarrito}</h2>
-              {usuarioRol === 'Admin' && (
-                <p>Ganancia estimada: ${gananciaCarrito}</p>
-              )}
-              <p>Método de pago: {metodoPago}</p>
             </div>
-
-            <button style={styles.bigButton} onClick={finalizarVenta}>Finalizar venta</button>
-            <button style={styles.blackButton} onClick={descargarTicket}>Descargar ticket</button>
-            <button style={styles.redButton} onClick={enviarWhatsApp}>Enviar por WhatsApp</button>
-            <button style={styles.grayButton} onClick={cancelarTicket}>Cancelar ticket</button>
           </>
         )}
 
@@ -1528,7 +1574,7 @@ const styles: any = {
   nav: { display: 'flex', overflowX: 'auto', gap: 8, padding: 10, backgroundColor: '#111' },
   navBtn: { backgroundColor: '#fff', color: '#000', border: '1px solid #c40000', padding: '10px 14px', borderRadius: 6, whiteSpace: 'nowrap' },
   activeBtn: { backgroundColor: '#c40000', color: '#fff', border: '1px solid #c40000', padding: '10px 14px', borderRadius: 6, whiteSpace: 'nowrap' },
-  main: { padding: 16, maxWidth: 900, margin: '0 auto' },
+  main: { padding: 16, maxWidth: 1200, margin: '0 auto' },
   input: { width: '100%', padding: 12, marginBottom: 12, border: '1px solid #999', borderRadius: 6, fontSize: 16 },
   card: { border: '1px solid #111', borderLeft: '6px solid #c40000', borderRadius: 8, padding: 14, marginBottom: 12, backgroundColor: '#fff' },
   redButton: { backgroundColor: '#c40000', color: '#fff', border: 'none', borderRadius: 6, padding: 10, width: '100%', cursor: 'pointer', marginBottom: 8 },
@@ -1626,5 +1672,37 @@ const styles: any = {
     color: '#ccc',
     marginTop: 8,
   },
+  ventaLayout: {
+  display: 'grid',
+  gridTemplateColumns: '1fr 360px',
+  gap: 16,
+  alignItems: 'start',
+},
 
+productosVenta: {
+  minWidth: 0,
+},
+
+ticketFijo: {
+  position: 'sticky',
+  top: 12,
+  backgroundColor: '#fff',
+  border: '2px solid #111',
+  borderTop: '6px solid #c40000',
+  borderRadius: 10,
+  padding: 14,
+  maxHeight: 'calc(100vh - 24px)',
+  overflowY: 'auto',
+},
+
+listaTicket: {
+  maxHeight: 300,
+  overflowY: 'auto',
+  marginBottom: 10,
+},
+'@media (max-width: 800px)': {
+  ventaLayout: {
+    gridTemplateColumns: '1fr',
+  },
+},
 }
