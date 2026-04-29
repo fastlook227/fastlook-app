@@ -1066,7 +1066,7 @@ export default function Home() {
           </>
         )}
 
-                {tab === 'venta' && (
+{tab === 'venta' && (
   <>
     <h2>Generar venta</h2>
 
