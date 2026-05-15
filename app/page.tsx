@@ -26,6 +26,19 @@ export default function Home() {
   const [clienteTelefono, setClienteTelefono] = useState('')
   const [clienteNombre, setClienteNombre] = useState('')
   const [carritoAbierto, setCarritoAbierto] = useState(false)
+  const [clientes, setClientes] = useState<any[]>([])
+  const [movimientosClientes, setMovimientosClientes] = useState<any[]>([])
+  const [busquedaClientes, setBusquedaClientes] = useState('')
+  const [montoCliente, setMontoCliente] = useState('')
+  const [notaCliente, setNotaCliente] = useState('')
+
+  const [formCliente, setFormCliente] = useState({
+    id: '',
+    nombre: '',
+    numero: '',
+    moto: '',
+    deuda: '',
+  })
 
   const [formProveedor, setFormProveedor] = useState({
     id: '',
@@ -51,12 +64,14 @@ export default function Home() {
   })
 
   useEffect(() => {
-    fetchProductos()
-    fetchVentas()
-    fetchProveedores()
-    fetchMovimientos()
-    fetchCortes()
-  }, [])
+  fetchProductos()
+  fetchVentas()
+  fetchProveedores()
+  fetchMovimientos()
+  fetchCortes()
+  fetchClientes()
+  fetchMovimientosClientes()
+}, [])
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -137,6 +152,34 @@ export default function Home() {
 
     setCortes(data || [])
   }
+
+  const fetchClientes = async () => {
+  const { data, error } = await supabase
+    .from('clientes')
+    .select('*')
+    .order('nombre', { ascending: true })
+
+  if (error) {
+    alert('Error al cargar clientes: ' + error.message)
+    return
+  }
+
+  setClientes(data || [])
+}
+
+const fetchMovimientosClientes = async () => {
+  const { data, error } = await supabase
+    .from('movimientos_clientes')
+    .select('*')
+    .order('created_at', { ascending: false })
+
+  if (error) {
+    alert('Error al cargar movimientos de clientes: ' + error.message)
+    return
+  }
+
+  setMovimientosClientes(data || [])
+}
 
   useEffect(() => {
     const verificarCambioDia = async () => {
@@ -240,6 +283,16 @@ export default function Home() {
       p.proveedor?.toLowerCase().includes(texto)
     )
   })
+
+  const clientesFiltrados = clientes.filter((c) => {
+  const texto = busquedaClientes.toLowerCase()
+
+  return (
+    c.nombre?.toLowerCase().includes(texto) ||
+    c.numero?.toLowerCase().includes(texto) ||
+    c.moto?.toLowerCase().includes(texto)
+  )
+})
 
   const productosBajoStock = productos.filter(
     (p) => Number(p.stock) <= Number(p.stock_minimo || 5)
@@ -777,6 +830,222 @@ export default function Home() {
     window.open(`https://wa.me/52${numeroLimpio}?text=${texto}`, '_blank')
   }
 
+  const guardarCliente = async () => {
+  if (!formCliente.nombre) {
+    alert('El nombre del cliente es obligatorio')
+    return
+  }
+
+  const cliente = {
+    nombre: formCliente.nombre,
+    numero: formCliente.numero,
+    moto: formCliente.moto,
+    deuda: Number(formCliente.deuda || 0),
+  }
+
+  if (formCliente.id) {
+    const { error } = await supabase
+      .from('clientes')
+      .update(cliente)
+      .eq('id', formCliente.id)
+
+    if (error) {
+      alert('Error al editar cliente: ' + error.message)
+      return
+    }
+  } else {
+    const { error } = await supabase
+      .from('clientes')
+      .insert([cliente])
+
+    if (error) {
+      alert('Error al guardar cliente: ' + error.message)
+      return
+    }
+  }
+
+  limpiarCliente()
+  fetchClientes()
+  alert('Cliente guardado')
+}
+
+const editarCliente = (cliente: any) => {
+  setFormCliente({
+    id: cliente.id,
+    nombre: cliente.nombre || '',
+    numero: cliente.numero || '',
+    moto: cliente.moto || '',
+    deuda: cliente.deuda || '',
+  })
+}
+
+const limpiarCliente = () => {
+  setFormCliente({
+    id: '',
+    nombre: '',
+    numero: '',
+    moto: '',
+    deuda: '',
+  })
+}
+
+const registrarAbonoEnCorte = async (cliente: any, monto: number, concepto: string) => {
+  const { error } = await supabase.from('ventas').insert([
+    {
+      producto_id: null,
+      codigo: 'ABONO',
+      nombre: `${concepto} - ${cliente.nombre}`,
+      precio: monto,
+      cantidad: 1,
+      total: monto,
+      metodo_pago: 'Abono',
+    },
+  ])
+
+  if (error) {
+    alert('El movimiento se guardó, pero no se pudo agregar al corte: ' + error.message)
+  }
+}
+
+const registrarMovimientoCliente = async (
+  cliente: any,
+  tipo: string,
+  monto: number,
+  nota: string
+) => {
+  if (monto <= 0) {
+    alert('El monto debe ser mayor a 0')
+    return
+  }
+
+  let nuevaDeuda = Number(cliente.deuda || 0)
+
+  if (tipo === 'DEUDA') {
+    nuevaDeuda += monto
+  }
+
+  if (tipo === 'ABONO') {
+    nuevaDeuda -= monto
+    if (nuevaDeuda < 0) nuevaDeuda = 0
+  }
+
+  if (tipo === 'LIQUIDACION') {
+    nuevaDeuda = 0
+  }
+
+  const { error: errorMovimiento } = await supabase
+    .from('movimientos_clientes')
+    .insert([
+      {
+        cliente_id: cliente.id,
+        tipo,
+        monto,
+        nota,
+      },
+    ])
+
+  if (errorMovimiento) {
+    alert('Error al registrar movimiento: ' + errorMovimiento.message)
+    return
+  }
+
+  const { error: errorCliente } = await supabase
+    .from('clientes')
+    .update({ deuda: nuevaDeuda })
+    .eq('id', cliente.id)
+
+  if (errorCliente) {
+    alert('Error al actualizar deuda: ' + errorCliente.message)
+    return
+  }
+
+  if (tipo === 'ABONO' || tipo === 'LIQUIDACION') {
+    await registrarAbonoEnCorte(cliente, monto, tipo === 'ABONO' ? 'ABONO' : 'LIQUIDACIÓN')
+  }
+
+  setMontoCliente('')
+  setNotaCliente('')
+  fetchClientes()
+  fetchMovimientosClientes()
+  fetchVentas()
+
+  alert('Movimiento registrado')
+}
+
+const abonarCliente = async (cliente: any) => {
+  const monto = Number(prompt('¿Cuánto abonó el cliente?'))
+
+  if (isNaN(monto) || monto <= 0) {
+    alert('Monto inválido')
+    return
+  }
+
+  await registrarMovimientoCliente(cliente, 'ABONO', monto, 'Abono a deuda')
+}
+
+const liquidarCliente = async (cliente: any) => {
+  const deudaActual = Number(cliente.deuda || 0)
+
+  if (deudaActual <= 0) {
+    alert('Este cliente no tiene deuda pendiente')
+    return
+  }
+
+  if (!confirm(`¿Liquidar deuda total de $${deudaActual}?`)) {
+    return
+  }
+
+  await registrarMovimientoCliente(cliente, 'LIQUIDACION', deudaActual, 'Liquidación total')
+}
+
+const agregarDeudaCliente = async (cliente: any) => {
+  const monto = Number(prompt('¿Cuánta deuda quieres añadir?'))
+
+  if (isNaN(monto) || monto <= 0) {
+    alert('Monto inválido')
+    return
+  }
+
+  const nota = prompt('Nota de la deuda') || 'Nueva deuda'
+
+  await registrarMovimientoCliente(cliente, 'DEUDA', monto, nota)
+}
+
+const eliminarClienteSinRegistro = async (cliente: any) => {
+  if (!confirm(`¿Eliminar a ${cliente.nombre} sin conservar registro?`)) {
+    return
+  }
+
+  const { error } = await supabase
+    .from('clientes')
+    .delete()
+    .eq('id', cliente.id)
+
+  if (error) {
+    alert('Error al eliminar cliente: ' + error.message)
+    return
+  }
+
+  fetchClientes()
+  fetchMovimientosClientes()
+  alert('Cliente eliminado')
+}
+
+const abrirWhatsAppCliente = (cliente: any) => {
+  if (!cliente.numero) {
+    alert('Este cliente no tiene número registrado')
+    return
+  }
+
+  const numeroLimpio = cliente.numero.replace(/\D/g, '')
+
+  const mensaje = encodeURIComponent(
+    `Hola ${cliente.nombre}, te recordamos que tienes una deuda pendiente de $${Number(cliente.deuda || 0)} en Fast Look.`
+  )
+
+  window.open(`https://wa.me/52${numeroLimpio}?text=${mensaje}`, '_blank')
+}
+
   const obtenerFechaLocal = (fecha: string | Date) => {
     const d = new Date(fecha)
 
@@ -835,7 +1104,10 @@ export default function Home() {
     )
 
     const productosVendidos = listaVentas.reduce(
-      (acc, v) => acc + Number(v.cantidad || 0),
+      (acc, v) => {
+        if (v.codigo === 'ABONO') return acc
+        return acc + Number(v.cantidad || 0)
+      },
       0
     )
 
@@ -1030,6 +1302,12 @@ export default function Home() {
         <button style={tab === 'venta' ? styles.activeBtn : styles.navBtn} onClick={() => setTab('venta')}>Generar venta</button>
         <button style={tab === 'stock' ? styles.activeBtn : styles.navBtn} onClick={() => setTab('stock')}>Stock bajo</button>
         <button style={tab === 'ia' ? styles.activeBtn : styles.navBtn} onClick={() => setTab('ia')}>Asistente IA</button>
+        <button
+          style={tab === 'clientes' ? styles.activeBtn : styles.navBtn}
+          onClick={() => setTab('clientes')}
+        >
+          Clientes
+        </button>
 
         {usuarioRol === 'Admin' && (
           <>
@@ -1436,6 +1714,133 @@ export default function Home() {
           </div>
         )}
 
+        {tab === 'clientes' && (
+  <>
+    <h2>Clientes</h2>
+
+    <div style={styles.card}>
+      <h3>{formCliente.id ? 'Editar cliente' : 'Agregar cliente'}</h3>
+
+      <input
+        style={styles.input}
+        placeholder="Nombre del cliente *"
+        value={formCliente.nombre}
+        onChange={(e) => setFormCliente({ ...formCliente, nombre: e.target.value })}
+      />
+
+      <input
+        style={styles.input}
+        placeholder="Número de WhatsApp / teléfono (opcional)"
+        value={formCliente.numero}
+        onChange={(e) => setFormCliente({ ...formCliente, numero: e.target.value })}
+      />
+
+      <input
+        style={styles.input}
+        placeholder="¿Qué moto tiene? (opcional)"
+        value={formCliente.moto}
+        onChange={(e) => setFormCliente({ ...formCliente, moto: e.target.value })}
+      />
+
+      <input
+        style={styles.input}
+        type="number"
+        placeholder="Deuda inicial"
+        value={formCliente.deuda}
+        onChange={(e) => setFormCliente({ ...formCliente, deuda: e.target.value })}
+      />
+
+      <button style={styles.bigButton} onClick={guardarCliente}>
+        {formCliente.id ? 'Guardar cambios' : 'Agregar cliente'}
+      </button>
+
+      <button style={styles.grayButton} onClick={limpiarCliente}>
+        Limpiar formulario
+      </button>
+    </div>
+
+    <input
+      style={styles.input}
+      placeholder="Buscar cliente por nombre, número o moto..."
+      value={busquedaClientes}
+      onChange={(e) => setBusquedaClientes(e.target.value)}
+    />
+
+    <p>
+      Mostrando <b>{clientesFiltrados.length}</b> de <b>{clientes.length}</b> clientes
+    </p>
+
+    {clientesFiltrados.length === 0 && (
+      <div style={styles.alert}>No hay clientes registrados.</div>
+    )}
+
+    {clientesFiltrados.map((cliente) => {
+      const movimientosDelCliente = movimientosClientes.filter(
+        (m) => m.cliente_id === cliente.id
+      )
+
+      return (
+        <div key={cliente.id} style={styles.card}>
+          <h3>{cliente.nombre}</h3>
+
+          <p><b>Número:</b> {cliente.numero || 'Sin número'}</p>
+          <p><b>Moto:</b> {cliente.moto || 'No registrada'}</p>
+
+          <div
+            style={
+              Number(cliente.deuda || 0) > 0
+                ? styles.deudaBox
+                : styles.sinDeudaBox
+            }
+          >
+            <b>Deuda pendiente:</b> ${Number(cliente.deuda || 0).toFixed(2)}
+          </div>
+
+          <button style={styles.redButton} onClick={() => agregarDeudaCliente(cliente)}>
+            Añadir más deuda
+          </button>
+
+          <button style={styles.blackButton} onClick={() => abonarCliente(cliente)}>
+            Registrar abono
+          </button>
+
+          <button style={styles.bigButton} onClick={() => liquidarCliente(cliente)}>
+            Liquidación total
+          </button>
+
+          {cliente.numero && (
+            <button style={styles.grayButton} onClick={() => abrirWhatsAppCliente(cliente)}>
+              Recordar por WhatsApp
+            </button>
+          )}
+
+          <button style={styles.grayButton} onClick={() => editarCliente(cliente)}>
+            Editar cliente
+          </button>
+
+          <button style={styles.blackButton} onClick={() => eliminarClienteSinRegistro(cliente)}>
+            Eliminar sin registro
+          </button>
+
+          <h4>Historial del cliente</h4>
+
+          {movimientosDelCliente.length === 0 && (
+            <p>No hay movimientos registrados.</p>
+          )}
+
+          {movimientosDelCliente.slice(0, 5).map((m) => (
+            <div key={m.id} style={styles.ticketItem}>
+              <p><b>{m.tipo}</b> - ${Number(m.monto || 0).toFixed(2)}</p>
+              <p>{m.nota}</p>
+              <p>Fecha: {obtenerFechaLocal(m.created_at)}</p>
+            </div>
+          ))}
+        </div>
+      )
+    })}
+  </>
+)}
+
         {tab === 'proveedores' && (
           <>
             <h2>Proveedores</h2>
@@ -1802,5 +2207,22 @@ cerrarCarrito: {
   height: 34,
   fontSize: 22,
   cursor: 'pointer',
+},
+deudaBox: {
+  backgroundColor: '#ffe5e5',
+  border: '1px solid #c40000',
+  color: '#900',
+  padding: 12,
+  borderRadius: 8,
+  marginBottom: 12,
+},
+
+sinDeudaBox: {
+  backgroundColor: '#e9ffe5',
+  border: '1px solid #198754',
+  color: '#146c43',
+  padding: 12,
+  borderRadius: 8,
+  marginBottom: 12,
 },
 }
