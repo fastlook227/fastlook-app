@@ -3,15 +3,47 @@
 import { useEffect, useState } from 'react'
 import { jsPDF } from 'jspdf'
 import { supabase } from '@/lib/supabase'
+import type {
+  CarritoItem,
+  Cliente,
+  CorteCaja,
+  FormCliente,
+  FormProducto,
+  FormProveedor,
+  MovimientoCliente,
+  MovimientoInventario,
+  Producto,
+  Proveedor,
+  RolUsuario,
+  Tab,
+  Venta,
+} from '@/types'
+import { obtenerFechaLocal } from '@/utils/fechas'
+import { calcularResumenVentas } from '@/utils/ventas'
+import { generarTextoTicket } from '@/utils/ticket'
+import { comprimirImagenProducto } from '@/utils/imagenes'
+import PantallaCarga from '@/components/PantallaCarga'
+import PantallaAcceso from '@/components/PantallaAcceso'
+import Navegacion from '@/components/Navegacion'
+import ListaPrecios from '@/components/ListaPrecios'
+import StockBajo from '@/components/StockBajo'
+import AsistenteIA from '@/components/AsistenteIA'
+import Movimientos from '@/components/Movimientos'
+import Dashboard from '@/components/Dashboard'
+import Proveedores from '@/components/Proveedores'
+import ListaCompras, {
+  type ProductoCompra,
+} from '@/components/ListaCompras'
+import Clientes from '@/components/Clientes'
 
 export default function Home() {
-  const [tab, setTab] = useState('precios')
-  const [productos, setProductos] = useState<any[]>([])
-  const [ventas, setVentas] = useState<any[]>([])
+  const [tab, setTab] = useState<Tab>('precios')
+  const [productos, setProductos] = useState<Producto[]>([])
+  const [ventas, setVentas] = useState<Venta[]>([])
   const [busqueda, setBusqueda] = useState('')
-  const [carrito, setCarrito] = useState<any[]>([])
+  const [carrito, setCarrito] = useState<CarritoItem[]>([])
   const [metodoPago, setMetodoPago] = useState('Efectivo')
-  const [usuarioRol, setUsuarioRol] = useState('Vendedor')
+  const [usuarioRol, setUsuarioRol] = useState<RolUsuario>('Vendedor')
   const [appLista, setAppLista] = useState(false)
   const [sistemaActivo, setSistemaActivo] = useState(false)
   const [mostrarPasswordAdmin, setMostrarPasswordAdmin] = useState(false)
@@ -19,20 +51,20 @@ export default function Home() {
   const [subiendoImagen, setSubiendoImagen] = useState(false)
   const [fechaInicio, setFechaInicio] = useState('')
   const [fechaFin, setFechaFin] = useState('')
-  const [proveedores, setProveedores] = useState<any[]>([])
-  const [movimientos, setMovimientos] = useState<any[]>([])
-  const [cortes, setCortes] = useState<any[]>([])
+  const [proveedores, setProveedores] = useState<Proveedor[]>([])
+  const [movimientos, setMovimientos] = useState<MovimientoInventario[]>([])
+  const [cortes, setCortes] = useState<CorteCaja[]>([])
   const [cantidadCompra, setCantidadCompra] = useState(1)
   const [clienteTelefono, setClienteTelefono] = useState('')
   const [clienteNombre, setClienteNombre] = useState('')
   const [carritoAbierto, setCarritoAbierto] = useState(false)
-  const [clientes, setClientes] = useState<any[]>([])
-  const [movimientosClientes, setMovimientosClientes] = useState<any[]>([])
+  const [clientes, setClientes] = useState<Cliente[]>([])
+  const [movimientosClientes, setMovimientosClientes] = useState<MovimientoCliente[]>([])
   const [busquedaClientes, setBusquedaClientes] = useState('')
   const [montoCliente, setMontoCliente] = useState('')
   const [notaCliente, setNotaCliente] = useState('')
 
-  const [formCliente, setFormCliente] = useState({
+  const [formCliente, setFormCliente] = useState<FormCliente>({
     id: '',
     nombre: '',
     numero: '',
@@ -40,7 +72,7 @@ export default function Home() {
     deuda: '',
   })
 
-  const [formProveedor, setFormProveedor] = useState({
+  const [formProveedor, setFormProveedor] = useState<FormProveedor>({
     id: '',
     nombre: '',
     telefono: '',
@@ -49,7 +81,7 @@ export default function Home() {
     notas: '',
   })
 
-  const [form, setForm] = useState({
+  const [form, setForm] = useState<FormProducto>({
     id: '',
     codigo: '',
     nombre: '',
@@ -206,7 +238,7 @@ const fetchMovimientosClientes = async () => {
         return obtenerFechaLocal(v.created_at) === ayer
       })
 
-      const resumenAyer = calcularResumenVentas(ventasAyer)
+      const resumenAyer = calcularResumenVentas(ventasAyer, productos)
 
       const { error: errorCorte } = await supabase.from('cortes_caja').insert([
         {
@@ -244,15 +276,51 @@ const fetchMovimientosClientes = async () => {
   const subirImagenProducto = async (file: File) => {
     if (!file) return
 
+    const tiposPermitidos = ['image/jpeg', 'image/png', 'image/webp']
+    const tamanoMaximo = 15 * 1024 * 1024
+
+    if (!tiposPermitidos.includes(file.type)) {
+      alert('Formato no válido. Selecciona una imagen JPEG, PNG o WebP.')
+      return
+    }
+
+    if (file.size > tamanoMaximo) {
+      alert('La imagen es demasiado grande. El tamaño máximo permitido es 15 MB.')
+      return
+    }
+
     setSubiendoImagen(true)
 
-    const extension = file.name.split('.').pop()
+    let archivoComprimido: File
+
+    try {
+      archivoComprimido = await comprimirImagenProducto(file)
+    } catch (error) {
+      setSubiendoImagen(false)
+      const mensaje =
+        error instanceof Error ? error.message : 'Error desconocido'
+      alert('Error al comprimir imagen: ' + mensaje)
+      return
+    }
+
+    const reduccion =
+      file.size > 0
+        ? ((file.size - archivoComprimido.size) / file.size) * 100
+        : 0
+
+    console.log('Peso original:', file.size, 'bytes')
+    console.log('Peso comprimido:', archivoComprimido.size, 'bytes')
+    console.log('Porcentaje de reducción:', `${reduccion.toFixed(2)}%`)
+
     const nombreLimpio = form.codigo || 'producto'
-    const nombreArchivo = `${nombreLimpio}-${Date.now()}.${extension}`
+    const nombreArchivo = `${nombreLimpio}-${Date.now()}.webp`
 
     const { error } = await supabase.storage
       .from('productos')
-      .upload(nombreArchivo, file)
+      .upload(nombreArchivo, archivoComprimido, {
+        contentType: 'image/webp',
+        cacheControl: '31536000',
+      })
 
     if (error) {
       setSubiendoImagen(false)
@@ -302,7 +370,7 @@ const fetchMovimientosClientes = async () => {
     (p) => Number(p.precio || 0) <= Number(p.costo || 0)
   )
 
-  const agregarAlCarrito = (producto: any) => {
+  const agregarAlCarrito = (producto: Producto) => {
     if (producto.stock <= 0) {
       alert('Sin stock disponible')
       return
@@ -382,7 +450,7 @@ const fetchMovimientosClientes = async () => {
 
 
   const registrarMovimiento = async (
-    producto: any,
+    producto: Producto,
     tipo: string,
     cantidad: number,
     stockAnterior: number,
@@ -410,7 +478,7 @@ const fetchMovimientosClientes = async () => {
     fetchMovimientos()
   }
 
-  const entradaStock = async (producto: any, cantidad: number) => {
+  const entradaStock = async (producto: Producto, cantidad: number) => {
     if (usuarioRol !== 'Admin') {
       alert('Solo el administrador puede modificar stock')
       return
@@ -447,7 +515,7 @@ const fetchMovimientosClientes = async () => {
     alert('Stock actualizado')
   }
 
-  const ajustarStock = async (producto: any, nuevoStock: number) => {
+  const ajustarStock = async (producto: Producto, nuevoStock: number) => {
     if (usuarioRol !== 'Admin') {
       alert('Solo el administrador puede modificar stock')
       return
@@ -549,23 +617,6 @@ const fetchMovimientosClientes = async () => {
     fetchVentas()
   }
 
-  const generarTextoTicket = () => {
-    let texto = 'FAST LOOK\n'
-    texto += 'Ticket de venta\n\n'
-
-    carrito.forEach((item) => {
-      texto += `${item.nombre}\n`
-      texto += `Cantidad: ${item.cantidad}\n`
-      texto += `Precio: $${item.precio}\n`
-      texto += `Subtotal: $${Number(item.precio) * item.cantidad}\n\n`
-    })
-
-    texto += `Método de pago: ${metodoPago}\n`
-    texto += `TOTAL: $${totalCarrito}\n`
-
-    return texto
-  }
-
   const cargarImagenBase64 = async (url: string) => {
     const response = await fetch(url)
     const blob = await response.blob()
@@ -664,7 +715,9 @@ const fetchMovimientosClientes = async () => {
   }
 
   const enviarWhatsApp = () => {
-    const texto = encodeURIComponent(generarTextoTicket())
+    const texto = encodeURIComponent(
+      generarTextoTicket(carrito, metodoPago, totalCarrito)
+    )
     window.open(`https://wa.me/?text=${texto}`, '_blank')
   }
 
@@ -732,7 +785,7 @@ const fetchMovimientosClientes = async () => {
     })
   }
 
-  const editarProducto = (p: any) => {
+  const editarProducto = (p: Producto) => {
     if (usuarioRol !== 'Admin') {
       alert('Solo el administrador puede editar inventario')
       return
@@ -796,7 +849,7 @@ const fetchMovimientosClientes = async () => {
     alert('Proveedor guardado')
   }
 
-  const editarProveedor = (p: any) => {
+  const editarProveedor = (p: Proveedor) => {
     setFormProveedor({
       id: p.id,
       nombre: p.nombre || '',
@@ -869,7 +922,7 @@ const fetchMovimientosClientes = async () => {
   alert('Cliente guardado')
 }
 
-const editarCliente = (cliente: any) => {
+const editarCliente = (cliente: Cliente) => {
   setFormCliente({
     id: cliente.id,
     nombre: cliente.nombre || '',
@@ -889,7 +942,7 @@ const limpiarCliente = () => {
   })
 }
 
-const registrarAbonoEnCorte = async (cliente: any, monto: number, concepto: string) => {
+const registrarAbonoEnCorte = async (cliente: Cliente, monto: number, concepto: string) => {
   const { error } = await supabase.from('ventas').insert([
     {
       producto_id: null,
@@ -908,7 +961,7 @@ const registrarAbonoEnCorte = async (cliente: any, monto: number, concepto: stri
 }
 
 const registrarMovimientoCliente = async (
-  cliente: any,
+  cliente: Cliente,
   tipo: string,
   monto: number,
   nota: string
@@ -972,7 +1025,7 @@ const registrarMovimientoCliente = async (
   alert('Movimiento registrado')
 }
 
-const abonarCliente = async (cliente: any) => {
+const abonarCliente = async (cliente: Cliente) => {
   const monto = Number(prompt('¿Cuánto abonó el cliente?'))
 
   if (isNaN(monto) || monto <= 0) {
@@ -983,7 +1036,7 @@ const abonarCliente = async (cliente: any) => {
   await registrarMovimientoCliente(cliente, 'ABONO', monto, 'Abono a deuda')
 }
 
-const liquidarCliente = async (cliente: any) => {
+const liquidarCliente = async (cliente: Cliente) => {
   const deudaActual = Number(cliente.deuda || 0)
 
   if (deudaActual <= 0) {
@@ -998,7 +1051,7 @@ const liquidarCliente = async (cliente: any) => {
   await registrarMovimientoCliente(cliente, 'LIQUIDACION', deudaActual, 'Liquidación total')
 }
 
-const agregarDeudaCliente = async (cliente: any) => {
+const agregarDeudaCliente = async (cliente: Cliente) => {
   const monto = Number(prompt('¿Cuánta deuda quieres añadir?'))
 
   if (isNaN(monto) || monto <= 0) {
@@ -1011,7 +1064,7 @@ const agregarDeudaCliente = async (cliente: any) => {
   await registrarMovimientoCliente(cliente, 'DEUDA', monto, nota)
 }
 
-const eliminarClienteSinRegistro = async (cliente: any) => {
+const eliminarClienteSinRegistro = async (cliente: Cliente) => {
   if (!confirm(`¿Eliminar a ${cliente.nombre} sin conservar registro?`)) {
     return
   }
@@ -1031,7 +1084,7 @@ const eliminarClienteSinRegistro = async (cliente: any) => {
   alert('Cliente eliminado')
 }
 
-const abrirWhatsAppCliente = (cliente: any) => {
+const abrirWhatsAppCliente = (cliente: Cliente) => {
   if (!cliente.numero) {
     alert('Este cliente no tiene número registrado')
     return
@@ -1045,16 +1098,6 @@ const abrirWhatsAppCliente = (cliente: any) => {
 
   window.open(`https://wa.me/52${numeroLimpio}?text=${mensaje}`, '_blank')
 }
-
-  const obtenerFechaLocal = (fecha: string | Date) => {
-    const d = new Date(fecha)
-
-    const year = d.getFullYear()
-    const month = String(d.getMonth() + 1).padStart(2, '0')
-    const day = String(d.getDate()).padStart(2, '0')
-
-    return `${year}-${month}-${day}`
-  }
 
   const hoy = obtenerFechaLocal(new Date())
 
@@ -1080,56 +1123,8 @@ const abrirWhatsAppCliente = (cliente: any) => {
     return fechaVenta >= fechaInicio && fechaVenta <= fechaFin
   })
 
-  const calcularGananciaVentas = (listaVentas: any[]) => {
-    let ganancia = 0
-
-    listaVentas.forEach((v) => {
-      const producto = productos.find((p) => p.id === v.producto_id)
-
-      if (producto) {
-        const costo = Number(producto.costo || 0)
-        const precio = Number(v.precio || 0)
-
-        ganancia += (precio - costo) * Number(v.cantidad || 0)
-      }
-    })
-
-    return ganancia
-  }
-
-  const calcularResumenVentas = (listaVentas: any[]) => {
-    const total = listaVentas.reduce(
-      (acc, v) => acc + Number(v.total || 0),
-      0
-    )
-
-    const productosVendidos = listaVentas.reduce(
-      (acc, v) => {
-        if (v.codigo === 'ABONO') return acc
-        return acc + Number(v.cantidad || 0)
-      },
-      0
-    )
-
-    const metodos = listaVentas.reduce((acc: any, v) => {
-      const metodo = v.metodo_pago || 'Efectivo'
-      acc[metodo] = (acc[metodo] || 0) + Number(v.total || 0)
-      return acc
-    }, {})
-
-    const ganancia = calcularGananciaVentas(listaVentas)
-
-    return {
-      total,
-      productosVendidos,
-      numeroVentas: listaVentas.length,
-      ganancia,
-      metodos,
-    }
-  }
-
-  const resumenHoy = calcularResumenVentas(ventasHoy)
-  const resumenPeriodo = calcularResumenVentas(ventasFiltradas)
+  const resumenHoy = calcularResumenVentas(ventasHoy, productos)
+  const resumenPeriodo = calcularResumenVentas(ventasFiltradas, productos)
 
   const resumenesDiarios = ventas.reduce((acc: any, venta) => {
     const fecha = obtenerFechaLocal(venta.created_at)
@@ -1147,7 +1142,7 @@ const abrirWhatsAppCliente = (cliente: any) => {
     .sort((a, b) => b.localeCompare(a))
     .map((fecha) => {
       const ventasDelDia = resumenesDiarios[fecha]
-      const resumen = calcularResumenVentas(ventasDelDia)
+      const resumen = calcularResumenVentas(ventasDelDia, productos)
 
       return {
         fecha,
@@ -1171,6 +1166,29 @@ const abrirWhatsAppCliente = (cliente: any) => {
     return acc
   }, {})
 
+  const comprasPorProveedorConCantidad = Object.keys(comprasPorProveedor).reduce(
+    (acc: Record<string, ProductoCompra[]>, proveedor) => {
+      acc[proveedor] = comprasPorProveedor[proveedor].map((p: Producto) => {
+        const stockActual = Number(p.stock || 0)
+        const stockMinimo = Number(p.stock_minimo || 5)
+        const cantidadSugerida = Math.max(
+          stockMinimo * 2 - stockActual,
+          cantidadCompra
+        )
+
+        return {
+          producto: p,
+          stockActual,
+          stockMinimo,
+          cantidadSugerida,
+        }
+      })
+
+      return acc
+    },
+    {}
+  )
+
   const generarMensajeCompra = (proveedor: string, productosProveedor: any[]) => {
     let mensaje = `Hola, necesito cotizar/resurtir estos productos para Fast Look:\n\n`
 
@@ -1188,6 +1206,17 @@ const abrirWhatsAppCliente = (cliente: any) => {
     mensaje += `Quedo atento a precio y disponibilidad.`
 
     return mensaje
+  }
+
+  const enviarPedidoProveedor = (proveedor: string) => {
+    const proveedorData = proveedores.find(
+      (p) => p.nombre?.toLowerCase() === proveedor.toLowerCase()
+    )
+
+    abrirWhatsAppProveedor(
+      proveedorData?.telefono || '',
+      generarMensajeCompra(proveedor, comprasPorProveedor[proveedor])
+    )
   }
 
 
@@ -1217,131 +1246,43 @@ const abrirWhatsAppCliente = (cliente: any) => {
     setTab('precios')
   }
   if (!appLista) {
-    return (
-      <div style={styles.loadingPage}>
-        <img
-          src="https://i.postimg.cc/T1KLqYXb/Chat-GPT-Image-4-dic-2025-11-34-20-p-m.png"
-          alt="Fast Look"
-          style={styles.loadingLogo}
-        />
-
-        <h2 style={styles.loadingTitle}>FAST LOOK</h2>
-        <p style={styles.loadingText}>Cargando sistema...</p>
-
-        <style jsx global>{`
-          @keyframes girarLogo {
-            from {
-              transform: rotate(0deg);
-            }
-            to {
-              transform: rotate(360deg);
-            }
-          }
-        `}</style>
-      </div>
-    )
+    return <PantallaCarga styles={styles} />
   }
 
   if (!sistemaActivo) {
     return (
-      <div style={styles.loginPage}>
-        <div style={styles.loginBox}>
-          <h1 style={styles.logoLogin}>FAST LOOK</h1>
-          <p style={styles.loginSubtitle}>Selecciona cómo deseas entrar</p>
-
-          <button style={styles.bigButton} onClick={entrarComoVendedor}>
-            Entrar como vendedor
-          </button>
-
-          <button
-            style={styles.blackButton}
-            onClick={() => setMostrarPasswordAdmin(true)}
-          >
-            Entrar como administrador
-          </button>
-
-          {mostrarPasswordAdmin && (
-            <>
-              <input
-                style={styles.input}
-                type="password"
-                placeholder="Contraseña de administrador"
-                value={passwordAdmin}
-                onChange={(e) => setPasswordAdmin(e.target.value)}
-              />
-
-              <button style={styles.bigButton} onClick={intentarEntrarAdmin}>
-                Confirmar acceso admin
-              </button>
-            </>
-          )}
-        </div>
-      </div>
+      <PantallaAcceso
+        mostrarPasswordAdmin={mostrarPasswordAdmin}
+        passwordAdmin={passwordAdmin}
+        onEntrarComoVendedor={entrarComoVendedor}
+        onMostrarPasswordAdmin={() => setMostrarPasswordAdmin(true)}
+        onCambiarPasswordAdmin={setPasswordAdmin}
+        onIntentarEntrarAdmin={intentarEntrarAdmin}
+        styles={styles}
+      />
     )
   }
 
   return (
     <div style={styles.page}>
-      <header style={styles.header}>
-        <h1 style={styles.logo}>FAST LOOK</h1>
-        <p style={styles.subtitle}>Sistema de Gestión</p>
-
-        <div style={styles.userBox}>
-          <p style={styles.userText}>
-            Modo actual: <b>{usuarioRol}</b>
-          </p>
-
-          <button style={styles.logoutButton} onClick={cerrarSistema}>
-            Salir
-          </button>
-        </div>
-      </header>
-
-      <nav style={styles.nav}>
-        <button style={tab === 'precios' ? styles.activeBtn : styles.navBtn} onClick={() => setTab('precios')}>Lista de precios</button>
-        <button style={tab === 'venta' ? styles.activeBtn : styles.navBtn} onClick={() => setTab('venta')}>Generar venta</button>
-        <button style={tab === 'stock' ? styles.activeBtn : styles.navBtn} onClick={() => setTab('stock')}>Stock bajo</button>
-        <button style={tab === 'ia' ? styles.activeBtn : styles.navBtn} onClick={() => setTab('ia')}>Asistente IA</button>
-        <button
-          style={tab === 'clientes' ? styles.activeBtn : styles.navBtn}
-          onClick={() => setTab('clientes')}
-        >
-          Clientes
-        </button>
-
-        {usuarioRol === 'Admin' && (
-          <>
-            <button style={tab === 'inventario' ? styles.activeBtn : styles.navBtn} onClick={() => setTab('inventario')}>Inventario</button>
-            <button style={tab === 'corte' ? styles.activeBtn : styles.navBtn} onClick={() => setTab('corte')}>Corte de caja</button>
-            <button style={tab === 'proveedores' ? styles.activeBtn : styles.navBtn} onClick={() => setTab('proveedores')}>Proveedores</button>
-            <button style={tab === 'compras' ? styles.activeBtn : styles.navBtn} onClick={() => setTab('compras')}>Lista de compras</button>
-            <button style={tab === 'movimientos' ? styles.activeBtn : styles.navBtn} onClick={() => setTab('movimientos')}>Movimientos</button>
-            <button style={tab === 'dashboard' ? styles.activeBtn : styles.navBtn} onClick={() => setTab('dashboard')}>Dashboard</button>
-          </>
-        )}
-      </nav>
+      <Navegacion
+        tab={tab}
+        usuarioRol={usuarioRol}
+        onCambiarTab={setTab}
+        onCerrarSistema={cerrarSistema}
+        styles={styles}
+      />
 
       <main style={styles.main}>
         
         
         {tab === 'precios' && (
-          <>
-            <h2>Lista de precios completa</h2>
-            <input style={styles.input} placeholder="Buscar producto..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)} />
-
-            {productosFiltrados.map((p) => (
-              <div key={p.id} style={styles.card}>
-                {p.imagen_url && <img src={p.imagen_url} alt={p.nombre} style={styles.image} />}
-                <h3>{p.nombre}</h3>
-                <p><b>Código:</b> {p.codigo}</p>
-                <p><b>Tipo:</b> {p.tipo}</p>
-                <p><b>Precio:</b> ${p.precio}</p>
-                <p><b>Stock:</b> {p.stock}</p>
-                <p><b>Ubicación:</b> {p.ubicacion}</p>
-                <p><b>Proveedor:</b> {p.proveedor}</p>
-              </div>
-            ))}
-          </>
+          <ListaPrecios
+            busqueda={busqueda}
+            productosFiltrados={productosFiltrados}
+            onCambiarBusqueda={setBusqueda}
+            styles={styles}
+          />
         )}
 
 {tab === 'venta' && (
@@ -1507,7 +1448,7 @@ const abrirWhatsAppCliente = (cliente: any) => {
 
             <input
               type="file"
-              accept="image/*"
+              accept="image/jpeg,image/png,image/webp"
               capture="environment"
               style={styles.input}
               onChange={(e) => {
@@ -1687,319 +1628,70 @@ const abrirWhatsAppCliente = (cliente: any) => {
         )}
 
         {tab === 'stock' && (
-          <>
-            <h2>Stock bajo / comprar pronto</h2>
-
-            {productosBajoStock.length > 0 && (
-              <div style={styles.alert}>Hay {productosBajoStock.length} productos con stock bajo.</div>
-            )}
-
-            {productosBajoStock.map((p) => (
-              <div key={p.id} style={styles.card}>
-                <h3>{p.nombre}</h3>
-                <p><b>Código:</b> {p.codigo}</p>
-                <p><b>Stock:</b> {p.stock}</p>
-                <p><b>Stock mínimo:</b> {p.stock_minimo || 5}</p>
-                <p><b>Proveedor:</b> {p.proveedor}</p>
-                <p><b>Ubicación:</b> {p.ubicacion}</p>
-              </div>
-            ))}
-          </>
+          <StockBajo
+            productosBajoStock={productosBajoStock}
+            styles={styles}
+          />
         )}
 
         {tab === 'ia' && (
-          <div style={styles.card}>
-            <h2>Asistente IA</h2>
-            <p>Aquí irá la sección para preguntar compatibilidades, medidas, precios y dudas técnicas.</p>
-          </div>
+          <AsistenteIA styles={styles} />
         )}
 
         {tab === 'clientes' && (
-  <>
-    <h2>Clientes</h2>
-
-    <div style={styles.card}>
-      <h3>{formCliente.id ? 'Editar cliente' : 'Agregar cliente'}</h3>
-
-      <input
-        style={styles.input}
-        placeholder="Nombre del cliente *"
-        value={formCliente.nombre}
-        onChange={(e) => setFormCliente({ ...formCliente, nombre: e.target.value })}
-      />
-
-      <input
-        style={styles.input}
-        placeholder="Número de WhatsApp / teléfono (opcional)"
-        value={formCliente.numero}
-        onChange={(e) => setFormCliente({ ...formCliente, numero: e.target.value })}
-      />
-
-      <input
-        style={styles.input}
-        placeholder="¿Qué moto tiene? (opcional)"
-        value={formCliente.moto}
-        onChange={(e) => setFormCliente({ ...formCliente, moto: e.target.value })}
-      />
-
-      <input
-        style={styles.input}
-        type="number"
-        placeholder="Deuda inicial"
-        value={formCliente.deuda}
-        onChange={(e) => setFormCliente({ ...formCliente, deuda: e.target.value })}
-      />
-
-      <button style={styles.bigButton} onClick={guardarCliente}>
-        {formCliente.id ? 'Guardar cambios' : 'Agregar cliente'}
-      </button>
-
-      <button style={styles.grayButton} onClick={limpiarCliente}>
-        Limpiar formulario
-      </button>
-    </div>
-
-    <input
-      style={styles.input}
-      placeholder="Buscar cliente por nombre, número o moto..."
-      value={busquedaClientes}
-      onChange={(e) => setBusquedaClientes(e.target.value)}
-    />
-
-    <p>
-      Mostrando <b>{clientesFiltrados.length}</b> de <b>{clientes.length}</b> clientes
-    </p>
-
-    {clientesFiltrados.length === 0 && (
-      <div style={styles.alert}>No hay clientes registrados.</div>
-    )}
-
-    {clientesFiltrados.map((cliente) => {
-      const movimientosDelCliente = movimientosClientes.filter(
-        (m) => m.cliente_id === cliente.id
-      )
-
-      return (
-        <div key={cliente.id} style={styles.card}>
-          <h3>{cliente.nombre}</h3>
-
-          <p><b>Número:</b> {cliente.numero || 'Sin número'}</p>
-          <p><b>Moto:</b> {cliente.moto || 'No registrada'}</p>
-
-          <div
-            style={
-              Number(cliente.deuda || 0) > 0
-                ? styles.deudaBox
-                : styles.sinDeudaBox
-            }
-          >
-            <b>Deuda pendiente:</b> ${Number(cliente.deuda || 0).toFixed(2)}
-          </div>
-
-          <button style={styles.redButton} onClick={() => agregarDeudaCliente(cliente)}>
-            Añadir más deuda
-          </button>
-
-          <button style={styles.blackButton} onClick={() => abonarCliente(cliente)}>
-            Registrar abono
-          </button>
-
-          <button style={styles.bigButton} onClick={() => liquidarCliente(cliente)}>
-            Liquidación total
-          </button>
-
-          {cliente.numero && (
-            <button style={styles.grayButton} onClick={() => abrirWhatsAppCliente(cliente)}>
-              Recordar por WhatsApp
-            </button>
-          )}
-
-          <button style={styles.grayButton} onClick={() => editarCliente(cliente)}>
-            Editar cliente
-          </button>
-
-          <button style={styles.blackButton} onClick={() => eliminarClienteSinRegistro(cliente)}>
-            Eliminar sin registro
-          </button>
-
-          <h4>Historial del cliente</h4>
-
-          {movimientosDelCliente.length === 0 && (
-            <p>No hay movimientos registrados.</p>
-          )}
-
-          {movimientosDelCliente.slice(0, 5).map((m) => (
-            <div key={m.id} style={styles.ticketItem}>
-              <p><b>{m.tipo}</b> - ${Number(m.monto || 0).toFixed(2)}</p>
-              <p>{m.nota}</p>
-              <p>Fecha: {obtenerFechaLocal(m.created_at)}</p>
-            </div>
-          ))}
-        </div>
-      )
-    })}
-  </>
+          <Clientes
+            clientesFiltrados={clientesFiltrados}
+            clientes={clientes}
+            movimientosClientes={movimientosClientes}
+            busquedaClientes={busquedaClientes}
+            formCliente={formCliente}
+            guardarCliente={guardarCliente}
+            limpiarCliente={limpiarCliente}
+            agregarDeudaCliente={agregarDeudaCliente}
+            abonarCliente={abonarCliente}
+            liquidarCliente={liquidarCliente}
+            abrirWhatsAppCliente={abrirWhatsAppCliente}
+            editarCliente={editarCliente}
+            eliminarClienteSinRegistro={eliminarClienteSinRegistro}
+            setBusquedaClientes={setBusquedaClientes}
+            setFormCliente={setFormCliente}
+            obtenerFechaLocal={obtenerFechaLocal}
+            styles={styles}
+          />
 )}
 
         {tab === 'proveedores' && (
-          <>
-            <h2>Proveedores</h2>
-
-            <input
-              style={styles.input}
-              placeholder="Nombre del proveedor"
-              value={formProveedor.nombre}
-              onChange={(e) => setFormProveedor({ ...formProveedor, nombre: e.target.value })}
-            />
-
-            <input
-              style={styles.input}
-              placeholder="Teléfono WhatsApp"
-              value={formProveedor.telefono}
-              onChange={(e) => setFormProveedor({ ...formProveedor, telefono: e.target.value })}
-            />
-
-            <input
-              style={styles.input}
-              placeholder="Productos que maneja"
-              value={formProveedor.productos}
-              onChange={(e) => setFormProveedor({ ...formProveedor, productos: e.target.value })}
-            />
-
-            <input
-              style={styles.input}
-              placeholder="Tiempo de entrega"
-              value={formProveedor.tiempo_entrega}
-              onChange={(e) => setFormProveedor({ ...formProveedor, tiempo_entrega: e.target.value })}
-            />
-
-            <textarea
-              style={styles.input}
-              placeholder="Notas"
-              value={formProveedor.notas}
-              onChange={(e) => setFormProveedor({ ...formProveedor, notas: e.target.value })}
-            />
-
-            <button style={styles.bigButton} onClick={guardarProveedor}>
-              {formProveedor.id ? 'Guardar cambios' : 'Agregar proveedor'}
-            </button>
-
-            <button style={styles.grayButton} onClick={limpiarProveedor}>
-              Limpiar proveedor
-            </button>
-
-            <h3>Lista de proveedores</h3>
-
-            {proveedores.map((p) => (
-              <div key={p.id} style={styles.card}>
-                <h3>{p.nombre}</h3>
-                <p><b>Teléfono:</b> {p.telefono}</p>
-                <p><b>Productos:</b> {p.productos}</p>
-                <p><b>Tiempo de entrega:</b> {p.tiempo_entrega}</p>
-                <p><b>Notas:</b> {p.notas}</p>
-
-                <button style={styles.redButton} onClick={() => editarProveedor(p)}>
-                  Editar proveedor
-                </button>
-
-                <button
-                  style={styles.blackButton}
-                  onClick={() =>
-                    abrirWhatsAppProveedor(
-                      p.telefono,
-                      `Hola ${p.nombre}, quiero consultar disponibilidad y precios para resurtir productos de Fast Look.`
-                    )
-                  }
-                >
-                  Enviar WhatsApp
-                </button>
-              </div>
-            ))}
-          </>
+          <Proveedores
+            formProveedor={formProveedor}
+            setFormProveedor={setFormProveedor}
+            proveedores={proveedores}
+            guardarProveedor={guardarProveedor}
+            limpiarProveedor={limpiarProveedor}
+            editarProveedor={editarProveedor}
+            abrirWhatsAppProveedor={abrirWhatsAppProveedor}
+            styles={styles}
+          />
         )}
 
         {tab === 'compras' && (
-          <>
-            <h2>Lista automática de compras</h2>
-
-            <input
-              type="number"
-              style={styles.input}
-              placeholder="Cantidad mínima sugerida a comprar"
-              value={cantidadCompra}
-              onChange={(e) => setCantidadCompra(Number(e.target.value))}
-            />
-
-            {Object.keys(comprasPorProveedor).length === 0 && (
-              <div style={styles.alert}>No hay productos con stock bajo para comprar.</div>
-            )}
-
-            {Object.keys(comprasPorProveedor).map((proveedor) => (
-              <div key={proveedor} style={styles.card}>
-                <h3>{proveedor}</h3>
-
-                {comprasPorProveedor[proveedor].map((p: any) => {
-                  const stockActual = Number(p.stock || 0)
-                  const stockMinimo = Number(p.stock_minimo || 5)
-                  const cantidadSugerida = Math.max(
-                    stockMinimo * 2 - stockActual,
-                    cantidadCompra
-                  )
-
-                  return (
-                    <div key={p.id} style={styles.ticketItem}>
-                      <p><b>{p.nombre}</b></p>
-                      <p>Código: {p.codigo}</p>
-                      <p>Stock actual: {stockActual}</p>
-                      <p>Stock mínimo: {stockMinimo}</p>
-                      <p><b>Comprar sugerido:</b> {cantidadSugerida}</p>
-                      <p>Ubicación: {p.ubicacion}</p>
-                    </div>
-                  )
-
-                  
-
-                  
-                })}
-
-                <button
-                  style={styles.redButton}
-                  onClick={() => {
-                    const proveedorData = proveedores.find(
-                      (p) => p.nombre?.toLowerCase() === proveedor.toLowerCase()
-                    )
-
-                    abrirWhatsAppProveedor(
-                      proveedorData?.telefono || '',
-                      generarMensajeCompra(proveedor, comprasPorProveedor[proveedor])
-                    )
-                  }}
-                >
-                  Enviar pedido por WhatsApp
-                </button>
-              </div>
-            ))}
-          </>
+          <ListaCompras
+            cantidadCompra={cantidadCompra}
+            setCantidadCompra={setCantidadCompra}
+            comprasPorProveedor={comprasPorProveedorConCantidad}
+            enviarPedidoProveedor={enviarPedidoProveedor}
+            styles={styles}
+          />
         )}
 
         {tab === 'movimientos' && (
-          <>
-            <h2>Historial de movimientos</h2>
-
-            {movimientos.map((m) => (
-              <div key={m.id} style={styles.ticketItem}>
-                <p><b>{m.nombre}</b></p>
-                <p>Código: {m.codigo}</p>
-                <p>Tipo: {m.tipo_movimiento}</p>
-                <p>Cantidad: {m.cantidad}</p>
-                <p>Stock anterior: {m.stock_anterior}</p>
-                <p>Stock nuevo: {m.stock_nuevo}</p>
-                <p>Nota: {m.nota}</p>
-                <p>Fecha: {obtenerFechaLocal(m.created_at)}</p>
-              </div>
-            ))}
-          </>
+          <Movimientos
+            movimientos={movimientos}
+            obtenerFechaLocal={obtenerFechaLocal}
+            styles={styles}
+          />
         )}
+
+        {tab === 'dashboard' && <Dashboard />}
       </main>
     </div>
   )
