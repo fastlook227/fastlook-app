@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { jsPDF } from 'jspdf'
 import { supabase } from '@/lib/supabase'
 import type {
@@ -94,6 +94,7 @@ export default function Home() {
     proveedor: '',
     imagen_url: '',
   })
+  const formRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
   fetchProductos()
@@ -806,6 +807,10 @@ const fetchMovimientosClientes = async () => {
     })
 
     setTab('inventario')
+    formRef.current?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'start',
+    })
   }
 
 
@@ -1428,11 +1433,12 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
 
         {tab === 'inventario' && (
           <>
-            <h2>Inventario: agregar o editar productos</h2>
+            <div ref={formRef}>
+              <h2>Inventario: agregar o editar productos</h2>
 
-            {usuarioRol !== 'Admin' && (
-              <div style={styles.alert}>Estás en modo vendedor. No puedes editar inventario.</div>
-            )}
+              {usuarioRol !== 'Admin' && (
+                <div style={styles.alert}>Estás en modo vendedor. No puedes editar inventario.</div>
+              )}
 
             <input style={styles.input} placeholder="Código" value={form.codigo} onChange={(e) => setForm({ ...form, codigo: e.target.value })} />
             <input style={styles.input} placeholder="Nombre" value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} />
@@ -1467,9 +1473,10 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
               {form.id ? 'Guardar cambios' : 'Agregar producto'}
             </button>
 
-            <button style={styles.grayButton} onClick={limpiarFormulario}>
-              Limpiar formulario
-            </button>
+              <button style={styles.grayButton} onClick={limpiarFormulario}>
+                Limpiar formulario
+              </button>
+            </div>
 
                         <h3>Productos registrados</h3>
 
