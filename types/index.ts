@@ -1,5 +1,13 @@
 export type RolUsuario = 'Admin' | 'Vendedor'
 
+export interface PerfilUsuario {
+  id: string
+  correo: string
+  nombre: string
+  rol: RolUsuario
+  activo: boolean
+}
+
 export type Tab =
   | 'precios'
   | 'venta'
@@ -12,6 +20,7 @@ export type Tab =
   | 'compras'
   | 'movimientos'
   | 'dashboard'
+  | 'usuarios'
 
 export interface Producto {
   id: string

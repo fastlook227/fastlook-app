@@ -1,68 +1,73 @@
-import type { CSSProperties } from 'react'
+import type { CSSProperties, FormEvent } from 'react'
 
 interface PantallaAccesoProps {
-  mostrarPasswordAdmin: boolean
-  passwordAdmin: string
-  onEntrarComoVendedor: () => void
-  onMostrarPasswordAdmin: () => void
-  onCambiarPasswordAdmin: (password: string) => void
-  onIntentarEntrarAdmin: () => void
+  correo: string
+  password: string
+  error: string
+  cargando: boolean
+  onCambiarCorreo: (correo: string) => void
+  onCambiarPassword: (password: string) => void
+  onIniciarSesion: () => void | Promise<void>
   styles: {
     loginPage: CSSProperties
     loginBox: CSSProperties
     logoLogin: CSSProperties
     loginSubtitle: CSSProperties
     bigButton: CSSProperties
-    blackButton: CSSProperties
     input: CSSProperties
   }
 }
 
 export default function PantallaAcceso({
-  mostrarPasswordAdmin,
-  passwordAdmin,
-  onEntrarComoVendedor,
-  onMostrarPasswordAdmin,
-  onCambiarPasswordAdmin,
-  onIntentarEntrarAdmin,
+  correo,
+  password,
+  error,
+  cargando,
+  onCambiarCorreo,
+  onCambiarPassword,
+  onIniciarSesion,
   styles,
 }: PantallaAccesoProps) {
+  const enviar = (evento: FormEvent<HTMLFormElement>) => {
+    evento.preventDefault()
+    void onIniciarSesion()
+  }
+
   return (
     <div style={styles.loginPage}>
-      <div style={styles.loginBox}>
+      <form style={styles.loginBox} onSubmit={enviar}>
         <h1 style={styles.logoLogin}>FAST LOOK</h1>
-        <p style={styles.loginSubtitle}>Selecciona cómo deseas entrar</p>
+        <p style={styles.loginSubtitle}>Inicia sesión para continuar</p>
 
-        <button style={styles.bigButton} onClick={onEntrarComoVendedor}>
-          Entrar como vendedor
-        </button>
+        <input
+          style={styles.input}
+          type="email"
+          autoComplete="email"
+          placeholder="Correo"
+          value={correo}
+          onChange={(evento) => onCambiarCorreo(evento.target.value)}
+          disabled={cargando}
+          required
+        />
+        <input
+          style={styles.input}
+          type="password"
+          autoComplete="current-password"
+          placeholder="Contraseña"
+          value={password}
+          onChange={(evento) => onCambiarPassword(evento.target.value)}
+          disabled={cargando}
+          required
+        />
 
-        <button
-          style={styles.blackButton}
-          onClick={onMostrarPasswordAdmin}
-        >
-          Entrar como administrador
-        </button>
-
-        {mostrarPasswordAdmin && (
-          <>
-            <input
-              style={styles.input}
-              type="password"
-              placeholder="Contraseña de administrador"
-              value={passwordAdmin}
-              onChange={(e) => onCambiarPasswordAdmin(e.target.value)}
-            />
-
-            <button
-              style={styles.bigButton}
-              onClick={onIntentarEntrarAdmin}
-            >
-              Confirmar acceso admin
-            </button>
-          </>
+        {error && (
+          <p role="alert" style={{ color: '#a00000', fontWeight: 'bold' }}>{error}</p>
         )}
-      </div>
+
+        <button style={styles.bigButton} type="submit" disabled={cargando}>
+          {cargando ? 'Iniciando sesión...' : 'Iniciar sesión'}
+        </button>
+      </form>
     </div>
   )
 }

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { jsPDF } from 'jspdf'
+import type { Session } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
 import type {
   CarritoItem,
@@ -12,6 +13,7 @@ import type {
   FormProveedor,
   MovimientoCliente,
   MovimientoInventario,
+  PerfilUsuario,
   Producto,
   Proveedor,
   RolUsuario,
@@ -27,7 +29,7 @@ import PantallaAcceso from '@/components/PantallaAcceso'
 import Navegacion from '@/components/Navegacion'
 import ListaPrecios from '@/components/ListaPrecios'
 import StockBajo from '@/components/StockBajo'
-import AsistenteIA from '@/components/AsistenteIA'
+import AsistenteInventario from '@/components/AsistenteInventario'
 import Movimientos from '@/components/Movimientos'
 import Dashboard from '@/components/Dashboard'
 import Proveedores from '@/components/Proveedores'
@@ -35,6 +37,8 @@ import ListaCompras, {
   type ProductoCompra,
 } from '@/components/ListaCompras'
 import Clientes from '@/components/Clientes'
+import GestionUsuarios from '@/components/GestionUsuarios'
+import LoadingOverlay from '@/components/LoadingOverlay'
 
 export default function Home() {
   const [tab, setTab] = useState<Tab>('precios')
@@ -43,11 +47,14 @@ export default function Home() {
   const [busqueda, setBusqueda] = useState('')
   const [carrito, setCarrito] = useState<CarritoItem[]>([])
   const [metodoPago, setMetodoPago] = useState('Efectivo')
-  const [usuarioRol, setUsuarioRol] = useState<RolUsuario>('Vendedor')
+  const [usuarioRol, setUsuarioRol] = useState<RolUsuario | null>(null)
+  const [perfilUsuario, setPerfilUsuario] = useState<PerfilUsuario | null>(null)
   const [appLista, setAppLista] = useState(false)
-  const [sistemaActivo, setSistemaActivo] = useState(false)
-  const [mostrarPasswordAdmin, setMostrarPasswordAdmin] = useState(false)
-  const [passwordAdmin, setPasswordAdmin] = useState('')
+  const [correoAcceso, setCorreoAcceso] = useState('')
+  const [passwordAcceso, setPasswordAcceso] = useState('')
+  const [errorAcceso, setErrorAcceso] = useState('')
+  const [cargandoAcceso, setCargandoAcceso] = useState(false)
+  const [verificandoSesion, setVerificandoSesion] = useState(true)
   const [subiendoImagen, setSubiendoImagen] = useState(false)
   const [fechaInicio, setFechaInicio] = useState('')
   const [fechaFin, setFechaFin] = useState('')
@@ -97,14 +104,15 @@ export default function Home() {
   const formRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-  fetchProductos()
-  fetchVentas()
-  fetchProveedores()
-  fetchMovimientos()
-  fetchCortes()
-  fetchClientes()
-  fetchMovimientosClientes()
-}, [])
+    if (!perfilUsuario) return
+    fetchProductos()
+    fetchVentas()
+    fetchProveedores()
+    fetchMovimientos()
+    fetchCortes()
+    fetchClientes()
+    fetchMovimientosClientes()
+  }, [perfilUsuario])
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -112,6 +120,63 @@ export default function Home() {
     }, 1500)
 
     return () => clearTimeout(timer)
+  }, [])
+
+  useEffect(() => {
+    let activo = true
+
+    const sincronizarSesion = async (sesion: Session | null) => {
+      if (!activo) return
+      if (!sesion?.user) {
+        setPerfilUsuario(null)
+        setUsuarioRol(null)
+        setVerificandoSesion(false)
+        return
+      }
+
+      const { data: perfil, error } = await supabase
+        .from('usuarios')
+        .select('id,correo,nombre,rol,activo')
+        .eq('id', sesion.user.id)
+        .maybeSingle()
+      if (!activo) return
+      if (error || !perfil) {
+        setPerfilUsuario(null)
+        setUsuarioRol(null)
+        setErrorAcceso('No fue posible cargar el perfil autorizado.')
+        setVerificandoSesion(false)
+        return
+      }
+      if (perfil.activo !== true) {
+        setPerfilUsuario(null)
+        setUsuarioRol(null)
+        setErrorAcceso('Tu usuario está inactivo.')
+        setTimeout(() => { void supabase.auth.signOut() }, 0)
+        setVerificandoSesion(false)
+        return
+      }
+      if (!['Admin', 'Vendedor'].includes(perfil.rol)) {
+        setPerfilUsuario(null)
+        setUsuarioRol(null)
+        setErrorAcceso('Tu perfil no tiene un rol válido.')
+        setVerificandoSesion(false)
+        return
+      }
+      const perfilValidado = { ...perfil, rol: perfil.rol as RolUsuario } as PerfilUsuario
+      setPerfilUsuario(perfilValidado)
+      setUsuarioRol(perfilValidado.rol)
+      setErrorAcceso('')
+      setVerificandoSesion(false)
+    }
+
+    void supabase.auth.getSession().then(({ data }) => sincronizarSesion(data.session))
+    const { data: suscripcion } = supabase.auth.onAuthStateChange((_evento, sesion) => {
+      void sincronizarSesion(sesion)
+    })
+    return () => {
+      activo = false
+      suscripcion.subscription.unsubscribe()
+    }
   }, [])
 
   const fetchProductos = async () => {
@@ -267,7 +332,7 @@ const fetchMovimientosClientes = async () => {
   }, [ventas, productos])
 
   useEffect(() => {
-    const tabsAdmin = ['inventario', 'corte', 'proveedores', 'compras', 'movimientos', 'dashboard']
+    const tabsAdmin = ['inventario', 'corte', 'proveedores', 'compras', 'movimientos', 'dashboard', 'usuarios']
 
     if (usuarioRol !== 'Admin' && tabsAdmin.includes(tab)) {
       setTab('precios')
@@ -813,7 +878,6 @@ const fetchMovimientosClientes = async () => {
     })
   }
 
-
   const guardarProveedor = async () => {
     if (!formProveedor.nombre) {
       alert('El nombre del proveedor es obligatorio')
@@ -1226,58 +1290,68 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
 
 
 
-  const entrarComoVendedor = () => {
-    setUsuarioRol('Vendedor')
-    setSistemaActivo(true)
-  }
-
-  const intentarEntrarAdmin = () => {
-    const passwordCorrecta = '1234'
-
-    if (passwordAdmin !== passwordCorrecta) {
-      alert('Contraseña incorrecta')
+  const iniciarSesion = async () => {
+    if (!correoAcceso.trim() || !passwordAcceso) {
+      setErrorAcceso('Ingresa tu correo y contraseña.')
       return
     }
-
-    setUsuarioRol('Admin')
-    setSistemaActivo(true)
+    setCargandoAcceso(true)
+    setErrorAcceso('')
+    const { error } = await supabase.auth.signInWithPassword({
+      email: correoAcceso.trim(),
+      password: passwordAcceso,
+    })
+    if (error) {
+      setErrorAcceso('Correo o contraseña incorrectos.')
+      setCargandoAcceso(false)
+      return
+    }
+    setPasswordAcceso('')
+    setCargandoAcceso(false)
   }
 
-  const cerrarSistema = () => {
-    setSistemaActivo(false)
-    setMostrarPasswordAdmin(false)
-    setPasswordAdmin('')
-    setUsuarioRol('Vendedor')
+  const cerrarSistema = async () => {
+    setCargandoAcceso(true)
+    const { error } = await supabase.auth.signOut()
+    if (error) {
+      setErrorAcceso('No fue posible cerrar la sesión.')
+      setCargandoAcceso(false)
+      return
+    }
+    setPerfilUsuario(null)
+    setUsuarioRol(null)
+    setPasswordAcceso('')
     setTab('precios')
+    setCargandoAcceso(false)
   }
-  if (!appLista) {
+  if (!appLista || verificandoSesion) {
     return <PantallaCarga styles={styles} />
   }
 
-  if (!sistemaActivo) {
+  if (!perfilUsuario || !usuarioRol) {
     return (
       <PantallaAcceso
-        mostrarPasswordAdmin={mostrarPasswordAdmin}
-        passwordAdmin={passwordAdmin}
-        onEntrarComoVendedor={entrarComoVendedor}
-        onMostrarPasswordAdmin={() => setMostrarPasswordAdmin(true)}
-        onCambiarPasswordAdmin={setPasswordAdmin}
-        onIntentarEntrarAdmin={intentarEntrarAdmin}
+        correo={correoAcceso}
+        password={passwordAcceso}
+        error={errorAcceso}
+        cargando={cargandoAcceso}
+        onCambiarCorreo={setCorreoAcceso}
+        onCambiarPassword={setPasswordAcceso}
+        onIniciarSesion={iniciarSesion}
         styles={styles}
       />
     )
   }
 
   return (
-    <div style={styles.page}>
-      <Navegacion
-        tab={tab}
-        usuarioRol={usuarioRol}
-        onCambiarTab={setTab}
-        onCerrarSistema={cerrarSistema}
-        styles={styles}
-      />
-
+    <Navegacion
+      tab={tab}
+      usuarioRol={usuarioRol}
+      usuarioNombre={perfilUsuario.nombre}
+      usuarioCorreo={perfilUsuario.correo}
+      onCambiarTab={setTab}
+      onCerrarSistema={cerrarSistema}
+    >
       <main style={styles.main}>
         
         
@@ -1642,7 +1716,12 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
         )}
 
         {tab === 'ia' && (
-          <AsistenteIA styles={styles} />
+          <AsistenteInventario
+            usuarioRol={usuarioRol}
+            onInventarioActualizado={async () => {
+              await Promise.all([fetchProductos(), fetchMovimientos()])
+            }}
+          />
         )}
 
         {tab === 'clientes' && (
@@ -1699,8 +1778,14 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
         )}
 
         {tab === 'dashboard' && <Dashboard />}
+        {tab === 'usuarios' && <GestionUsuarios />}
       </main>
-    </div>
+      <LoadingOverlay
+        visible={subiendoImagen}
+        titulo="Subiendo imagen..."
+        detalle="Estamos optimizando y guardando la fotografía del producto."
+      />
+    </Navegacion>
   )
 }
 
