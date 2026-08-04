@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { jsPDF } from 'jspdf'
 import type { Session } from '@supabase/supabase-js'
+import { ChevronDown, ChevronUp, Plus } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import type {
   CarritoItem,
@@ -102,6 +103,22 @@ export default function Home() {
     imagen_url: '',
   })
   const formRef = useRef<HTMLDivElement>(null)
+  const primerCampoInventarioRef = useRef<HTMLInputElement>(null)
+  const formularioInventarioBaseRef = useRef<FormProducto>({
+    id: '',
+    codigo: '',
+    nombre: '',
+    tipo: '',
+    precio: '',
+    costo: '',
+    stock: '',
+    stock_minimo: '',
+    ubicacion: '',
+    proveedor: '',
+    imagen_url: '',
+  })
+  const [formularioInventarioAbierto, setFormularioInventarioAbierto] = useState(Boolean(form.id))
+  const [confirmarCierreInventario, setConfirmarCierreInventario] = useState(false)
 
   useEffect(() => {
     if (!perfilUsuario) return
@@ -836,7 +853,7 @@ const fetchMovimientosClientes = async () => {
   }
 
   const limpiarFormulario = () => {
-    setForm({
+    const formularioVacio: FormProducto = {
       id: '',
       codigo: '',
       nombre: '',
@@ -848,7 +865,27 @@ const fetchMovimientosClientes = async () => {
       ubicacion: '',
       proveedor: '',
       imagen_url: '',
-    })
+    }
+    setForm(formularioVacio)
+    formularioInventarioBaseRef.current = formularioVacio
+    setConfirmarCierreInventario(false)
+    setFormularioInventarioAbierto(false)
+  }
+
+  const formularioInventarioTieneCambios =
+    JSON.stringify(form) !== JSON.stringify(formularioInventarioBaseRef.current)
+
+  const abrirFormularioInventario = () => {
+    setFormularioInventarioAbierto(true)
+    requestAnimationFrame(() => primerCampoInventarioRef.current?.focus())
+  }
+
+  const solicitarCerrarFormularioInventario = () => {
+    if (formularioInventarioTieneCambios) {
+      setConfirmarCierreInventario(true)
+      return
+    }
+    limpiarFormulario()
   }
 
   const editarProducto = (p: Producto) => {
@@ -857,7 +894,7 @@ const fetchMovimientosClientes = async () => {
       return
     }
 
-    setForm({
+    const productoParaEditar: FormProducto = {
       id: p.id,
       codigo: p.codigo || '',
       nombre: p.nombre || '',
@@ -869,12 +906,18 @@ const fetchMovimientosClientes = async () => {
       ubicacion: p.ubicacion || '',
       proveedor: p.proveedor || '',
       imagen_url: p.imagen_url || '',
-    })
+    }
+    formularioInventarioBaseRef.current = productoParaEditar
+    setForm(productoParaEditar)
+    setFormularioInventarioAbierto(true)
 
     setTab('inventario')
-    formRef.current?.scrollIntoView({
-      behavior: 'smooth',
-      block: 'start',
+    requestAnimationFrame(() => {
+      formRef.current?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start',
+      })
+      primerCampoInventarioRef.current?.focus({ preventScroll: true })
     })
   }
 
@@ -1507,14 +1550,40 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
 
         {tab === 'inventario' && (
           <>
-            <div ref={formRef}>
-              <h2>Inventario: agregar o editar productos</h2>
+            <div ref={formRef} className="fl-inventory-form-card" tabIndex={-1}>
+              <div className="fl-inventory-form-header">
+                <button
+                  type="button"
+                  className="fl-inventory-form-toggle"
+                  onClick={() => formularioInventarioAbierto ? solicitarCerrarFormularioInventario() : abrirFormularioInventario()}
+                  aria-expanded={formularioInventarioAbierto}
+                  aria-controls="formulario-inventario-contenido"
+                >
+                  <span>
+                    <strong>Agregar o editar producto</strong>
+                    <small>{form.id ? 'Editando producto' : formularioInventarioAbierto ? 'Completa los datos del producto' : 'Formulario minimizado'}</small>
+                  </span>
+                  {formularioInventarioAbierto
+                    ? <ChevronUp size={22} aria-hidden="true" />
+                    : <ChevronDown size={22} aria-hidden="true" />}
+                </button>
+                {!formularioInventarioAbierto && (
+                  <button type="button" className="fl-inventory-new-button" onClick={abrirFormularioInventario}>
+                    <Plus size={18} aria-hidden="true" />
+                    Nuevo producto
+                  </button>
+                )}
+              </div>
+
+              {formularioInventarioAbierto && (
+                <div id="formulario-inventario-contenido" className="fl-inventory-form-content">
+                  <h2>{form.id ? 'Editar producto' : 'Nuevo producto'}</h2>
 
               {usuarioRol !== 'Admin' && (
                 <div style={styles.alert}>Estás en modo vendedor. No puedes editar inventario.</div>
               )}
 
-            <input style={styles.input} placeholder="Código" value={form.codigo} onChange={(e) => setForm({ ...form, codigo: e.target.value })} />
+            <input ref={primerCampoInventarioRef} style={styles.input} placeholder="Código" value={form.codigo} onChange={(e) => setForm({ ...form, codigo: e.target.value })} />
             <input style={styles.input} placeholder="Nombre" value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} />
             <input style={styles.input} placeholder="Tipo" value={form.tipo} onChange={(e) => setForm({ ...form, tipo: e.target.value })} />
             <input style={styles.input} placeholder="Precio de venta" value={form.precio} onChange={(e) => setForm({ ...form, precio: e.target.value })} />
@@ -1548,9 +1617,24 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
             </button>
 
               <button style={styles.grayButton} onClick={limpiarFormulario}>
-                Limpiar formulario
+                Cancelar
               </button>
+                </div>
+              )}
             </div>
+
+            {confirmarCierreInventario && (
+              <div className="fl-confirm-backdrop" role="presentation">
+                <section className="fl-confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="titulo-cierre-inventario" aria-describedby="mensaje-cierre-inventario">
+                  <h2 id="titulo-cierre-inventario">Cambios sin guardar</h2>
+                  <p id="mensaje-cierre-inventario">Hay cambios sin guardar. ¿Deseas cerrar el formulario?</p>
+                  <div className="fl-confirm-actions">
+                    <button type="button" className="fl-confirm-danger" onClick={limpiarFormulario}>Cerrar sin guardar</button>
+                    <button type="button" className="fl-confirm-secondary" onClick={() => setConfirmarCierreInventario(false)}>Continuar editando</button>
+                  </div>
+                </section>
+              </div>
+            )}
 
                         <h3>Productos registrados</h3>
 

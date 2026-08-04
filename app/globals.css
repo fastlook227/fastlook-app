@@ -120,6 +120,29 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .fl-progress { height: 7px; margin-top: 20px; overflow: hidden; background: #393939; border-radius: 999px; }
 .fl-progress span { display: block; height: 100%; background: var(--fl-red); border-radius: inherit; transition: width .2s ease; }
 
+.fl-inventory-form-card { margin: 16px 0 24px; overflow: hidden; background: var(--fl-white); border: 1px solid var(--fl-gray-200); border-radius: var(--fl-radius-md); box-shadow: var(--fl-shadow-sm); scroll-margin-top: calc(var(--fl-header-height) + 16px); }
+.fl-inventory-form-header { display: flex; align-items: center; gap: 12px; padding: 14px 16px; }
+.fl-inventory-form-toggle { display: flex; min-width: 0; min-height: 48px; flex: 1; align-items: center; justify-content: space-between; gap: 14px; padding: 7px 8px; color: var(--fl-black); background: transparent; border: 0; border-radius: var(--fl-radius-sm); cursor: pointer; text-align: left; }
+.fl-inventory-form-toggle:hover { background: var(--fl-gray-100); }
+.fl-inventory-form-toggle span { min-width: 0; }
+.fl-inventory-form-toggle strong, .fl-inventory-form-toggle small { display: block; }
+.fl-inventory-form-toggle strong { font-size: 17px; }
+.fl-inventory-form-toggle small { margin-top: 4px; color: var(--fl-gray-700); font-size: 12px; }
+.fl-inventory-form-toggle svg { flex: 0 0 auto; color: var(--fl-red); }
+.fl-inventory-new-button { display: inline-flex; min-height: 46px; align-items: center; justify-content: center; gap: 8px; padding: 10px 16px; color: var(--fl-white); background: var(--fl-red); border: 0; border-radius: var(--fl-radius-sm); cursor: pointer; font-weight: 800; box-shadow: 0 6px 16px rgba(214,0,0,.2); }
+.fl-inventory-new-button:hover { background: var(--fl-red-dark); }
+.fl-inventory-form-content { padding: 18px 18px 8px; border-top: 1px solid var(--fl-gray-200); }
+.fl-inventory-form-content > h2 { margin: 0 0 18px; font-size: 20px; }
+
+.fl-confirm-backdrop { position: fixed; inset: 0; z-index: 1100; display: grid; place-items: center; padding: 20px; background: rgba(8,8,8,.58); backdrop-filter: blur(5px); }
+.fl-confirm-dialog { width: min(100%, 430px); padding: 24px; background: var(--fl-white); border: 1px solid var(--fl-gray-200); border-radius: var(--fl-radius-lg); box-shadow: 0 24px 70px rgba(0,0,0,.3); }
+.fl-confirm-dialog h2 { margin: 0 0 10px; font-size: 21px; }
+.fl-confirm-dialog p { margin: 0; color: var(--fl-gray-700); line-height: 1.55; }
+.fl-confirm-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 22px; }
+.fl-confirm-danger, .fl-confirm-secondary { min-height: 46px; padding: 10px 13px; border-radius: var(--fl-radius-sm); cursor: pointer; font-weight: 800; }
+.fl-confirm-danger { color: var(--fl-white); background: var(--fl-red); border: 1px solid var(--fl-red); }
+.fl-confirm-secondary { color: var(--fl-black); background: var(--fl-white); border: 1px solid var(--fl-gray-300); }
+
 @media (max-width: 1023px) {
   :root { --fl-header-height: 76px; }
   .fl-sidebar { display: none; }
@@ -152,6 +175,9 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .fl-app-content { padding-inline: 11px; }
   .fl-mobile-nav { padding-inline: 3px; }
   .fl-mobile-sheet { padding-inline: 13px; }
+  .fl-inventory-form-header { align-items: stretch; flex-direction: column; }
+  .fl-inventory-new-button { width: 100%; }
+  .fl-confirm-actions { grid-template-columns: 1fr; }
 }
 
 @media (min-width: 1440px) {
