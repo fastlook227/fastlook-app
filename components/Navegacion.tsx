@@ -9,6 +9,7 @@ import {
   History,
   Package,
   ShoppingCart,
+  Shield,
   Tags,
   Truck,
   UserCog,
@@ -35,6 +36,7 @@ const itemsGenerales: NavigationItem[] = [
   { tab: 'precios', label: 'Lista de precios', icon: Tags },
   { tab: 'venta', label: 'Generar venta', icon: ShoppingCart },
   { tab: 'stock', label: 'Stock bajo', icon: AlertTriangle },
+  { tab: 'cascos', label: 'Cascos', icon: Shield },
   { tab: 'ia', label: 'Asistente', icon: Bot },
   { tab: 'clientes', label: 'Clientes', icon: Users },
 ]

@@ -1,9 +1,9 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { jsPDF } from 'jspdf'
 import type { Session } from '@supabase/supabase-js'
-import { ChevronDown, ChevronUp, Plus } from 'lucide-react'
+import { AlertTriangle, CheckCircle, ChevronDown, ChevronUp, Hash, Plus, RefreshCw } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import type {
   CarritoItem,
@@ -41,10 +41,23 @@ import Clientes from '@/components/Clientes'
 import GestionUsuarios from '@/components/GestionUsuarios'
 import LoadingOverlay from '@/components/LoadingOverlay'
 import CorteCajaDashboard from '@/components/corte/CorteCajaDashboard'
+import CatalogoCascos from '@/components/cascos/CatalogoCascos'
+import {
+  comprobarCodigoProducto,
+  esErrorCodigoDuplicado,
+  generarCodigoProductoDisponible,
+  normalizarCodigoProducto,
+} from '@/utils/codigosProducto'
+import {
+  claveSemanticaTipoProducto,
+  normalizarTipoProducto,
+  obtenerTiposProducto,
+} from '@/utils/tiposProducto'
 
 export default function Home() {
   const [tab, setTab] = useState<Tab>('precios')
   const [productos, setProductos] = useState<Producto[]>([])
+  const [errorProductos, setErrorProductos] = useState('')
   const [ventas, setVentas] = useState<Venta[]>([])
   const [busqueda, setBusqueda] = useState('')
   const [carrito, setCarrito] = useState<CarritoItem[]>([])
@@ -118,6 +131,15 @@ export default function Home() {
   })
   const [formularioInventarioAbierto, setFormularioInventarioAbierto] = useState(Boolean(form.id))
   const [confirmarCierreInventario, setConfirmarCierreInventario] = useState(false)
+  const [generarCodigoAutomatico, setGenerarCodigoAutomatico] = useState(true)
+  const [generandoCodigo, setGenerandoCodigo] = useState(false)
+  const [estadoCodigo, setEstadoCodigo] = useState<'idle' | 'disponible' | 'ocupado' | 'error' | 'regenerado'>('idle')
+  const [mensajeCodigo, setMensajeCodigo] = useState('')
+  const [tipoPersonalizado, setTipoPersonalizado] = useState('')
+  const [tipoModificadoManualmente, setTipoModificadoManualmente] = useState(false)
+  const tipoOriginalEdicionRef = useRef('')
+  const codigoOriginalEdicionRef = useRef('')
+  const tiposProducto = useMemo(() => obtenerTiposProducto(productos.map((producto) => producto.tipo)), [productos])
 
   useEffect(() => {
     if (!perfilUsuario) return
@@ -202,12 +224,14 @@ export default function Home() {
       .order('nombre', { ascending: true })
 
     if (error) {
-      if (silencioso) throw new Error('No fue posible actualizar los productos del corte: ' + error.message)
+      setErrorProductos(error.message)
+      if (silencioso) throw new Error('No fue posible actualizar los productos: ' + error.message)
       alert('Error al cargar productos: ' + error.message)
       return
     }
 
     setProductos(data || [])
+    setErrorProductos('')
   }
 
   const fetchVentas = async (silencioso = false) => {
@@ -802,21 +826,86 @@ const fetchMovimientosClientes = async () => {
     window.open(`https://wa.me/?text=${texto}`, '_blank')
   }
 
+  const generarCodigoInventario = async (mensajeRegenerado = false) => {
+    if (usuarioRol !== 'Admin') return null
+    setGenerandoCodigo(true)
+    setEstadoCodigo('idle')
+    setMensajeCodigo('Generando código…')
+    try {
+      const codigo = await generarCodigoProductoDisponible(supabase)
+      setForm((actual) => ({ ...actual, codigo }))
+      setEstadoCodigo(mensajeRegenerado ? 'regenerado' : 'disponible')
+      setMensajeCodigo(mensajeRegenerado ? 'Se generó otro código porque el anterior ya fue ocupado.' : 'Código disponible')
+      return codigo
+    } catch (error) {
+      setEstadoCodigo('error')
+      setMensajeCodigo(error instanceof Error ? error.message : 'No fue posible generar el código')
+      return null
+    } finally {
+      setGenerandoCodigo(false)
+    }
+  }
+
+  const validarCodigoManual = async () => {
+    if (generarCodigoAutomatico || !form.codigo.trim()) return
+    const codigo = normalizarCodigoProducto(form.codigo)
+    setForm((actual) => ({ ...actual, codigo }))
+    try {
+      const ocupado = await comprobarCodigoProducto(supabase, codigo, form.id || undefined)
+      setEstadoCodigo(ocupado ? 'ocupado' : 'disponible')
+      setMensajeCodigo(ocupado ? 'Código ocupado' : 'Código disponible')
+    } catch (error) {
+      setEstadoCodigo('error')
+      setMensajeCodigo(error instanceof Error ? error.message : 'No fue posible validar el código')
+    }
+  }
+
+  const resolverTipoParaGuardar = () => {
+    if (form.id && !tipoModificadoManualmente) return tipoOriginalEdicionRef.current
+    const seleccionado = normalizarTipoProducto(form.tipo)
+    if (!seleccionado) {
+      alert('Selecciona un tipo de producto.')
+      return null
+    }
+    if (seleccionado !== 'OTROS') return seleccionado
+    const nuevoTipo = normalizarTipoProducto(tipoPersonalizado)
+    if (!nuevoTipo) {
+      alert('Especifica el nuevo tipo de producto.')
+      return null
+    }
+    const claveNueva = claveSemanticaTipoProducto(nuevoTipo)
+    const tipoExistente = tiposProducto.find((tipo) => tipo !== 'OTROS' && claveSemanticaTipoProducto(tipo) === claveNueva)
+    if (tipoExistente) {
+      alert(`Ese tipo ya existe como ${tipoExistente}. Selecciónalo en la lista.`)
+      return null
+    }
+    if (!confirm(`Se creará el nuevo tipo “${nuevoTipo}”. ¿Deseas continuar?`)) return null
+    return nuevoTipo
+  }
+
   const guardarProducto = async () => {
     if (usuarioRol !== 'Admin') {
       alert('Solo el administrador puede editar inventario')
       return
     }
 
-    if (!form.codigo || !form.nombre || !form.precio) {
+    let codigoFinal = form.id && form.codigo === codigoOriginalEdicionRef.current
+      ? codigoOriginalEdicionRef.current
+      : normalizarCodigoProducto(form.codigo)
+    if (!form.id && generarCodigoAutomatico && !codigoFinal) {
+      codigoFinal = await generarCodigoInventario() || ''
+    }
+    if (!codigoFinal || !form.nombre || !form.precio) {
       alert('Código, nombre y precio son obligatorios')
       return
     }
+    const tipoFinal = resolverTipoParaGuardar()
+    if (!tipoFinal) return
 
-    const producto = {
-      codigo: form.codigo,
+    const crearDatosProducto = (codigo: string) => ({
+      codigo,
       nombre: form.nombre,
-      tipo: form.tipo,
+      tipo: tipoFinal,
       precio: Number(form.precio),
       costo: Number(form.costo || 0),
       stock: Number(form.stock),
@@ -824,23 +913,66 @@ const fetchMovimientosClientes = async () => {
       ubicacion: form.ubicacion,
       proveedor: form.proveedor,
       imagen_url: form.imagen_url,
-    }
+    })
 
     if (form.id) {
+      const ocupado = await comprobarCodigoProducto(supabase, codigoFinal, form.id)
+      if (ocupado) {
+        setEstadoCodigo('ocupado')
+        setMensajeCodigo('El código ya existe.')
+        return
+      }
       const { error } = await supabase
         .from('productos')
-        .update(producto)
+        .update(crearDatosProducto(codigoFinal))
         .eq('id', form.id)
 
       if (error) {
+        if (esErrorCodigoDuplicado(error)) {
+          setEstadoCodigo('ocupado')
+          setMensajeCodigo('El código ya existe.')
+          return
+        }
         alert('Error al editar producto: ' + error.message)
         return
       }
-    } else {
-      const { error } = await supabase.from('productos').insert([producto])
-
+    } else if (!generarCodigoAutomatico) {
+      const ocupado = await comprobarCodigoProducto(supabase, codigoFinal)
+      if (ocupado) {
+        setEstadoCodigo('ocupado')
+        setMensajeCodigo('El código ya existe.')
+        return
+      }
+      const { error } = await supabase.from('productos').insert([crearDatosProducto(codigoFinal)])
       if (error) {
+        if (esErrorCodigoDuplicado(error)) {
+          setEstadoCodigo('ocupado')
+          setMensajeCodigo('El código ya existe.')
+          return
+        }
         alert('Error al agregar producto: ' + error.message)
+        return
+      }
+    } else {
+      let guardado = false
+      for (let intento = 0; intento < 5 && !guardado; intento += 1) {
+        const ocupado = await comprobarCodigoProducto(supabase, codigoFinal)
+        if (ocupado) codigoFinal = await generarCodigoInventario(true) || ''
+        if (!codigoFinal) return
+        const { error } = await supabase.from('productos').insert([crearDatosProducto(codigoFinal)])
+        if (!error) {
+          guardado = true
+          break
+        }
+        if (!esErrorCodigoDuplicado(error)) {
+          alert('Error al agregar producto: ' + error.message)
+          return
+        }
+        codigoFinal = await generarCodigoInventario(true) || ''
+      }
+      if (!guardado) {
+        setEstadoCodigo('error')
+        setMensajeCodigo('No fue posible guardar después de varios intentos de código.')
         return
       }
     }
@@ -866,6 +998,14 @@ const fetchMovimientosClientes = async () => {
     }
     setForm(formularioVacio)
     formularioInventarioBaseRef.current = formularioVacio
+    setGenerarCodigoAutomatico(true)
+    setGenerandoCodigo(false)
+    setEstadoCodigo('idle')
+    setMensajeCodigo('')
+    setTipoPersonalizado('')
+    setTipoModificadoManualmente(false)
+    tipoOriginalEdicionRef.current = ''
+    codigoOriginalEdicionRef.current = ''
     setConfirmarCierreInventario(false)
     setFormularioInventarioAbierto(false)
   }
@@ -873,8 +1013,16 @@ const fetchMovimientosClientes = async () => {
   const formularioInventarioTieneCambios =
     JSON.stringify(form) !== JSON.stringify(formularioInventarioBaseRef.current)
 
-  const abrirFormularioInventario = () => {
+  const abrirFormularioInventario = async () => {
+    if (usuarioRol !== 'Admin') {
+      alert('Solo el administrador puede crear productos')
+      return
+    }
+    setGenerarCodigoAutomatico(true)
+    setTipoPersonalizado('')
+    setTipoModificadoManualmente(false)
     setFormularioInventarioAbierto(true)
+    await generarCodigoInventario()
     requestAnimationFrame(() => primerCampoInventarioRef.current?.focus())
   }
 
@@ -896,7 +1044,7 @@ const fetchMovimientosClientes = async () => {
       id: p.id,
       codigo: p.codigo || '',
       nombre: p.nombre || '',
-      tipo: p.tipo || '',
+      tipo: normalizarTipoProducto(p.tipo || ''),
       precio: p.precio || '',
       costo: p.costo || '',
       stock: p.stock || '',
@@ -906,6 +1054,13 @@ const fetchMovimientosClientes = async () => {
       imagen_url: p.imagen_url || '',
     }
     formularioInventarioBaseRef.current = productoParaEditar
+    tipoOriginalEdicionRef.current = p.tipo || ''
+    codigoOriginalEdicionRef.current = p.codigo || ''
+    setTipoModificadoManualmente(false)
+    setTipoPersonalizado('')
+    setGenerarCodigoAutomatico(false)
+    setEstadoCodigo('idle')
+    setMensajeCodigo('')
     setForm(productoParaEditar)
     setFormularioInventarioAbierto(true)
 
@@ -1530,9 +1685,24 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
                 <div style={styles.alert}>Estás en modo vendedor. No puedes editar inventario.</div>
               )}
 
-            <input ref={primerCampoInventarioRef} style={styles.input} placeholder="Código" value={form.codigo} onChange={(e) => setForm({ ...form, codigo: e.target.value })} />
-            <input style={styles.input} placeholder="Nombre" value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} />
-            <input style={styles.input} placeholder="Tipo" value={form.tipo} onChange={(e) => setForm({ ...form, tipo: e.target.value })} />
+            <section className="fl-product-code-box">
+              <div className="fl-product-code-heading"><span><Hash size={19} aria-hidden="true" /><strong>Código del producto</strong></span><label><input type="checkbox" role="switch" aria-label="Generar código automáticamente" checked={!form.id && generarCodigoAutomatico} disabled={Boolean(form.id)} onChange={(e) => { const activo = e.target.checked; setGenerarCodigoAutomatico(activo); setEstadoCodigo('idle'); setMensajeCodigo(''); if (activo) void generarCodigoInventario() }} />Generar automáticamente</label></div>
+              <input
+                style={styles.input}
+                placeholder="Código"
+                value={form.codigo}
+                disabled={!form.id && generarCodigoAutomatico}
+                onChange={(e) => { setForm({ ...form, codigo: e.target.value.toUpperCase() }); setEstadoCodigo('idle'); setMensajeCodigo('') }}
+                onBlur={() => void validarCodigoManual()}
+              />
+              {!generarCodigoAutomatico && !form.id && <small className="fl-product-code-help">Puedes utilizar un código propio o del proveedor.</small>}
+              {form.id && <small className="fl-product-code-warning"><AlertTriangle size={15} aria-hidden="true" />Cambiar el código puede afectar búsquedas e historial.</small>}
+              {generarCodigoAutomatico && !form.id && <button type="button" className="fl-product-code-regenerate" onClick={() => void generarCodigoInventario()} disabled={generandoCodigo}><RefreshCw size={16} aria-hidden="true" />{generandoCodigo ? 'Generando código…' : 'Regenerar'}</button>}
+              {mensajeCodigo && <p className={`fl-product-code-status is-${estadoCodigo}`} role="status">{estadoCodigo === 'disponible' || estadoCodigo === 'regenerado' ? <CheckCircle size={16} aria-hidden="true" /> : <AlertTriangle size={16} aria-hidden="true" />}{mensajeCodigo}</p>}
+            </section>
+            <input ref={primerCampoInventarioRef} style={styles.input} placeholder="Nombre" value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} />
+            <label className="fl-product-type-field"><span>Tipo de producto</span><select style={styles.input} value={form.tipo} onChange={(e) => { setForm({ ...form, tipo: e.target.value }); setTipoModificadoManualmente(true); if (e.target.value !== 'OTROS') setTipoPersonalizado('') }}><option value="">Selecciona un tipo</option>{tiposProducto.map((tipo) => <option key={tipo} value={tipo}>{tipo}</option>)}</select></label>
+            {form.tipo === 'OTROS' && <label className="fl-product-type-field"><span>Nuevo tipo</span><input style={styles.input} value={tipoPersonalizado} onChange={(e) => setTipoPersonalizado(e.target.value.toLocaleUpperCase('es-MX'))} placeholder="Nuevo tipo de producto" /></label>}
             <input style={styles.input} placeholder="Precio de venta" value={form.precio} onChange={(e) => setForm({ ...form, precio: e.target.value })} />
             <input style={styles.input} placeholder="Costo / precio de compra" value={form.costo} onChange={(e) => setForm({ ...form, costo: e.target.value })} />
             <input style={styles.input} placeholder="Stock" value={form.stock} onChange={(e) => setForm({ ...form, stock: e.target.value })} />
@@ -1651,6 +1821,15 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
           <StockBajo
             productosBajoStock={productosBajoStock}
             styles={styles}
+          />
+        )}
+
+        {tab === 'cascos' && (
+          <CatalogoCascos
+            productos={productos}
+            rol={usuarioRol}
+            error={errorProductos}
+            onReintentar={async () => { await fetchProductos(true) }}
           />
         )}
 

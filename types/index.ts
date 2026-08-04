@@ -12,6 +12,7 @@ export type Tab =
   | 'precios'
   | 'venta'
   | 'stock'
+  | 'cascos'
   | 'ia'
   | 'clientes'
   | 'inventario'
@@ -34,6 +35,9 @@ export interface Producto {
   ubicacion: string
   proveedor: string
   imagen_url: string
+  talla?: string | null
+  certificacion?: string | null
+  archivado?: boolean | null
   [key: string]: unknown
 }
 
