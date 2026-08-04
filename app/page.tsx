@@ -40,6 +40,7 @@ import ListaCompras, {
 import Clientes from '@/components/Clientes'
 import GestionUsuarios from '@/components/GestionUsuarios'
 import LoadingOverlay from '@/components/LoadingOverlay'
+import CorteCajaDashboard from '@/components/corte/CorteCajaDashboard'
 
 export default function Home() {
   const [tab, setTab] = useState<Tab>('precios')
@@ -57,8 +58,6 @@ export default function Home() {
   const [cargandoAcceso, setCargandoAcceso] = useState(false)
   const [verificandoSesion, setVerificandoSesion] = useState(true)
   const [subiendoImagen, setSubiendoImagen] = useState(false)
-  const [fechaInicio, setFechaInicio] = useState('')
-  const [fechaFin, setFechaFin] = useState('')
   const [proveedores, setProveedores] = useState<Proveedor[]>([])
   const [movimientos, setMovimientos] = useState<MovimientoInventario[]>([])
   const [cortes, setCortes] = useState<CorteCaja[]>([])
@@ -196,13 +195,14 @@ export default function Home() {
     }
   }, [])
 
-  const fetchProductos = async () => {
+  const fetchProductos = async (silencioso = false) => {
     const { data, error } = await supabase
       .from('productos')
       .select('*')
       .order('nombre', { ascending: true })
 
     if (error) {
+      if (silencioso) throw new Error('No fue posible actualizar los productos del corte: ' + error.message)
       alert('Error al cargar productos: ' + error.message)
       return
     }
@@ -210,13 +210,14 @@ export default function Home() {
     setProductos(data || [])
   }
 
-  const fetchVentas = async () => {
+  const fetchVentas = async (silencioso = false) => {
     const { data, error } = await supabase
       .from('ventas')
       .select('*')
       .order('created_at', { ascending: false })
 
     if (error) {
+      if (silencioso) throw new Error('No fue posible actualizar las ventas del corte: ' + error.message)
       alert('Error al cargar ventas: ' + error.message)
       return
     }
@@ -254,13 +255,14 @@ export default function Home() {
   }
 
 
-  const fetchCortes = async () => {
+  const fetchCortes = async (silencioso = false) => {
     const { data, error } = await supabase
       .from('cortes_caja')
       .select('*')
       .order('created_at', { ascending: false })
 
     if (error) {
+      if (silencioso) throw new Error('No fue posible actualizar el historial de cortes: ' + error.message)
       alert('Error al cargar cortes: ' + error.message)
       return
     }
@@ -447,10 +449,6 @@ const fetchMovimientosClientes = async () => {
 
   const productosBajoStock = productos.filter(
     (p) => Number(p.stock) <= Number(p.stock_minimo || 5)
-  )
-
-  const productosSinGanancia = productos.filter(
-    (p) => Number(p.precio || 0) <= Number(p.costo || 0)
   )
 
   const agregarAlCarrito = (producto: Producto) => {
@@ -1211,57 +1209,6 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
   window.open(`https://wa.me/52${numeroLimpio}?text=${mensaje}`, '_blank')
 }
 
-  const hoy = obtenerFechaLocal(new Date())
-
-  const ventasHoy = ventas.filter((v) => {
-    return obtenerFechaLocal(v.created_at) === hoy
-  })
-
-  const ventasFiltradas = ventas.filter((v) => {
-    const fechaVenta = obtenerFechaLocal(v.created_at)
-
-    if (!fechaInicio && !fechaFin) {
-      return true
-    }
-
-    if (fechaInicio && !fechaFin) {
-      return fechaVenta >= fechaInicio
-    }
-
-    if (!fechaInicio && fechaFin) {
-      return fechaVenta <= fechaFin
-    }
-
-    return fechaVenta >= fechaInicio && fechaVenta <= fechaFin
-  })
-
-  const resumenHoy = calcularResumenVentas(ventasHoy, productos)
-  const resumenPeriodo = calcularResumenVentas(ventasFiltradas, productos)
-
-  const resumenesDiarios = ventas.reduce((acc: any, venta) => {
-    const fecha = obtenerFechaLocal(venta.created_at)
-
-    if (!acc[fecha]) {
-      acc[fecha] = []
-    }
-
-    acc[fecha].push(venta)
-
-    return acc
-  }, {})
-
-  const listaResumenesDiarios = Object.keys(resumenesDiarios)
-    .sort((a, b) => b.localeCompare(a))
-    .map((fecha) => {
-      const ventasDelDia = resumenesDiarios[fecha]
-      const resumen = calcularResumenVentas(ventasDelDia, productos)
-
-      return {
-        fecha,
-        ...resumen,
-      }
-    })
-
   const productosParaComprar = productos.filter((p) => {
     return Number(p.stock) <= Number(p.stock_minimo || 5)
   })
@@ -1690,106 +1637,14 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
         )}
 
         {tab === 'corte' && (
-          <>
-            <h2>Corte de caja automático</h2>
-
-            {productosSinGanancia.length > 0 && (
-              <div style={styles.alert}>
-                ⚠️ Tienes {productosSinGanancia.length} productos sin ganancia. Revisa precio y costo antes de venderlos.
-              </div>
-            )}
-
-            <div style={styles.card}>
-              <h3>Resumen de hoy</h3>
-              <p><b>Fecha:</b> {hoy}</p>
-              <p><b>Total vendido:</b> ${resumenHoy.total}</p>
-              <p><b>Número de ventas:</b> {resumenHoy.numeroVentas}</p>
-              <p><b>Productos vendidos:</b> {resumenHoy.productosVendidos}</p>
-              <p><b>Ganancia real estimada:</b> ${resumenHoy.ganancia}</p>
-
-              <h4>Métodos de pago</h4>
-              {Object.keys(resumenHoy.metodos).length === 0 && <p>No hay ventas hoy.</p>}
-              {Object.keys(resumenHoy.metodos).map((metodo) => (
-                <p key={metodo}>
-                  <b>{metodo}:</b> ${resumenHoy.metodos[metodo]}
-                </p>
-              ))}
-            </div>
-
-            <h3>Seleccionar periodo de ventas</h3>
-
-            <input
-              type="date"
-              value={fechaInicio}
-              onChange={(e) => setFechaInicio(e.target.value)}
-              style={styles.input}
-            />
-
-            <input
-              type="date"
-              value={fechaFin}
-              onChange={(e) => setFechaFin(e.target.value)}
-              style={styles.input}
-            />
-
-            <div style={styles.card}>
-              <h3>Resumen del periodo</h3>
-              <p><b>Total vendido:</b> ${resumenPeriodo.total}</p>
-              <p><b>Número de ventas:</b> {resumenPeriodo.numeroVentas}</p>
-              <p><b>Productos vendidos:</b> {resumenPeriodo.productosVendidos}</p>
-              <p><b>Ganancia real estimada:</b> ${resumenPeriodo.ganancia}</p>
-
-              <h4>Métodos de pago</h4>
-              {Object.keys(resumenPeriodo.metodos).length === 0 && <p>No hay ventas en este periodo.</p>}
-              {Object.keys(resumenPeriodo.metodos).map((metodo) => (
-                <p key={metodo}>
-                  <b>{metodo}:</b> ${resumenPeriodo.metodos[metodo]}
-                </p>
-              ))}
-            </div>
-
-            <h3>Historial de cortes</h3>
-
-            {cortes.length === 0 && (
-              <div style={styles.alert}>Aún no hay cortes guardados.</div>
-            )}
-
-            {cortes.map((c) => (
-              <div key={c.id} style={styles.card}>
-                <p><b>Periodo:</b> {c.fecha_inicio} a {c.fecha_fin}</p>
-                <p>Total: ${c.total}</p>
-                <p>Ganancia: ${c.ganancia}</p>
-                <p>Efectivo: ${c.efectivo}</p>
-                <p>Transferencia: ${c.transferencia}</p>
-                <p>Tarjeta: ${c.tarjeta}</p>
-              </div>
-            ))}
-
-            <h3>Resúmenes diarios</h3>
-
-            {listaResumenesDiarios.map((dia) => (
-              <div key={dia.fecha} style={styles.card}>
-                <h3>{dia.fecha}</h3>
-                <p><b>Total vendido:</b> ${dia.total}</p>
-                <p><b>Ventas:</b> {dia.numeroVentas}</p>
-                <p><b>Productos vendidos:</b> {dia.productosVendidos}</p>
-                <p><b>Ganancia:</b> ${dia.ganancia}</p>
-              </div>
-            ))}
-
-            <h3>Ventas del periodo</h3>
-
-            {ventasFiltradas.map((v) => (
-              <div key={v.id} style={styles.ticketItem}>
-                <p><b>{v.nombre}</b></p>
-                <p>Código: {v.codigo}</p>
-                <p>Cantidad: {v.cantidad}</p>
-                <p>Total: ${v.total}</p>
-                <p>Método: {v.metodo_pago}</p>
-                <p>Fecha: {obtenerFechaLocal(v.created_at)}</p>
-              </div>
-            ))}
-          </>
+          <CorteCajaDashboard
+            ventas={ventas}
+            productos={productos}
+            cortes={cortes}
+            onActualizar={async () => {
+              await Promise.all([fetchVentas(true), fetchProductos(true), fetchCortes(true)])
+            }}
+          />
         )}
 
         {tab === 'stock' && (
