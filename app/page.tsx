@@ -475,18 +475,18 @@ const fetchMovimientosClientes = async () => {
     (p) => Number(p.stock) <= Number(p.stock_minimo || 5)
   )
 
-  const agregarAlCarrito = (producto: Producto) => {
+  const agregarAlCarrito = (producto: Producto, mostrarAlertas = true): { ok: boolean; mensaje: string } => {
     if (producto.stock <= 0) {
-      alert('Sin stock disponible')
-      return
+      if (mostrarAlertas) alert('Sin stock disponible')
+      return { ok: false, mensaje: 'Este casco no tiene stock disponible.' }
     }
 
     const existe = carrito.find((item) => item.id === producto.id)
 
     if (existe) {
       if (existe.cantidad + 1 > producto.stock) {
-        alert('No hay más stock disponible')
-        return
+        if (mostrarAlertas) alert('No hay más stock disponible')
+        return { ok: false, mensaje: 'Ya alcanzaste el máximo disponible en el carrito.' }
       }
 
       setCarrito(
@@ -499,6 +499,7 @@ const fetchMovimientosClientes = async () => {
     } else {
       setCarrito([...carrito, { ...producto, cantidad: 1 }])
     }
+    return { ok: true, mensaje: 'Casco añadido a la venta.' }
   }
 
   const aumentarCantidad = (id: string) => {
@@ -1830,6 +1831,10 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
             rol={usuarioRol}
             error={errorProductos}
             onReintentar={async () => { await fetchProductos(true) }}
+            onProductoActualizado={(producto) => setProductos((actuales) => actuales.some((item) => item.id === producto.id) ? actuales.map((item) => item.id === producto.id ? producto : item) : [...actuales, producto])}
+            onProductoEliminado={(productoId) => setProductos((actuales) => actuales.filter((producto) => producto.id !== productoId))}
+            onVender={(producto) => agregarAlCarrito(producto, false)}
+            onIrAVenta={() => setTab('venta')}
           />
         )}
 
