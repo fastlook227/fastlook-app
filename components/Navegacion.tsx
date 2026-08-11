@@ -17,6 +17,7 @@ import {
   WalletCards,
 } from 'lucide-react'
 import type { RolUsuario, Tab } from '@/types'
+import { puedeAccederCorteCaja } from '@/lib/permisos/corteCaja'
 import AppShell from '@/components/AppShell'
 import MobileBottomNav from '@/components/MobileBottomNav'
 import Sidebar, { type NavigationItem } from '@/components/Sidebar'
@@ -60,14 +61,19 @@ export default function Navegacion({
   onCerrarSistema,
   children,
 }: NavegacionProps) {
-  const items = usuarioRol === 'Admin' ? [...itemsGenerales, ...itemsAdmin] : itemsGenerales
+  const accesoCorte = puedeAccederCorteCaja(usuarioCorreo)
+  const itemsAdminPermitidos = itemsAdmin.filter((item) => item.tab !== 'corte' || accesoCorte)
+  const itemCorte = itemsAdmin.find((item) => item.tab === 'corte') as NavigationItem
+  const items = usuarioRol === 'Admin'
+    ? [...itemsGenerales, ...itemsAdminPermitidos]
+    : [...itemsGenerales, ...(accesoCorte ? [itemCorte] : [])]
   const buscar = (destino: Tab) => items.find((item) => item.tab === destino) as NavigationItem
   const primaryItems = usuarioRol === 'Admin'
     ? [buscar('precios'), buscar('venta'), buscar('inventario')]
     : [buscar('precios'), buscar('venta'), buscar('stock')]
   const quickTabs: Tab[] = usuarioRol === 'Admin'
-    ? ['venta', 'inventario', 'ia', 'clientes', 'corte']
-    : ['venta', 'precios', 'ia', 'clientes', 'stock']
+    ? ['venta', 'inventario', 'ia', 'clientes', ...(accesoCorte ? ['corte' as Tab] : [])]
+    : ['venta', 'precios', 'ia', 'clientes', ...(accesoCorte ? ['corte' as Tab] : ['stock' as Tab])]
   const quickItems = quickTabs.map(buscar)
   const primaryTabs = new Set(primaryItems.map((item) => item.tab))
   const moreItems = items.filter((item) => !primaryTabs.has(item.tab))

@@ -22,7 +22,7 @@ import type {
   Venta,
 } from '@/types'
 import { obtenerFechaLocal } from '@/utils/fechas'
-import { calcularResumenVentas } from '@/utils/ventas'
+import { puedeAccederCorteCaja } from '@/lib/permisos/corteCaja'
 import { generarTextoTicket } from '@/utils/ticket'
 import { comprimirImagenProducto } from '@/utils/imagenes'
 import PantallaCarga from '@/components/PantallaCarga'
@@ -74,6 +74,7 @@ export default function Home() {
   const [proveedores, setProveedores] = useState<Proveedor[]>([])
   const [movimientos, setMovimientos] = useState<MovimientoInventario[]>([])
   const [cortes, setCortes] = useState<CorteCaja[]>([])
+  const [avisoCorte, setAvisoCorte] = useState('')
   const [cantidadCompra, setCantidadCompra] = useState(1)
   const [clienteTelefono, setClienteTelefono] = useState('')
   const [clienteNombre, setClienteNombre] = useState('')
@@ -147,7 +148,7 @@ export default function Home() {
     fetchVentas()
     fetchProveedores()
     fetchMovimientos()
-    fetchCortes()
+    if (puedeAccederCorteCaja(perfilUsuario.correo)) fetchCortes()
     fetchClientes()
     fetchMovimientosClientes()
   }, [perfilUsuario])
@@ -168,6 +169,9 @@ export default function Home() {
       if (!sesion?.user) {
         setPerfilUsuario(null)
         setUsuarioRol(null)
+        setCortes([])
+        setAvisoCorte('')
+        setTab('precios')
         setVerificandoSesion(false)
         return
       }
@@ -280,18 +284,21 @@ export default function Home() {
 
 
   const fetchCortes = async (silencioso = false) => {
-    const { data, error } = await supabase
-      .from('cortes_caja')
-      .select('*')
-      .order('created_at', { ascending: false })
-
-    if (error) {
-      if (silencioso) throw new Error('No fue posible actualizar el historial de cortes: ' + error.message)
-      alert('Error al cargar cortes: ' + error.message)
+    const { data: sesionData } = await supabase.auth.getSession()
+    const token = sesionData.session?.access_token
+    if (!token) {
+      if (silencioso) throw new Error('Debes iniciar sesión.')
       return
     }
-
-    setCortes(data || [])
+    const respuesta = await fetch('/api/corte-caja', { headers: { Authorization: `Bearer ${token}` } })
+    const resultado = await respuesta.json() as { cortes?: CorteCaja[]; mensaje?: string }
+    if (!respuesta.ok) {
+      const mensaje = resultado.mensaje || 'No fue posible actualizar el historial de cortes.'
+      if (silencioso) throw new Error(mensaje)
+      alert(mensaje)
+      return
+    }
+    setCortes(resultado.cortes || [])
   }
 
   const fetchClientes = async () => {
@@ -324,63 +331,33 @@ const fetchMovimientosClientes = async () => {
 
   useEffect(() => {
     const verificarCambioDia = async () => {
-      const ayerDate = new Date()
-      ayerDate.setDate(ayerDate.getDate() - 1)
-      const ayer = obtenerFechaLocal(ayerDate)
-
-      const { data, error } = await supabase
-        .from('cortes_caja')
-        .select('*')
-        .eq('fecha_inicio', ayer)
-        .eq('fecha_fin', ayer)
-
-      if (error) {
-        alert('Error al verificar corte automático: ' + error.message)
+      const { data } = await supabase.auth.getSession()
+      const token = data.session?.access_token
+      if (!token) return
+      const respuesta = await fetch('/api/corte-caja', { method: 'POST', headers: { Authorization: `Bearer ${token}` } })
+      if (!respuesta.ok) {
+        const resultado = await respuesta.json() as { mensaje?: string }
+        alert(resultado.mensaje || 'No fue posible generar el corte automático.')
         return
       }
-
-      if (data && data.length > 0) {
-        return
-      }
-
-      const ventasAyer = ventas.filter((v) => {
-        return obtenerFechaLocal(v.created_at) === ayer
-      })
-
-      const resumenAyer = calcularResumenVentas(ventasAyer, productos)
-
-      const { error: errorCorte } = await supabase.from('cortes_caja').insert([
-        {
-          fecha_inicio: ayer,
-          fecha_fin: ayer,
-          total: resumenAyer.total,
-          ganancia: resumenAyer.ganancia,
-          efectivo: resumenAyer.metodos.Efectivo || 0,
-          transferencia: resumenAyer.metodos.Transferencia || 0,
-          tarjeta: resumenAyer.metodos.Tarjeta || 0,
-        },
-      ])
-
-      if (errorCorte) {
-        alert('Error al guardar corte automático: ' + errorCorte.message)
-        return
-      }
-
-      fetchCortes()
+      await fetchCortes()
     }
 
-    if (ventas.length > 0 && productos.length > 0) {
-      verificarCambioDia()
+    if (perfilUsuario && puedeAccederCorteCaja(perfilUsuario.correo) && ventas.length > 0 && productos.length > 0) {
+      void verificarCambioDia()
     }
-  }, [ventas, productos])
+  }, [perfilUsuario, ventas, productos])
 
   useEffect(() => {
     const tabsAdmin = ['inventario', 'corte', 'proveedores', 'compras', 'movimientos', 'dashboard', 'usuarios']
 
-    if (usuarioRol !== 'Admin' && tabsAdmin.includes(tab)) {
+    if (tab === 'corte' && !puedeAccederCorteCaja(perfilUsuario?.correo)) {
+      setAvisoCorte('No tienes permiso para acceder a Corte de caja.')
+      setTab('precios')
+    } else if (usuarioRol !== 'Admin' && tab !== 'corte' && tabsAdmin.includes(tab)) {
       setTab('precios')
     }
-  }, [usuarioRol, tab])
+  }, [usuarioRol, perfilUsuario?.correo, tab])
 
   const subirImagenProducto = async (file: File) => {
     if (!file) return
@@ -1466,6 +1443,8 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
     }
     setPerfilUsuario(null)
     setUsuarioRol(null)
+    setCortes([])
+    setAvisoCorte('')
     setPasswordAcceso('')
     setTab('precios')
     setCargandoAcceso(false)
@@ -1495,10 +1474,19 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
       usuarioRol={usuarioRol}
       usuarioNombre={perfilUsuario.nombre}
       usuarioCorreo={perfilUsuario.correo}
-      onCambiarTab={setTab}
+      onCambiarTab={(nuevaTab) => {
+        if (nuevaTab === 'corte' && !puedeAccederCorteCaja(perfilUsuario.correo)) {
+          setAvisoCorte('No tienes permiso para acceder a Corte de caja.')
+          setTab('precios')
+          return
+        }
+        setAvisoCorte('')
+        setTab(nuevaTab)
+      }}
       onCerrarSistema={cerrarSistema}
     >
       <main style={styles.main}>
+        {avisoCorte && <div style={styles.alert} role="alert">{avisoCorte}</div>}
         
         
         {tab === 'precios' && (
@@ -1807,7 +1795,7 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
           </>
         )}
 
-        {tab === 'corte' && (
+        {tab === 'corte' && puedeAccederCorteCaja(perfilUsuario.correo) && (
           <CorteCajaDashboard
             ventas={ventas}
             productos={productos}
@@ -1816,6 +1804,9 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
               await Promise.all([fetchVentas(true), fetchProductos(true), fetchCortes(true)])
             }}
           />
+        )}
+        {tab === 'corte' && !puedeAccederCorteCaja(perfilUsuario.correo) && (
+          <div style={styles.alert} role="alert">No tienes permiso para acceder a Corte de caja.</div>
         )}
 
         {tab === 'stock' && (

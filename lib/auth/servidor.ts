@@ -3,6 +3,7 @@ import 'server-only'
 import { createClient } from '@supabase/supabase-js'
 import { supabaseAnonKey, supabaseUrl } from '@/lib/supabase'
 import type { PerfilUsuario, RolUsuario } from '@/types'
+import { puedeAccederCorteCaja } from '@/lib/permisos/corteCaja'
 
 export class ErrorAutenticacion extends Error {
   constructor(public status: 401 | 403, mensaje: string) {
@@ -43,6 +44,14 @@ export async function exigirAdministrador(request: Request): Promise<PerfilUsuar
   const perfil = await obtenerPerfilAutenticado(request)
   if (perfil.rol !== 'Admin') {
     throw new ErrorAutenticacion(403, 'Esta acción requiere permisos de Administrador.')
+  }
+  return perfil
+}
+
+export async function exigirAccesoCorteCaja(request: Request): Promise<PerfilUsuario> {
+  const perfil = await obtenerPerfilAutenticado(request)
+  if (!puedeAccederCorteCaja(perfil.correo)) {
+    throw new ErrorAutenticacion(403, 'No tienes permiso para acceder a Corte de caja.')
   }
   return perfil
 }
