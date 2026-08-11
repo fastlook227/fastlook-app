@@ -40,6 +40,7 @@ import ListaCompras, {
 import Clientes from '@/components/Clientes'
 import GestionUsuarios from '@/components/GestionUsuarios'
 import LoadingOverlay from '@/components/LoadingOverlay'
+import SelectorImagen from '@/components/SelectorImagen'
 import CorteCajaDashboard from '@/components/corte/CorteCajaDashboard'
 import CatalogoCascos from '@/components/cascos/CatalogoCascos'
 import {
@@ -71,6 +72,8 @@ export default function Home() {
   const [cargandoAcceso, setCargandoAcceso] = useState(false)
   const [verificandoSesion, setVerificandoSesion] = useState(true)
   const [subiendoImagen, setSubiendoImagen] = useState(false)
+  const [faseImagen, setFaseImagen] = useState('Procesando imagen…')
+  const [notificacionImagen, setNotificacionImagen] = useState<{ tipo: 'ok' | 'error'; mensaje: string } | null>(null)
   const [proveedores, setProveedores] = useState<Proveedor[]>([])
   const [movimientos, setMovimientos] = useState<MovimientoInventario[]>([])
   const [cortes, setCortes] = useState<CorteCaja[]>([])
@@ -366,26 +369,28 @@ const fetchMovimientosClientes = async () => {
     const tamanoMaximo = 15 * 1024 * 1024
 
     if (!tiposPermitidos.includes(file.type)) {
-      alert('Formato no válido. Selecciona una imagen JPEG, PNG o WebP.')
+      setNotificacionImagen({ tipo: 'error', mensaje: 'Formato no válido. Selecciona una imagen JPEG, PNG o WebP.' })
       return
     }
 
     if (file.size > tamanoMaximo) {
-      alert('La imagen es demasiado grande. El tamaño máximo permitido es 15 MB.')
+      setNotificacionImagen({ tipo: 'error', mensaje: 'La imagen es demasiado grande. El tamaño máximo permitido es 15 MB.' })
       return
     }
 
+    setFaseImagen('Procesando imagen…')
+    setNotificacionImagen(null)
     setSubiendoImagen(true)
+    try {
 
     let archivoComprimido: File
 
     try {
       archivoComprimido = await comprimirImagenProducto(file)
     } catch (error) {
-      setSubiendoImagen(false)
       const mensaje =
         error instanceof Error ? error.message : 'Error desconocido'
-      alert('Error al comprimir imagen: ' + mensaje)
+      setNotificacionImagen({ tipo: 'error', mensaje: 'Error al comprimir imagen: ' + mensaje })
       return
     }
 
@@ -401,6 +406,7 @@ const fetchMovimientosClientes = async () => {
     const nombreLimpio = form.codigo || 'producto'
     const nombreArchivo = `${nombreLimpio}-${Date.now()}.webp`
 
+    setFaseImagen('Subiendo imagen…')
     const { error } = await supabase.storage
       .from('productos')
       .upload(nombreArchivo, archivoComprimido, {
@@ -409,8 +415,7 @@ const fetchMovimientosClientes = async () => {
       })
 
     if (error) {
-      setSubiendoImagen(false)
-      alert('Error al subir imagen: ' + error.message)
+      setNotificacionImagen({ tipo: 'error', mensaje: 'Error al subir imagen: ' + error.message })
       return
     }
 
@@ -423,8 +428,10 @@ const fetchMovimientosClientes = async () => {
       imagen_url: data.publicUrl,
     }))
 
-    setSubiendoImagen(false)
-    alert('Imagen subida correctamente')
+    setNotificacionImagen({ tipo: 'ok', mensaje: 'Imagen subida correctamente.' })
+    } finally {
+      setSubiendoImagen(false)
+    }
   }
 
   const productosFiltrados = productos.filter((p) => {
@@ -1701,22 +1708,8 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
 
             <input style={styles.input} placeholder="URL de imagen" value={form.imagen_url} onChange={(e) => setForm({ ...form, imagen_url: e.target.value })} />
 
-            <input
-              type="file"
-              accept="image/jpeg,image/png,image/webp"
-              capture="environment"
-              style={styles.input}
-              onChange={(e) => {
-                const file = e.target.files?.[0]
-                if (file) subirImagenProducto(file)
-              }}
-            />
-
-            {subiendoImagen && <div style={styles.alert}>Subiendo imagen...</div>}
-
-            {form.imagen_url && (
-              <img src={form.imagen_url} alt="Vista previa" style={styles.image} />
-            )}
+            <SelectorImagen imagenUrl={form.imagen_url} deshabilitado={subiendoImagen} onSeleccionar={subirImagenProducto} onEliminar={() => setForm((actual) => ({ ...actual, imagen_url: '' }))} />
+            {notificacionImagen && <div className={`fl-image-notice is-${notificacionImagen.tipo}`} role="status">{notificacionImagen.mensaje}</div>}
 
             <button style={styles.bigButton} onClick={guardarProducto}>
               {form.id ? 'Guardar cambios' : 'Agregar producto'}
@@ -1896,7 +1889,7 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
       </main>
       <LoadingOverlay
         visible={subiendoImagen}
-        titulo="Subiendo imagen..."
+        titulo={faseImagen}
         detalle="Estamos optimizando y guardando la fotografía del producto."
       />
     </Navegacion>

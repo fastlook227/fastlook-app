@@ -1,8 +1,9 @@
 'use client'
 
-import { AlertTriangle, ImagePlus, X } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { AlertTriangle, X } from 'lucide-react'
+import { useState } from 'react'
 import type { CascoCatalogo, DatosFormularioCasco } from '@/types/cascos'
+import SelectorImagen from '@/components/SelectorImagen'
 
 const TALLAS = ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'Unitalla']
 const CERTIFICACIONES = ['DOT', 'ECE', 'DOT + ECE', 'Sin especificar'] as const
@@ -34,7 +35,6 @@ export default function FormularioCasco({ casco, codigoInicial, ocupado, onGener
   const [imagenUrl, setImagenUrl] = useState(casco?.imagen_url || '')
   const [imagen, setImagen] = useState<File | null>(null)
   const [error, setError] = useState('')
-  const vistaPrevia = useMemo(() => imagen ? URL.createObjectURL(imagen) : imagenUrl, [imagen, imagenUrl])
 
   const enviar = async () => {
     const tallaFinal = talla === 'Otra' ? otraTalla.trim() : talla
@@ -48,6 +48,6 @@ export default function FormularioCasco({ casco, codigoInicial, ocupado, onGener
     <label className="is-wide"><span>Nombre</span><input value={nombre} onChange={(e) => setNombre(e.target.value)} /></label>
     <label><span>Tipo</span><input value="CASCOS" disabled /></label><label><span>Precio</span><input type="number" min="0" value={precio} onChange={(e) => setPrecio(e.target.value)} /></label><label><span>Costo</span><input type="number" min="0" value={costo} onChange={(e) => setCosto(e.target.value)} /></label><label><span>Existencia</span><input type="number" min="0" step="1" value={stock} onChange={(e) => setStock(e.target.value)} /></label><label><span>Stock mínimo</span><input type="number" min="0" step="1" value={stockMinimo} onChange={(e) => setStockMinimo(e.target.value)} /></label>
     <label><span>Talla</span><select value={talla} onChange={(e) => setTalla(e.target.value)}><option value="">Selecciona</option>{TALLAS.map((valor) => <option key={valor}>{valor}</option>)}<option>Otra</option></select></label>{talla === 'Otra' && <label><span>Otra talla</span><input value={otraTalla} onChange={(e) => setOtraTalla(e.target.value)} /></label>}<label><span>Certificación</span><select value={certificacion} onChange={(e) => setCertificacion(e.target.value as DatosFormularioCasco['certificacion'])}>{CERTIFICACIONES.map((valor) => <option key={valor}>{valor}</option>)}</select></label><label><span>Ubicación</span><input value={ubicacion} onChange={(e) => setUbicacion(e.target.value)} /></label><label><span>Proveedor</span><input value={proveedor} onChange={(e) => setProveedor(e.target.value)} /></label>
-    <label className="is-wide"><span>URL de imagen</span><input value={imagenUrl} onChange={(e) => setImagenUrl(e.target.value)} /></label><label className="fl-casco-image-input"><ImagePlus /><span>Seleccionar imagen</span><input type="file" accept="image/jpeg,image/png,image/webp" onChange={(e) => setImagen(e.target.files?.[0] || null)} /></label>{vistaPrevia && <img className="fl-casco-form-preview" src={vistaPrevia} alt="Vista previa" />}
+    <label className="is-wide"><span>URL de imagen</span><input value={imagenUrl} onChange={(e) => { setImagenUrl(e.target.value); setImagen(null) }} /></label><div className="is-wide"><SelectorImagen imagenUrl={imagenUrl} archivo={imagen} deshabilitado={ocupado} onSeleccionar={setImagen} onEliminar={() => { setImagen(null); setImagenUrl('') }} /></div>
   </div>{error && <p className="fl-casco-form-error" role="alert">{error}</p>}<footer><button type="button" onClick={onCancelar} disabled={ocupado}>Cancelar</button><button type="button" className="is-primary" onClick={() => void enviar()} disabled={ocupado}>{casco ? 'Actualizar casco' : 'Guardar casco'}</button></footer></section></div>
 }

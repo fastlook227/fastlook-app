@@ -113,7 +113,9 @@ export default function CatalogoCascos({ productos, rol, error, onReintentar, on
   const subirImagen = async (archivo: File, codigo: string) => {
     if (!['image/jpeg', 'image/png', 'image/webp'].includes(archivo.type)) throw new Error('Selecciona una imagen JPEG, PNG o WebP válida.')
     if (archivo.size > 15 * 1024 * 1024) throw new Error('La imagen supera el máximo permitido de 15 MB.')
+    setOperacion('Procesando imagen…')
     const comprimida = await comprimirImagenProducto(archivo)
+    setOperacion('Subiendo imagen…')
     const nombre = `${codigo || 'casco'}-${Date.now()}.webp`
     const { error: errorSubida } = await supabase.storage.from('productos').upload(nombre, comprimida, { contentType: 'image/webp', cacheControl: '31536000' })
     if (errorSubida) throw new Error(errorSubida.message)
