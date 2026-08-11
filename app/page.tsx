@@ -134,6 +134,7 @@ export default function Home() {
     imagen_url: '',
   })
   const [formularioInventarioAbierto, setFormularioInventarioAbierto] = useState(Boolean(form.id))
+  const [detallesProductoAbiertos, setDetallesProductoAbiertos] = useState(false)
   const [confirmarCierreInventario, setConfirmarCierreInventario] = useState(false)
   const [generarCodigoAutomatico, setGenerarCodigoAutomatico] = useState(true)
   const [generandoCodigo, setGenerandoCodigo] = useState(false)
@@ -845,6 +846,11 @@ const fetchMovimientosClientes = async () => {
     }
   }
 
+  const abrirDetallesPorError = () => {
+    setDetallesProductoAbiertos(true)
+    requestAnimationFrame(() => document.getElementById('detalles-producto-contenido')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }))
+  }
+
   const resolverTipoParaGuardar = () => {
     if (form.id && !tipoModificadoManualmente) return tipoOriginalEdicionRef.current
     const seleccionado = normalizarTipoProducto(form.tipo)
@@ -855,6 +861,7 @@ const fetchMovimientosClientes = async () => {
     if (seleccionado !== 'OTROS') return seleccionado
     const nuevoTipo = normalizarTipoProducto(tipoPersonalizado)
     if (!nuevoTipo) {
+      abrirDetallesPorError()
       alert('Especifica el nuevo tipo de producto.')
       return null
     }
@@ -881,6 +888,7 @@ const fetchMovimientosClientes = async () => {
       codigoFinal = await generarCodigoInventario() || ''
     }
     if (!codigoFinal || !form.nombre || !form.precio) {
+      if (!codigoFinal) abrirDetallesPorError()
       alert('Código, nombre y precio son obligatorios')
       return
     }
@@ -903,6 +911,7 @@ const fetchMovimientosClientes = async () => {
     if (form.id) {
       const ocupado = await comprobarCodigoProducto(supabase, codigoFinal, form.id)
       if (ocupado) {
+        abrirDetallesPorError()
         setEstadoCodigo('ocupado')
         setMensajeCodigo('El código ya existe.')
         return
@@ -914,6 +923,7 @@ const fetchMovimientosClientes = async () => {
 
       if (error) {
         if (esErrorCodigoDuplicado(error)) {
+          abrirDetallesPorError()
           setEstadoCodigo('ocupado')
           setMensajeCodigo('El código ya existe.')
           return
@@ -924,6 +934,7 @@ const fetchMovimientosClientes = async () => {
     } else if (!generarCodigoAutomatico) {
       const ocupado = await comprobarCodigoProducto(supabase, codigoFinal)
       if (ocupado) {
+        abrirDetallesPorError()
         setEstadoCodigo('ocupado')
         setMensajeCodigo('El código ya existe.')
         return
@@ -931,6 +942,7 @@ const fetchMovimientosClientes = async () => {
       const { error } = await supabase.from('productos').insert([crearDatosProducto(codigoFinal)])
       if (error) {
         if (esErrorCodigoDuplicado(error)) {
+          abrirDetallesPorError()
           setEstadoCodigo('ocupado')
           setMensajeCodigo('El código ya existe.')
           return
@@ -956,6 +968,7 @@ const fetchMovimientosClientes = async () => {
         codigoFinal = await generarCodigoInventario(true) || ''
       }
       if (!guardado) {
+        abrirDetallesPorError()
         setEstadoCodigo('error')
         setMensajeCodigo('No fue posible guardar después de varios intentos de código.')
         return
@@ -993,6 +1006,7 @@ const fetchMovimientosClientes = async () => {
     codigoOriginalEdicionRef.current = ''
     setConfirmarCierreInventario(false)
     setFormularioInventarioAbierto(false)
+    setDetallesProductoAbiertos(false)
   }
 
   const formularioInventarioTieneCambios =
@@ -1007,6 +1021,7 @@ const fetchMovimientosClientes = async () => {
     setTipoPersonalizado('')
     setTipoModificadoManualmente(false)
     setFormularioInventarioAbierto(true)
+    setDetallesProductoAbiertos(false)
     await generarCodigoInventario()
     requestAnimationFrame(() => primerCampoInventarioRef.current?.focus())
   }
@@ -1048,6 +1063,7 @@ const fetchMovimientosClientes = async () => {
     setMensajeCodigo('')
     setForm(productoParaEditar)
     setFormularioInventarioAbierto(true)
+    setDetallesProductoAbiertos(false)
 
     setTab('inventario')
     requestAnimationFrame(() => {
@@ -1681,35 +1697,34 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
                 <div style={styles.alert}>Estás en modo vendedor. No puedes editar inventario.</div>
               )}
 
-            <section className="fl-product-code-box">
-              <div className="fl-product-code-heading"><span><Hash size={19} aria-hidden="true" /><strong>Código del producto</strong></span><label><input type="checkbox" role="switch" aria-label="Generar código automáticamente" checked={!form.id && generarCodigoAutomatico} disabled={Boolean(form.id)} onChange={(e) => { const activo = e.target.checked; setGenerarCodigoAutomatico(activo); setEstadoCodigo('idle'); setMensajeCodigo(''); if (activo) void generarCodigoInventario() }} />Generar automáticamente</label></div>
-              <input
-                style={styles.input}
-                placeholder="Código"
-                value={form.codigo}
-                disabled={!form.id && generarCodigoAutomatico}
-                onChange={(e) => { setForm({ ...form, codigo: e.target.value.toUpperCase() }); setEstadoCodigo('idle'); setMensajeCodigo('') }}
-                onBlur={() => void validarCodigoManual()}
-              />
-              {!generarCodigoAutomatico && !form.id && <small className="fl-product-code-help">Puedes utilizar un código propio o del proveedor.</small>}
-              {form.id && <small className="fl-product-code-warning"><AlertTriangle size={15} aria-hidden="true" />Cambiar el código puede afectar búsquedas e historial.</small>}
-              {generarCodigoAutomatico && !form.id && <button type="button" className="fl-product-code-regenerate" onClick={() => void generarCodigoInventario()} disabled={generandoCodigo}><RefreshCw size={16} aria-hidden="true" />{generandoCodigo ? 'Generando código…' : 'Regenerar'}</button>}
-              {mensajeCodigo && <p className={`fl-product-code-status is-${estadoCodigo}`} role="status">{estadoCodigo === 'disponible' || estadoCodigo === 'regenerado' ? <CheckCircle size={16} aria-hidden="true" /> : <AlertTriangle size={16} aria-hidden="true" />}{mensajeCodigo}</p>}
+            <div className="fl-product-code-summary"><Hash size={16} aria-hidden="true" /><span>Código: <strong>{form.codigo || (generandoCodigo ? 'Generando…' : 'Pendiente')}</strong></span>{mensajeCodigo && <small className={`is-${estadoCodigo}`}>{mensajeCodigo}</small>}</div>
+            <div className="fl-product-main-grid">
+              <label><span>Nombre</span><input ref={primerCampoInventarioRef} style={styles.input} placeholder="Nombre" value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} /></label>
+              <label><span>Tipo de producto</span><select style={styles.input} value={form.tipo} onChange={(e) => { setForm({ ...form, tipo: e.target.value }); setTipoModificadoManualmente(true); if (e.target.value !== 'OTROS') setTipoPersonalizado('') }}><option value="">Selecciona un tipo</option>{tiposProducto.map((tipo) => <option key={tipo} value={tipo}>{tipo}</option>)}</select></label>
+              <label><span>Precio de venta</span><input style={styles.input} placeholder="Precio de venta" value={form.precio} onChange={(e) => setForm({ ...form, precio: e.target.value })} /></label>
+              <label><span>Stock</span><input style={styles.input} placeholder="Stock" value={form.stock} onChange={(e) => setForm({ ...form, stock: e.target.value })} /></label>
+              <div className="fl-product-photo-field"><span>Foto</span><SelectorImagen imagenUrl={form.imagen_url} deshabilitado={subiendoImagen} onSeleccionar={subirImagenProducto} onEliminar={() => setForm((actual) => ({ ...actual, imagen_url: '' }))} />{notificacionImagen && <div className={`fl-image-notice is-${notificacionImagen.tipo}`} role="status">{notificacionImagen.mensaje}</div>}</div>
+            </div>
+
+            <section className={`fl-product-details ${detallesProductoAbiertos ? 'is-open' : ''}`}>
+              <button type="button" className="fl-product-details-toggle" aria-expanded={detallesProductoAbiertos} aria-controls="detalles-producto-contenido" onClick={() => setDetallesProductoAbiertos((abiertos) => !abiertos)}><span>Detalles</span>{detallesProductoAbiertos ? <ChevronUp size={20} aria-hidden="true" /> : <ChevronDown size={20} aria-hidden="true" />}</button>
+              {detallesProductoAbiertos && <div id="detalles-producto-contenido" className="fl-product-details-content">
+                <section className="fl-product-code-box">
+                  <div className="fl-product-code-heading"><span><Hash size={19} aria-hidden="true" /><strong>Código del producto</strong></span><label><input type="checkbox" role="switch" aria-label="Generar código automáticamente" checked={!form.id && generarCodigoAutomatico} disabled={Boolean(form.id)} onChange={(e) => { const activo = e.target.checked; setGenerarCodigoAutomatico(activo); setEstadoCodigo('idle'); setMensajeCodigo(''); if (activo) void generarCodigoInventario() }} />Generar automáticamente</label></div>
+                  <input style={styles.input} placeholder="Código" value={form.codigo} disabled={!form.id && generarCodigoAutomatico} onChange={(e) => { setForm({ ...form, codigo: e.target.value.toUpperCase() }); setEstadoCodigo('idle'); setMensajeCodigo('') }} onBlur={() => void validarCodigoManual()} />
+                  {!generarCodigoAutomatico && !form.id && <small className="fl-product-code-help">Puedes utilizar un código propio o del proveedor.</small>}
+                  {form.id && <small className="fl-product-code-warning"><AlertTriangle size={15} aria-hidden="true" />Cambiar el código puede afectar búsquedas e historial.</small>}
+                  {generarCodigoAutomatico && !form.id && <button type="button" className="fl-product-code-regenerate" onClick={() => void generarCodigoInventario()} disabled={generandoCodigo}><RefreshCw size={16} aria-hidden="true" />{generandoCodigo ? 'Generando código…' : 'Regenerar'}</button>}
+                  {mensajeCodigo && <p className={`fl-product-code-status is-${estadoCodigo}`} role="status">{estadoCodigo === 'disponible' || estadoCodigo === 'regenerado' ? <CheckCircle size={16} aria-hidden="true" /> : <AlertTriangle size={16} aria-hidden="true" />}{mensajeCodigo}</p>}
+                </section>
+                {form.tipo === 'OTROS' && <label><span>Nuevo tipo</span><input style={styles.input} value={tipoPersonalizado} onChange={(e) => setTipoPersonalizado(e.target.value.toLocaleUpperCase('es-MX'))} placeholder="Nuevo tipo de producto" /></label>}
+                <label><span>Costo / precio de compra</span><input style={styles.input} placeholder="Costo / precio de compra" value={form.costo} onChange={(e) => setForm({ ...form, costo: e.target.value })} /></label>
+                <label><span>Stock mínimo</span><input style={styles.input} placeholder="Stock mínimo" value={form.stock_minimo} onChange={(e) => setForm({ ...form, stock_minimo: e.target.value })} /></label>
+                <label><span>Ubicación</span><input style={styles.input} placeholder="Ubicación" value={form.ubicacion} onChange={(e) => setForm({ ...form, ubicacion: e.target.value })} /></label>
+                <label><span>Proveedor</span><input style={styles.input} placeholder="Proveedor" value={form.proveedor} onChange={(e) => setForm({ ...form, proveedor: e.target.value })} /></label>
+                <label className="is-wide"><span>URL de imagen</span><input style={styles.input} placeholder="URL de imagen" value={form.imagen_url} onChange={(e) => setForm({ ...form, imagen_url: e.target.value })} /></label>
+              </div>}
             </section>
-            <input ref={primerCampoInventarioRef} style={styles.input} placeholder="Nombre" value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} />
-            <label className="fl-product-type-field"><span>Tipo de producto</span><select style={styles.input} value={form.tipo} onChange={(e) => { setForm({ ...form, tipo: e.target.value }); setTipoModificadoManualmente(true); if (e.target.value !== 'OTROS') setTipoPersonalizado('') }}><option value="">Selecciona un tipo</option>{tiposProducto.map((tipo) => <option key={tipo} value={tipo}>{tipo}</option>)}</select></label>
-            {form.tipo === 'OTROS' && <label className="fl-product-type-field"><span>Nuevo tipo</span><input style={styles.input} value={tipoPersonalizado} onChange={(e) => setTipoPersonalizado(e.target.value.toLocaleUpperCase('es-MX'))} placeholder="Nuevo tipo de producto" /></label>}
-            <input style={styles.input} placeholder="Precio de venta" value={form.precio} onChange={(e) => setForm({ ...form, precio: e.target.value })} />
-            <input style={styles.input} placeholder="Costo / precio de compra" value={form.costo} onChange={(e) => setForm({ ...form, costo: e.target.value })} />
-            <input style={styles.input} placeholder="Stock" value={form.stock} onChange={(e) => setForm({ ...form, stock: e.target.value })} />
-            <input style={styles.input} placeholder="Stock mínimo" value={form.stock_minimo} onChange={(e) => setForm({ ...form, stock_minimo: e.target.value })} />
-            <input style={styles.input} placeholder="Ubicación" value={form.ubicacion} onChange={(e) => setForm({ ...form, ubicacion: e.target.value })} />
-            <input style={styles.input} placeholder="Proveedor" value={form.proveedor} onChange={(e) => setForm({ ...form, proveedor: e.target.value })} />
-
-            <input style={styles.input} placeholder="URL de imagen" value={form.imagen_url} onChange={(e) => setForm({ ...form, imagen_url: e.target.value })} />
-
-            <SelectorImagen imagenUrl={form.imagen_url} deshabilitado={subiendoImagen} onSeleccionar={subirImagenProducto} onEliminar={() => setForm((actual) => ({ ...actual, imagen_url: '' }))} />
-            {notificacionImagen && <div className={`fl-image-notice is-${notificacionImagen.tipo}`} role="status">{notificacionImagen.mensaje}</div>}
 
             <button style={styles.bigButton} onClick={guardarProducto}>
               {form.id ? 'Guardar cambios' : 'Agregar producto'}
