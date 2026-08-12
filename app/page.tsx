@@ -22,6 +22,7 @@ import type {
   Venta,
 } from '@/types'
 import { obtenerFechaLocal } from '@/utils/fechas'
+import { normalizarTextoBusqueda } from '@/utils/busqueda'
 import { puedeAccederCorteCaja } from '@/lib/permisos/corteCaja'
 import { generarTextoTicket } from '@/utils/ticket'
 import { comprimirImagenProducto } from '@/utils/imagenes'
@@ -436,13 +437,13 @@ const fetchMovimientosClientes = async () => {
   }
 
   const productosFiltrados = productos.filter((p) => {
-    const texto = busqueda.toLowerCase()
+    const texto = normalizarTextoBusqueda(busqueda)
     return (
-      p.nombre?.toLowerCase().includes(texto) ||
-      p.codigo?.toLowerCase().includes(texto) ||
-      p.tipo?.toLowerCase().includes(texto) ||
-      p.ubicacion?.toLowerCase().includes(texto) ||
-      p.proveedor?.toLowerCase().includes(texto)
+      normalizarTextoBusqueda(p.nombre).includes(texto) ||
+      normalizarTextoBusqueda(p.codigo).includes(texto) ||
+      normalizarTextoBusqueda(p.tipo).includes(texto) ||
+      normalizarTextoBusqueda(p.ubicacion).includes(texto) ||
+      normalizarTextoBusqueda(p.proveedor).includes(texto)
     )
   })
 

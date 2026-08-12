@@ -1,9 +1,8 @@
 import type { Producto } from '@/types'
 import type { CascoCatalogo, GrupoPrecioCascos } from '@/types/cascos'
+import { normalizarTextoBusqueda } from '@/utils/busqueda'
 
-export const normalizarTextoCasco = (valor: unknown) => String(valor || '')
-  .normalize('NFD')
-  .replace(/[\u0300-\u036f]/g, '')
+export const normalizarTextoCasco = (valor: unknown) => normalizarTextoBusqueda(valor)
   .replace(/[-_]+/g, ' ')
   .replace(/\s+/g, ' ')
   .trim()

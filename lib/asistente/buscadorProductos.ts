@@ -8,6 +8,7 @@ import type {
   ProductoSeleccionMasiva,
 } from '@/types/asistente'
 import type { RolUsuario } from '@/types'
+import { normalizarTextoBusqueda } from '@/utils/busqueda'
 
 interface ProductoConsultado {
   id: string
@@ -24,10 +25,7 @@ interface ProductoConsultado {
 }
 
 const normalizarTexto = (valor: string) =>
-  valor
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
+  normalizarTextoBusqueda(valor)
     .replace(/[^a-z0-9]+/g, ' ')
     .trim()
     .replace(/\s+/g, ' ')
