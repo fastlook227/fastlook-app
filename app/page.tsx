@@ -83,11 +83,35 @@ export default function Home() {
   const [clienteTelefono, setClienteTelefono] = useState('')
   const [clienteNombre, setClienteNombre] = useState('')
   const [carritoAbierto, setCarritoAbierto] = useState(false)
+  const panelCarritoRef = useRef<HTMLDivElement>(null)
+  const disparadorCarritoRef = useRef<HTMLElement | null>(null)
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [movimientosClientes, setMovimientosClientes] = useState<MovimientoCliente[]>([])
   const [busquedaClientes, setBusquedaClientes] = useState('')
   const [montoCliente, setMontoCliente] = useState('')
   const [notaCliente, setNotaCliente] = useState('')
+
+  const abrirCarrito = (disparador: HTMLElement) => {
+    disparadorCarritoRef.current = disparador
+    setCarritoAbierto(true)
+  }
+
+  const cerrarCarrito = () => {
+    setCarritoAbierto(false)
+    requestAnimationFrame(() => disparadorCarritoRef.current?.focus())
+  }
+
+  useEffect(() => {
+    if (!carritoAbierto) return
+    panelCarritoRef.current?.focus()
+    const cerrarConEscape = (evento: KeyboardEvent) => {
+      if (evento.key !== 'Escape') return
+      evento.preventDefault()
+      cerrarCarrito()
+    }
+    document.addEventListener('keydown', cerrarConEscape)
+    return () => document.removeEventListener('keydown', cerrarConEscape)
+  }, [carritoAbierto])
 
   const [formCliente, setFormCliente] = useState<FormCliente>({
     id: '',
@@ -1547,9 +1571,9 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
 
         <button
           style={styles.redButton}
-          onClick={() => {
+          onClick={(evento) => {
             agregarAlCarrito(p)
-            setCarritoAbierto(true)
+            abrirCarrito(evento.currentTarget)
           }}
         >
           Añadir al ticket
@@ -1559,7 +1583,8 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
 
     <button
       style={styles.botonCarritoFlotante}
-      onClick={() => setCarritoAbierto(true)}
+      onClick={(evento) => abrirCarrito(evento.currentTarget)}
+      aria-label="Abrir carrito"
     >
       🛒
       {carrito.length > 0 && (
@@ -1568,16 +1593,17 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
     </button>
 
     {carritoAbierto && (
-      <div style={styles.fondoCarrito}>
-        <div style={styles.carritoMovil}>
+      <div style={styles.fondoCarrito} onClick={cerrarCarrito} role="presentation">
+        <div ref={panelCarritoRef} style={styles.carritoMovil} onClick={(evento) => evento.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="titulo-carrito" tabIndex={-1}>
           <button
             style={styles.cerrarCarrito}
-            onClick={() => setCarritoAbierto(false)}
+            onClick={cerrarCarrito}
+            aria-label="Cerrar carrito"
           >
             ×
           </button>
 
-          <h2>Ticket actual</h2>
+          <h2 id="titulo-carrito">Ticket actual</h2>
 
           <select
             value={metodoPago}
@@ -2110,8 +2136,8 @@ cerrarCarrito: {
   backgroundColor: '#c40000',
   color: '#fff',
   borderRadius: '50%',
-  width: 34,
-  height: 34,
+  width: 44,
+  height: 44,
   fontSize: 22,
   cursor: 'pointer',
 },
