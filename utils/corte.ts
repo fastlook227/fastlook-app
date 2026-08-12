@@ -1,6 +1,6 @@
 import type { Producto, Venta } from '@/types'
 import type { DatosCorte, ProductoVendidoResumen, ResumenMetodoPago, VentaAgrupadaFecha } from '@/types/corte'
-import { obtenerFechaLocal } from '@/utils/fechas'
+import { obtenerFechaLocal, obtenerHoraLocalFastLook, obtenerRangoFechasFastLook } from '@/utils/fechas'
 import { calcularResumenVentas } from '@/utils/ventas'
 
 const numeroSeguro = (valor: unknown) => {
@@ -17,16 +17,17 @@ const normalizarMetodo = (metodo?: string) => {
 }
 
 const diferenciaDias = (inicio: string, fin: string) => {
-  const desde = new Date(`${inicio}T00:00:00`).getTime()
-  const hasta = new Date(`${fin}T00:00:00`).getTime()
+  const desde = Date.parse(`${inicio}T00:00:00Z`)
+  const hasta = Date.parse(`${fin}T00:00:00Z`)
   return Math.max(1, Math.round((hasta - desde) / 86400000) + 1)
 }
 
-export const filtrarVentasCorte = (ventas: Venta[], inicio: string, fin: string) =>
-  ventas.filter((venta) => {
-    const fecha = obtenerFechaLocal(venta.created_at)
-    return fecha >= inicio && fecha <= fin
-  })
+export const filtrarVentasCorte = (ventas: Venta[], inicio: string, fin: string) => {
+  const rango = obtenerRangoFechasFastLook(inicio, fin)
+  const desde = Date.parse(rango.inicioIso)
+  const hasta = Date.parse(rango.finExclusivoIso)
+  return ventas.filter((venta) => { const instante = Date.parse(venta.created_at); return instante >= desde && instante < hasta })
+}
 
 export const calcularDatosCorte = (
   ventas: Venta[],
@@ -52,7 +53,7 @@ export const calcularDatosCorte = (
     const ganancia = producto ? (precio - costoUnitario) * cantidad : 0
     const fechaLocal = obtenerFechaLocal(venta.created_at)
     const fecha = dias === 1
-      ? `${String(new Date(venta.created_at).getHours()).padStart(2, '0')}:00`
+      ? `${String(obtenerHoraLocalFastLook(venta.created_at)).padStart(2, '0')}:00`
       : dias <= 31
         ? fechaLocal
         : fechaLocal.slice(0, 7)

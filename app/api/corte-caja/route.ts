@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { ErrorAutenticacion, exigirAccesoCorteCaja } from '@/lib/auth/servidor'
 import { obtenerSupabaseAdmin } from '@/lib/supabaseAdmin'
-import { obtenerFechaLocal } from '@/utils/fechas'
+import { obtenerRangoAyerFastLook } from '@/utils/fechas'
 import { calcularResumenVentas } from '@/utils/ventas'
 import type { Producto, Venta } from '@/types'
 
@@ -28,20 +28,18 @@ export async function POST(request: Request) {
   try {
     await exigirAccesoCorteCaja(request)
     const admin = obtenerSupabaseAdmin()
-    const ayerDate = new Date()
-    ayerDate.setDate(ayerDate.getDate() - 1)
-    const ayer = obtenerFechaLocal(ayerDate)
+    const rangoAyer = obtenerRangoAyerFastLook()
+    const ayer = rangoAyer.inicio
     const { data: existente, error: errorExistente } = await admin.from('cortes_caja').select('id').eq('fecha_inicio', ayer).eq('fecha_fin', ayer).limit(1)
     if (errorExistente) throw errorExistente
     if (existente?.length) return NextResponse.json({ ok: true, creado: false })
     const [{ data: ventas, error: errorVentas }, { data: productos, error: errorProductos }] = await Promise.all([
-      admin.from('ventas').select('*'),
+      admin.from('ventas').select('*').gte('created_at', rangoAyer.inicioIso).lt('created_at', rangoAyer.finExclusivoIso),
       admin.from('productos').select('*'),
     ])
     if (errorVentas) throw errorVentas
     if (errorProductos) throw errorProductos
-    const ventasAyer = ((ventas || []) as Venta[]).filter((venta) => obtenerFechaLocal(venta.created_at) === ayer)
-    const resumen = calcularResumenVentas(ventasAyer, (productos || []) as Producto[])
+    const resumen = calcularResumenVentas((ventas || []) as Venta[], (productos || []) as Producto[])
     const { error: errorCorte } = await admin.from('cortes_caja').insert({
       fecha_inicio: ayer, fecha_fin: ayer, total: resumen.total, ganancia: resumen.ganancia,
       efectivo: resumen.metodos.Efectivo || 0, transferencia: resumen.metodos.Transferencia || 0, tarjeta: resumen.metodos.Tarjeta || 0,

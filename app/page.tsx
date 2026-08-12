@@ -21,7 +21,7 @@ import type {
   Tab,
   Venta,
 } from '@/types'
-import { obtenerFechaLocal } from '@/utils/fechas'
+import { obtenerFechaActualFastLook, obtenerFechaLocal } from '@/utils/fechas'
 import { normalizarTextoBusqueda } from '@/utils/busqueda'
 import { puedeAccederCorteCaja } from '@/lib/permisos/corteCaja'
 import { generarTextoTicket } from '@/utils/ticket'
@@ -90,6 +90,12 @@ export default function Home() {
   const [busquedaClientes, setBusquedaClientes] = useState('')
   const [montoCliente, setMontoCliente] = useState('')
   const [notaCliente, setNotaCliente] = useState('')
+  const [fechaOperativa, setFechaOperativa] = useState(obtenerFechaActualFastLook)
+
+  useEffect(() => {
+    const temporizador = window.setInterval(() => setFechaOperativa(obtenerFechaActualFastLook()), 30_000)
+    return () => window.clearInterval(temporizador)
+  }, [])
 
   const abrirCarrito = (disparador: HTMLElement) => {
     disparadorCarritoRef.current = disparador
@@ -375,7 +381,7 @@ const fetchMovimientosClientes = async () => {
     if (perfilUsuario && puedeAccederCorteCaja(perfilUsuario.correo) && ventas.length > 0 && productos.length > 0) {
       void verificarCambioDia()
     }
-  }, [perfilUsuario, ventas, productos])
+  }, [perfilUsuario, ventas, productos, fechaOperativa])
 
   useEffect(() => {
     const tabsAdmin = ['inventario', 'corte', 'proveedores', 'compras', 'movimientos', 'dashboard', 'usuarios']
@@ -1921,7 +1927,6 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
         {tab === 'movimientos' && (
           <Movimientos
             movimientos={movimientos}
-            obtenerFechaLocal={obtenerFechaLocal}
             styles={styles}
           />
         )}

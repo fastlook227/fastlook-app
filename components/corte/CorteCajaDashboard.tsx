@@ -1,10 +1,10 @@
 'use client'
 
-import { useMemo, useState, useTransition } from 'react'
+import { useEffect, useMemo, useState, useTransition } from 'react'
 import { Calculator, CircleDollarSign, PackageCheck, ReceiptText, TrendingUp, Trophy, WalletCards } from 'lucide-react'
 import type { CorteCaja, Producto, Venta } from '@/types'
 import type { PeriodoCorte } from '@/types/corte'
-import { obtenerFechaLocal } from '@/utils/fechas'
+import { formatearFechaHoraFastLook, obtenerFechaActualFastLook, obtenerRangoPeriodoFastLook } from '@/utils/fechas'
 import { calcularDatosCorte, filtrarVentasCorte } from '@/utils/corte'
 import LoadingOverlay from '@/components/LoadingOverlay'
 import CorteFiltros from '@/components/corte/CorteFiltros'
@@ -21,34 +21,14 @@ interface CorteCajaDashboardProps {
 }
 
 const moneda = (valor: number) => `$${valor.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-const fechaLocal = (fecha: Date) => obtenerFechaLocal(fecha)
-const moverDias = (fecha: Date, dias: number) => {
-  const resultado = new Date(fecha)
-  resultado.setDate(resultado.getDate() + dias)
-  return resultado
-}
-
 const rangoPeriodo = (periodo: Exclude<PeriodoCorte, 'personalizado'>) => {
-  const ahora = new Date()
-  const hoy = fechaLocal(ahora)
-  if (periodo === 'ayer') {
-    const ayer = fechaLocal(moverDias(ahora, -1))
-    return { inicio: ayer, fin: ayer }
-  }
-  if (periodo === 'ultimos7') return { inicio: fechaLocal(moverDias(ahora, -6)), fin: hoy }
-  if (periodo === 'mesActual') return {
-    inicio: fechaLocal(new Date(ahora.getFullYear(), ahora.getMonth(), 1)),
-    fin: hoy,
-  }
-  if (periodo === 'mesAnterior') return {
-    inicio: fechaLocal(new Date(ahora.getFullYear(), ahora.getMonth() - 1, 1)),
-    fin: fechaLocal(new Date(ahora.getFullYear(), ahora.getMonth(), 0)),
-  }
-  return { inicio: hoy, fin: hoy }
+  const { inicio, fin } = obtenerRangoPeriodoFastLook(periodo)
+  return { inicio, fin }
 }
 
 export default function CorteCajaDashboard({ ventas, productos, cortes, onActualizar }: CorteCajaDashboardProps) {
   const rangoHoy = rangoPeriodo('hoy')
+  const [fechaOperativa, setFechaOperativa] = useState(obtenerFechaActualFastLook)
   const [periodo, setPeriodo] = useState<PeriodoCorte>('hoy')
   const [fechaInicio, setFechaInicio] = useState(rangoHoy.inicio)
   const [fechaFin, setFechaFin] = useState(rangoHoy.fin)
@@ -57,6 +37,20 @@ export default function CorteCajaDashboard({ ventas, productos, cortes, onActual
   const [error, setError] = useState('')
   const [actualizando, setActualizando] = useState(false)
   const [analizando, iniciarTransicion] = useTransition()
+
+  useEffect(() => {
+    const temporizador = window.setInterval(() => setFechaOperativa(obtenerFechaActualFastLook()), 30_000)
+    return () => window.clearInterval(temporizador)
+  }, [])
+
+  useEffect(() => {
+    if (periodo === 'personalizado') return
+    const rango = rangoPeriodo(periodo)
+    setFechaInicio(rango.inicio)
+    setFechaFin(rango.fin)
+    setFechaInicioAplicada(rango.inicio)
+    setFechaFinAplicada(rango.fin)
+  }, [fechaOperativa, periodo])
 
   const ventasPeriodo = useMemo(
     () => filtrarVentasCorte(ventas, fechaInicioAplicada, fechaFinAplicada),
@@ -153,7 +147,7 @@ export default function CorteCajaDashboard({ ventas, productos, cortes, onActual
 
       <section className="fl-corte-history">
         <div className="fl-corte-panel-heading"><div><h2>Historial de cortes</h2><p>Registros existentes en Supabase, sin modificaciones.</p></div></div>
-        {cortes.length === 0 ? <p className="fl-corte-history-empty">Aún no hay cortes guardados.</p> : <div>{cortes.map((corte) => <article key={corte.id}><strong>{corte.fecha_inicio} — {corte.fecha_fin}</strong><span>Total {moneda(Number(corte.total || 0))}</span><span>Ganancia {moneda(Number(corte.ganancia || 0))}</span><small>Efectivo {moneda(Number(corte.efectivo || 0))} · Transferencia {moneda(Number(corte.transferencia || 0))} · Tarjeta {moneda(Number(corte.tarjeta || 0))}</small></article>)}</div>}
+        {cortes.length === 0 ? <p className="fl-corte-history-empty">Aún no hay cortes guardados.</p> : <div>{cortes.map((corte) => <article key={corte.id}><strong>{corte.fecha_inicio} — {corte.fecha_fin}</strong>{corte.created_at && <small>Generado: {formatearFechaHoraFastLook(corte.created_at)}</small>}<span>Total {moneda(Number(corte.total || 0))}</span><span>Ganancia {moneda(Number(corte.ganancia || 0))}</span><small>Efectivo {moneda(Number(corte.efectivo || 0))} · Transferencia {moneda(Number(corte.transferencia || 0))} · Tarjeta {moneda(Number(corte.tarjeta || 0))}</small></article>)}</div>}
       </section>
 
       <LoadingOverlay

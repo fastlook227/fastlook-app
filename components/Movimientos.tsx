@@ -1,9 +1,9 @@
 import type { CSSProperties } from 'react'
 import type { MovimientoInventario } from '@/types'
+import { formatearFechaHoraFastLook } from '@/utils/fechas'
 
 interface MovimientosProps {
   movimientos: MovimientoInventario[]
-  obtenerFechaLocal: (fecha: string | Date) => string
   styles: {
     ticketItem: CSSProperties
   }
@@ -11,7 +11,6 @@ interface MovimientosProps {
 
 export default function Movimientos({
   movimientos,
-  obtenerFechaLocal,
   styles,
 }: MovimientosProps) {
   return (
@@ -27,7 +26,7 @@ export default function Movimientos({
           <p>Stock anterior: {m.stock_anterior}</p>
           <p>Stock nuevo: {m.stock_nuevo}</p>
           <p>Nota: {m.nota}</p>
-          <p>Fecha: {obtenerFechaLocal(m.created_at)}</p>
+          <p>Fecha: {formatearFechaHoraFastLook(m.created_at)}</p>
         </div>
       ))}
     </>
