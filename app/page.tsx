@@ -1,9 +1,8 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { jsPDF } from 'jspdf'
 import type { Session } from '@supabase/supabase-js'
-import { AlertTriangle, CheckCircle, ChevronDown, ChevronUp, Hash, Plus, RefreshCw } from 'lucide-react'
+import { AlertTriangle, CheckCircle, ChevronDown, ChevronUp, Hash, Plus, RefreshCw, X } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import type {
   CarritoItem,
@@ -26,6 +25,7 @@ import { obtenerFechaActualFastLook, obtenerFechaLocal } from '@/utils/fechas'
 import { normalizarTextoBusqueda } from '@/utils/busqueda'
 import { puedeAccederCorteCaja } from '@/lib/permisos/corteCaja'
 import { generarTextoTicket } from '@/utils/ticket'
+import { generarPdfTicketHistorico } from '@/utils/pdfTicket'
 import { comprimirImagenProducto } from '@/utils/imagenes'
 import PantallaCarga from '@/components/PantallaCarga'
 import PantallaAcceso from '@/components/PantallaAcceso'
@@ -68,6 +68,13 @@ export default function Home() {
   const [busqueda, setBusqueda] = useState('')
   const [carrito, setCarrito] = useState<CarritoItem[]>([])
   const [metodoPago, setMetodoPago] = useState('Efectivo')
+  const [procesandoVenta, setProcesandoVenta] = useState(false)
+  const procesandoVentaRef = useRef(false)
+  const intentoVentaRef = useRef<{ idempotencyKey: string; metodoPago: string; lineas: Array<{ producto_id: string; cantidad: number }> } | null>(null)
+  const [resultadoVenta, setResultadoVenta] = useState<{ ticketId: string; folio: string; total: number } | null>(null)
+  const [guardandoProducto, setGuardandoProducto] = useState(false)
+  const guardandoProductoRef = useRef(false)
+  const [notificacionOperacion, setNotificacionOperacion] = useState<{ tipo: 'ok' | 'error'; mensaje: string } | null>(null)
   const [usuarioRol, setUsuarioRol] = useState<RolUsuario | null>(null)
   const [perfilUsuario, setPerfilUsuario] = useState<PerfilUsuario | null>(null)
   const [appLista, setAppLista] = useState(false)
@@ -77,6 +84,7 @@ export default function Home() {
   const [cargandoAcceso, setCargandoAcceso] = useState(false)
   const [verificandoSesion, setVerificandoSesion] = useState(true)
   const [subiendoImagen, setSubiendoImagen] = useState(false)
+  const subiendoImagenRef = useRef(false)
   const [faseImagen, setFaseImagen] = useState('Procesando imagen…')
   const [notificacionImagen, setNotificacionImagen] = useState<{ tipo: 'ok' | 'error'; mensaje: string } | null>(null)
   const [proveedores, setProveedores] = useState<Proveedor[]>([])
@@ -94,6 +102,8 @@ export default function Home() {
   const [busquedaClientes, setBusquedaClientes] = useState('')
   const [montoCliente, setMontoCliente] = useState('')
   const [notaCliente, setNotaCliente] = useState('')
+  const [operacionAbono, setOperacionAbono] = useState<{ clienteId: string; tipo: 'ABONO' | 'LIQUIDACION' } | null>(null)
+  const registrandoAbonoRef = useRef(false)
   const [fechaOperativa, setFechaOperativa] = useState(obtenerFechaActualFastLook)
 
   useEffect(() => {
@@ -180,13 +190,6 @@ export default function Home() {
   const tipoOriginalEdicionRef = useRef('')
   const codigoOriginalEdicionRef = useRef('')
   const tiposProducto = useMemo(() => obtenerTiposProducto(productos.map((producto) => producto.tipo)), [productos])
-
-  const crearIdentificadoresVenta = () => {
-    const ticketId = crypto.randomUUID()
-    const fechaFolio = obtenerFechaActualFastLook().replaceAll('-', '')
-    const sufijo = ticketId.replaceAll('-', '').slice(0, 12).toUpperCase()
-    return { ticketId, folio: `FLV-${fechaFolio}-${sufijo}` }
-  }
 
   useEffect(() => {
     if (!perfilUsuario) return
@@ -436,6 +439,9 @@ const fetchMovimientosClientes = async () => {
       return
     }
 
+    if (subiendoImagenRef.current) return
+    subiendoImagenRef.current = true
+
     setFaseImagen('Procesando imagen…')
     setNotificacionImagen(null)
     setSubiendoImagen(true)
@@ -488,6 +494,7 @@ const fetchMovimientosClientes = async () => {
 
     setNotificacionImagen({ tipo: 'ok', mensaje: 'Imagen subida correctamente.' })
     } finally {
+      subiendoImagenRef.current = false
       setSubiendoImagen(false)
     }
   }
@@ -517,7 +524,14 @@ const fetchMovimientosClientes = async () => {
     (p) => Number(p.stock) <= Number(p.stock_minimo || 5)
   )
 
+  const abandonarIntentoVenta = () => {
+    intentoVentaRef.current = null
+    setResultadoVenta(null)
+  }
+
   const agregarAlCarrito = (producto: Producto, mostrarAlertas = true): { ok: boolean; mensaje: string } => {
+    if (procesandoVentaRef.current) return { ok: false, mensaje: 'Espera a que termine la venta en curso.' }
+    abandonarIntentoVenta()
     if (producto.stock <= 0) {
       if (mostrarAlertas) alert('Sin stock disponible')
       return { ok: false, mensaje: 'Este casco no tiene stock disponible.' }
@@ -545,6 +559,8 @@ const fetchMovimientosClientes = async () => {
   }
 
   const aumentarCantidad = (id: string) => {
+    if (procesandoVentaRef.current) return
+    abandonarIntentoVenta()
     setCarrito(
       carrito.map((item) => {
         if (item.id === id) {
@@ -560,6 +576,8 @@ const fetchMovimientosClientes = async () => {
   }
 
   const disminuirCantidad = (id: string) => {
+    if (procesandoVentaRef.current) return
+    abandonarIntentoVenta()
     setCarrito(
       carrito
         .map((item) =>
@@ -572,6 +590,8 @@ const fetchMovimientosClientes = async () => {
   }
 
   const cambiarCantidad = (id: string, cantidad: number) => {
+    if (procesandoVentaRef.current) return
+    abandonarIntentoVenta()
     setCarrito(
       carrito.map((item) => {
         if (item.id === id) {
@@ -587,12 +607,17 @@ const fetchMovimientosClientes = async () => {
   }
 
   const eliminarDelCarrito = (id: string) => {
+    if (procesandoVentaRef.current) return
+    abandonarIntentoVenta()
     setCarrito(carrito.filter((item) => item.id !== id))
   }
 
   const cancelarTicket = () => {
+    if (procesandoVentaRef.current) return
     if (confirm('¿Cancelar ticket actual?')) {
+      abandonarIntentoVenta()
       setCarrito([])
+      setCarritoAbierto(false)
     }
   }
 
@@ -710,161 +735,51 @@ const fetchMovimientosClientes = async () => {
     0
   )
 
+  const mensajesVenta: Record<string, string> = {
+    SIN_SESION: 'Tu sesión terminó. Inicia sesión nuevamente.', ROL_NO_PERMITIDO: 'Tu usuario no puede registrar ventas.', USUARIO_INACTIVO: 'Tu usuario está inactivo.', PERFIL_INVALIDO: 'Tu perfil no está completo.', IDEMPOTENCIA_INVALIDA: 'No fue posible identificar la operación.', METODO_INVALIDO: 'Selecciona un método de pago válido.', CARRITO_VACIO: 'Agrega al menos un producto.', LINEAS_INVALIDAS: 'Revisa los productos y cantidades.', PRODUCTO_INEXISTENTE: 'Uno de los productos ya no existe.', PRODUCTO_ARCHIVADO: 'Uno de los productos está archivado.', PRECIO_INVALIDO: 'Uno de los productos no tiene un precio válido.', STOCK_INVALIDO: 'Uno de los productos no tiene un stock válido.', STOCK_INSUFICIENTE: 'No hay stock suficiente. El inventario fue actualizado.',
+  }
+
   const finalizarVenta = async () => {
-    if (carrito.length === 0) {
-      alert('El carrito está vacío')
-      return
-    }
-
-    const { ticketId, folio } = crearIdentificadoresVenta()
-
-    for (const item of carrito) {
-      if (item.stock < item.cantidad) {
-        alert(`No hay suficiente stock de ${item.nombre}`)
-        return
-      }
-
-      const { error: errorStock } = await supabase
-        .from('productos')
-        .update({ stock: item.stock - item.cantidad })
-        .eq('id', item.id)
-
-      if (errorStock) {
-        alert('Error al actualizar stock: ' + errorStock.message)
-        return
-      }
-
-      await registrarMovimiento(
-        item,
-        'Venta',
-        item.cantidad,
-        Number(item.stock),
-        Number(item.stock) - Number(item.cantidad),
-        'Salida por venta'
-      )
-
-      const { error: errorVenta } = await supabase.from('ventas').insert([
-        {
-          ticket_id: ticketId,
-          folio,
-          producto_id: item.id,
-          codigo: item.codigo,
-          nombre: item.nombre,
-          precio: item.precio,
-          costo_unitario: item.costo ?? null,
-          cantidad: item.cantidad,
-          total: Number(item.precio) * item.cantidad,
-          metodo_pago: metodoPago,
-        },
-      ])
-
-      if (errorVenta) {
-        alert('Error al registrar venta: ' + errorVenta.message)
-        return
-      }
-    }
-
-    await descargarTicket(folio)
-    alert(`Venta realizada. Total: $${totalCarrito}`)
-    setCarrito([])
-    fetchProductos()
-    fetchVentas()
-  }
-
-  const cargarImagenBase64 = async (url: string) => {
-    const response = await fetch(url)
-    const blob = await response.blob()
-
-    return new Promise<string>((resolve) => {
-      const reader = new FileReader()
-      reader.onloadend = () => resolve(reader.result as string)
-      reader.readAsDataURL(blob)
-    })
-  }
-
-  const descargarTicket = async (folio: string) => {
-    if (carrito.length === 0) {
-      alert('No hay productos en el ticket')
-      return
-    }
-
-    const altoBase = 120
-    const altoPorProducto = carrito.length * 14
-    const altoTicket = Math.max(180, altoBase + altoPorProducto)
-
-    const doc = new jsPDF({
-      orientation: 'portrait',
-      unit: 'mm',
-      format: [80, altoTicket],
-    })
-
-    let y = 8
-
-    const fecha = new Date().toLocaleString('es-MX')
-
-    const logoUrl = 'https://i.postimg.cc/T1KLqYXb/Chat-GPT-Image-4-dic-2025-11-34-20-p-m.png'
-
+    if (procesandoVentaRef.current) return
+    if (carrito.length === 0) { setNotificacionOperacion({ tipo: 'error', mensaje: 'El carrito está vacío.' }); return }
+    procesandoVentaRef.current = true; setProcesandoVenta(true); setNotificacionOperacion(null)
+    if (!intentoVentaRef.current) intentoVentaRef.current = { idempotencyKey: crypto.randomUUID(), metodoPago, lineas: carrito.map((item) => ({ producto_id: item.id, cantidad: item.cantidad })) }
+    const intento = intentoVentaRef.current
     try {
-      const logoBase64 = await cargarImagenBase64(logoUrl)
-      doc.addImage(logoBase64, 'PNG', 25, y, 30, 30)
-      y += 34
-    } catch (error) {
-      y += 4
+      const { data, error } = await supabase.rpc('procesar_venta', { p_idempotency_key: intento.idempotencyKey, p_metodo_pago: intento.metodoPago, p_lineas: intento.lineas })
+      if (error) throw error
+      const respuesta = data as { ok?: boolean; ticket_id?: string; folio?: string; total?: number | string }
+      if (!respuesta.ok || !respuesta.ticket_id || !respuesta.folio) throw new Error('RESULTADO_INCIERTO: La venta no fue confirmada.')
+      setResultadoVenta({ ticketId: respuesta.ticket_id, folio: respuesta.folio, total: Number(respuesta.total || 0) })
+      intentoVentaRef.current = null
+      setCarrito([]); setCarritoAbierto(false)
+      const actualizaciones = await Promise.allSettled([fetchProductos(true), fetchVentas(true), fetchMovimientos()])
+      const refrescoIncompleto = actualizaciones.some((actualizacion) => actualizacion.status === 'rejected')
+      setNotificacionOperacion({
+        tipo: 'ok',
+        mensaje: refrescoIncompleto
+          ? `Venta registrada. Folio ${respuesta.folio}. No se pudo refrescar toda la información; vuelve a cargar la vista.`
+          : `Venta registrada. Folio ${respuesta.folio}.`,
+      })
+    } catch (causa) {
+      const mensajeOriginal = causa && typeof causa === 'object' && 'message' in causa ? String(causa.message) : String(causa)
+      const prefijo = Object.keys(mensajesVenta).find((clave) => mensajeOriginal.includes(`${clave}:`))
+      setNotificacionOperacion({ tipo: 'error', mensaje: prefijo ? mensajesVenta[prefijo] : 'No se confirmó la venta. Reintenta: se conservará la misma operación.' })
+      if (prefijo === 'STOCK_INSUFICIENTE') await fetchProductos(true)
+    } finally {
+      procesandoVentaRef.current = false; setProcesandoVenta(false)
     }
+  }
 
-    doc.setFontSize(11)
-    doc.text('FAST LOOK', 40, y, { align: 'center' })
-    y += 5
-
-    doc.setFontSize(8)
-    doc.text('Accesorios para moto', 40, y, { align: 'center' })
-    y += 7
-
-    doc.setFontSize(8)
-    doc.text(`Folio: ${folio}`, 5, y)
-    y += 4
-    doc.text(`Fecha: ${fecha}`, 5, y)
-    y += 4
-    doc.text(`Método de pago: ${metodoPago}`, 5, y)
-    y += 6
-
-    doc.line(5, y, 75, y)
-    y += 5
-
-    carrito.forEach((item) => {
-      const nombre = String(item.nombre || '')
-      const precio = Number(item.precio || 0)
-      const cantidad = Number(item.cantidad || 0)
-      const subtotal = precio * cantidad
-
-      doc.setFontSize(8)
-
-      const nombreCortado =
-        nombre.length > 28 ? nombre.slice(0, 28) + '...' : nombre
-
-      doc.text(nombreCortado, 5, y)
-      y += 4
-
-      doc.text(`${cantidad} x $${precio.toFixed(2)}`, 5, y)
-      doc.text(`$${subtotal.toFixed(2)}`, 75, y, { align: 'right' })
-
-      y += 5
-    })
-
-    doc.line(5, y, 75, y)
-    y += 6
-
-    doc.setFontSize(12)
-    doc.text('TOTAL:', 5, y)
-    doc.text(`$${totalCarrito.toFixed(2)}`, 75, y, { align: 'right' })
-    y += 8
-
-    doc.setFontSize(8)
-    doc.text('Gracias por tu compra', 40, y, { align: 'center' })
-    y += 4
-    doc.text('FAST LOOK', 40, y, { align: 'center' })
-
-    doc.save(`ticket-fastlook-${folio}.pdf`)
+  const generarTicketPorId = async (ticketId: string) => {
+    try {
+      const { data, error } = await supabase.from('ventas').select('*').eq('ticket_id', ticketId).order('created_at', { ascending: true })
+      if (error) throw error
+      await generarPdfTicketHistorico((data || []) as Venta[])
+      setNotificacionOperacion({ tipo: 'ok', mensaje: 'Ticket generado.' })
+    } catch {
+      setNotificacionOperacion({ tipo: 'error', mensaje: 'No se pudo generar el ticket.' })
+    }
   }
 
   const enviarWhatsApp = () => {
@@ -937,7 +852,8 @@ const fetchMovimientosClientes = async () => {
     return nuevoTipo
   }
 
-  const guardarProducto = async () => {
+  const ejecutarGuardadoProducto = async () => {
+    const editando = Boolean(form.id)
     if (usuarioRol !== 'Admin') {
       alert('Solo el administrador puede editar inventario')
       return
@@ -1039,7 +955,19 @@ const fetchMovimientosClientes = async () => {
 
     limpiarFormulario()
     fetchProductos()
-    alert('Producto guardado')
+    setNotificacionOperacion({ tipo: 'ok', mensaje: editando ? 'Producto actualizado.' : 'Producto guardado.' })
+  }
+
+  const guardarProducto = async () => {
+    if (guardandoProductoRef.current) return
+    guardandoProductoRef.current = true
+    setGuardandoProducto(true)
+    try {
+      await ejecutarGuardadoProducto()
+    } finally {
+      guardandoProductoRef.current = false
+      setGuardandoProducto(false)
+    }
   }
 
   const limpiarFormulario = () => {
@@ -1271,11 +1199,10 @@ const limpiarCliente = () => {
 }
 
 const registrarAbonoEnCorte = async (cliente: Cliente, monto: number, concepto: string) => {
-  const { ticketId, folio } = crearIdentificadoresVenta()
   const { error } = await supabase.from('ventas').insert([
     {
-      ticket_id: ticketId,
-      folio,
+      ticket_id: null,
+      folio: null,
       producto_id: null,
       codigo: 'ABONO',
       nombre: `${concepto} - ${cliente.nombre}`,
@@ -1292,7 +1219,7 @@ const registrarAbonoEnCorte = async (cliente: Cliente, monto: number, concepto: 
   }
 }
 
-const registrarMovimientoCliente = async (
+const ejecutarMovimientoCliente = async (
   cliente: Cliente,
   tipo: string,
   monto: number,
@@ -1357,7 +1284,32 @@ const registrarMovimientoCliente = async (
   alert('Movimiento registrado')
 }
 
+const registrarMovimientoCliente = async (
+  cliente: Cliente,
+  tipo: string,
+  monto: number,
+  nota: string
+) => {
+  const esAbono = tipo === 'ABONO' || tipo === 'LIQUIDACION'
+  if (esAbono && registrandoAbonoRef.current) return
+
+  if (esAbono) {
+    registrandoAbonoRef.current = true
+    setOperacionAbono({ clienteId: cliente.id, tipo: tipo as 'ABONO' | 'LIQUIDACION' })
+  }
+
+  try {
+    await ejecutarMovimientoCliente(cliente, tipo, monto, nota)
+  } finally {
+    if (esAbono) {
+      registrandoAbonoRef.current = false
+      setOperacionAbono(null)
+    }
+  }
+}
+
 const abonarCliente = async (cliente: Cliente) => {
+  if (registrandoAbonoRef.current) return
   const monto = Number(prompt('¿Cuánto abonó el cliente?'))
 
   if (isNaN(monto) || monto <= 0) {
@@ -1369,6 +1321,7 @@ const abonarCliente = async (cliente: Cliente) => {
 }
 
 const liquidarCliente = async (cliente: Cliente) => {
+  if (registrandoAbonoRef.current) return
   const deudaActual = Number(cliente.deuda || 0)
 
   if (deudaActual <= 0) {
@@ -1603,6 +1556,8 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
   <>
     <h2>Generar venta</h2>
 
+    {resultadoVenta && <section className="fl-sale-result"><CheckCircle size={34} /><div><span>Venta registrada</span><strong>{resultadoVenta.folio}</strong><small>Total: ${resultadoVenta.total.toFixed(2)}</small></div><button type="button" onClick={() => setResultadoVenta(null)}>Nueva venta</button><button type="button" onClick={() => setTab('movimientos')}>Ver movimiento</button></section>}
+
     <input
       style={styles.input}
       placeholder="Buscar producto para vender..."
@@ -1624,6 +1579,7 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
 
         <button
           style={styles.redButton}
+          disabled={procesandoVenta}
           onClick={(evento) => {
             agregarAlCarrito(p)
             abrirCarrito(evento.currentTarget)
@@ -1660,7 +1616,8 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
 
           <select
             value={metodoPago}
-            onChange={(e) => setMetodoPago(e.target.value)}
+            disabled={procesandoVenta}
+            onChange={(e) => { abandonarIntentoVenta(); setMetodoPago(e.target.value) }}
             style={styles.input}
           >
             <option value="Efectivo">Efectivo</option>
@@ -1680,6 +1637,7 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
               <div style={styles.qtyRow}>
                 <button
                   style={styles.qtyBtn}
+                  disabled={procesandoVenta}
                   onClick={() => disminuirCantidad(item.id)}
                 >
                   -
@@ -1687,6 +1645,7 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
 
                 <input
                   type="number"
+                  disabled={procesandoVenta}
                   value={item.cantidad}
                   onChange={(e) => cambiarCantidad(item.id, Number(e.target.value))}
                   style={styles.qtyInput}
@@ -1694,6 +1653,7 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
 
                 <button
                   style={styles.qtyBtn}
+                  disabled={procesandoVenta}
                   onClick={() => aumentarCantidad(item.id)}
                 >
                   +
@@ -1704,6 +1664,7 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
 
               <button
                 style={styles.blackButton}
+                disabled={procesandoVenta}
                 onClick={() => eliminarDelCarrito(item.id)}
               >
                 Eliminar
@@ -1721,15 +1682,15 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
             <p>Método de pago: {metodoPago}</p>
           </div>
 
-          <button style={styles.bigButton} onClick={finalizarVenta}>
-            Finalizar venta
+          <button style={styles.bigButton} onClick={finalizarVenta} disabled={procesandoVenta || carrito.length === 0}>
+            {procesandoVenta ? 'Procesando venta…' : 'Finalizar venta'}
           </button>
 
-          <button style={styles.redButton} onClick={enviarWhatsApp}>
+          <button style={styles.redButton} onClick={enviarWhatsApp} disabled={procesandoVenta}>
             Enviar por WhatsApp
           </button>
 
-          <button style={styles.grayButton} onClick={cancelarTicket}>
+          <button style={styles.grayButton} onClick={cancelarTicket} disabled={procesandoVenta}>
             Cancelar ticket
           </button>
         </div>
@@ -1802,11 +1763,11 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
               </div>}
             </section>
 
-            <button style={styles.bigButton} onClick={guardarProducto}>
-              {form.id ? 'Guardar cambios' : 'Agregar producto'}
+            <button style={styles.bigButton} onClick={guardarProducto} disabled={guardandoProducto || subiendoImagen}>
+              {guardandoProducto ? (form.id ? 'Actualizando…' : 'Guardando…') : (form.id ? 'Guardar cambios' : 'Agregar producto')}
             </button>
 
-              <button style={styles.grayButton} onClick={limpiarFormulario}>
+              <button style={styles.grayButton} onClick={limpiarFormulario} disabled={guardandoProducto || subiendoImagen}>
                 Cancelar
               </button>
                 </div>
@@ -1935,6 +1896,7 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
             agregarDeudaCliente={agregarDeudaCliente}
             abonarCliente={abonarCliente}
             liquidarCliente={liquidarCliente}
+            operacionAbono={operacionAbono}
             abrirWhatsAppCliente={abrirWhatsAppCliente}
             editarCliente={editarCliente}
             eliminarClienteSinRegistro={eliminarClienteSinRegistro}
@@ -1971,6 +1933,7 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
         {tab === 'movimientos' && (
           <Movimientos
             movimientos={movimientos}
+            onGenerarTicket={generarTicketPorId}
             styles={styles}
           />
         )}
@@ -1979,10 +1942,11 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
         {tab === 'usuarios' && <GestionUsuarios />}
       </main>
       <LoadingOverlay
-        visible={subiendoImagen}
-        titulo={faseImagen}
-        detalle="Estamos optimizando y guardando la fotografía del producto."
+        visible={subiendoImagen || guardandoProducto || procesandoVenta || Boolean(operacionAbono)}
+        titulo={operacionAbono ? 'Registrando abono…' : procesandoVenta ? 'Procesando venta…' : guardandoProducto ? (form.id ? 'Actualizando producto…' : 'Guardando producto…') : faseImagen}
+        detalle={operacionAbono ? 'Actualizando el cliente y registrando el movimiento en Corte.' : procesandoVenta ? 'Validando inventario y registrando el ticket de forma segura.' : guardandoProducto ? 'Guardando la información del producto.' : 'Estamos optimizando y guardando la fotografía del producto.'}
       />
+      {notificacionOperacion && <div className={`fl-operation-toast is-${notificacionOperacion.tipo}`} role="status"><span>{notificacionOperacion.mensaje}</span><button type="button" aria-label="Cerrar notificación" onClick={() => setNotificacionOperacion(null)}><X size={17} /></button></div>}
     </Navegacion>
   )
 }

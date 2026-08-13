@@ -18,6 +18,7 @@ interface ClientesProps {
   agregarDeudaCliente: (cliente: Cliente) => void
   abonarCliente: (cliente: Cliente) => void
   liquidarCliente: (cliente: Cliente) => void
+  operacionAbono: { clienteId: string; tipo: 'ABONO' | 'LIQUIDACION' } | null
   abrirWhatsAppCliente: (cliente: Cliente) => void
   editarCliente: (cliente: Cliente) => void
   eliminarClienteSinRegistro: (cliente: Cliente) => void
@@ -49,6 +50,7 @@ export default function Clientes({
   agregarDeudaCliente,
   abonarCliente,
   liquidarCliente,
+  operacionAbono,
   abrirWhatsAppCliente,
   editarCliente,
   eliminarClienteSinRegistro,
@@ -143,12 +145,12 @@ export default function Clientes({
               Añadir más deuda
             </button>
 
-            <button style={styles.blackButton} onClick={() => abonarCliente(cliente)}>
-              Registrar abono
+            <button style={styles.blackButton} disabled={Boolean(operacionAbono)} onClick={() => abonarCliente(cliente)}>
+              {operacionAbono?.clienteId === cliente.id && operacionAbono.tipo === 'ABONO' ? 'Registrando abono…' : 'Registrar abono'}
             </button>
 
-            <button style={styles.bigButton} onClick={() => liquidarCliente(cliente)}>
-              Liquidación total
+            <button style={styles.bigButton} disabled={Boolean(operacionAbono)} onClick={() => liquidarCliente(cliente)}>
+              {operacionAbono?.clienteId === cliente.id && operacionAbono.tipo === 'LIQUIDACION' ? 'Registrando abono…' : 'Liquidación total'}
             </button>
 
             {cliente.numero && (

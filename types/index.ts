@@ -83,6 +83,8 @@ export interface MovimientoInventario {
   stock_anterior?: number | string
   stock_nuevo?: number | string
   nota?: string
+  ticket_id?: string | null
+  folio?: string | null
   [key: string]: unknown
 }
 

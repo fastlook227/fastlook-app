@@ -350,6 +350,20 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .fl-casco-toast.is-error { background: #9b1c1c; }
 .fl-casco-toast.is-ok { background: #0b6b36; }
 .fl-casco-toast button { display: grid; width: 34px; height: 34px; flex: 0 0 auto; place-items: center; color: white; background: rgba(255,255,255,.15); border: 0; border-radius: 8px; cursor: pointer; }
+.fl-operation-toast { position: fixed; right: 22px; bottom: 22px; z-index: 1450; display: flex; max-width: min(440px, calc(100vw - 30px)); align-items: center; gap: 12px; padding: 13px 15px; color: white; background: var(--fl-black); border-radius: 13px; box-shadow: var(--fl-shadow-md); }
+.fl-operation-toast.is-ok { background: #0b6b36; }
+.fl-operation-toast.is-error { background: #9b1c1c; }
+.fl-operation-toast button { display: grid; width: 34px; height: 34px; flex: 0 0 auto; place-items: center; color: white; background: rgba(255,255,255,.15); border: 0; border-radius: 8px; cursor: pointer; }
+.fl-sale-result { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 16px; padding: 14px; color: white; background: var(--fl-black); border-radius: 13px; }
+.fl-sale-result > svg { color: #64d891; }
+.fl-sale-result > div { display: grid; min-width: 210px; margin-right: auto; }
+.fl-sale-result > div span { font-size: 11px; font-weight: 800; }
+.fl-sale-result > div strong { color: #ff7474; }
+.fl-sale-result > div small { color: #ddd; }
+.fl-sale-result > button, .fl-movement-ticket-button { display: inline-flex; min-height: 42px; align-items: center; justify-content: center; gap: 7px; padding: 8px 12px; color: white; background: var(--fl-red); border: 0; border-radius: 9px; cursor: pointer; font-weight: 800; }
+.fl-sale-result > button:nth-last-child(2) { background: #444; }
+.fl-movement-line + .fl-movement-line { margin-top: 10px; padding-top: 10px; border-top: 1px solid #ccc; }
+.fl-movement-ticket-button:disabled { cursor: wait; opacity: .55; }
 .fl-helmets-state { display: grid; min-height: 330px; place-items: center; align-content: center; padding: 30px; text-align: center; background: white; border: 1px solid var(--fl-gray-200); border-radius: var(--fl-radius-md); box-shadow: var(--fl-shadow-sm); }
 .fl-helmets-state svg { color: var(--fl-red); }
 .fl-helmets-state h1, .fl-helmets-state h2 { margin: 12px 0 5px; }
@@ -542,6 +556,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .fl-image-source-actions { grid-template-columns: 1fr; }
   .fl-casco-form-dialog > footer { position: sticky; bottom: 0; background: white; }
   .fl-casco-toast { right: 12px; bottom: calc(var(--fl-mobile-nav-height) + 12px); }
+  .fl-operation-toast { right: 12px; bottom: calc(var(--fl-mobile-nav-height) + 12px); }
 }
 
 @media (max-width: 520px) {
