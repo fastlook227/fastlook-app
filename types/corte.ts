@@ -1,26 +1,33 @@
 export type PeriodoCorte = 'hoy' | 'ayer' | 'ultimos7' | 'mesActual' | 'mesAnterior' | 'personalizado'
 
 export interface ResumenCorte {
-  totalVendido: number
-  ganancia: number
-  numeroVentas: number
+  ventasBrutas: number
+  devoluciones: number
+  ventasNetas: number
+  gananciaBruta: number
+  utilidadRevertida: number
+  gananciaNeta: number
+  numeroTickets: number
+  ticketPromedioNeto: number
   productosVendidos: number
-  ticketPromedio: number
+  numeroDevoluciones: number
+  productosDevueltos: number
 }
 
 export interface VentaAgrupadaFecha {
   fecha: string
-  total: number
-  ganancia: number
-  costo: number
-  numeroVentas: number
+  ventasBrutas: number
+  devoluciones: number
+  ventasNetas: number
+  numeroTickets: number
 }
 
 export interface ResumenMetodoPago {
   metodo: string
-  total: number
-  porcentaje: number
-  numeroVentas: number
+  bruto: number
+  devuelto: number
+  neto: number
+  numeroTickets: number
 }
 
 export interface ProductoVendidoResumen {
@@ -37,5 +44,6 @@ export interface DatosCorte {
   ventasAgrupadas: VentaAgrupadaFecha[]
   metodos: ResumenMetodoPago[]
   productos: ProductoVendidoResumen[]
-  productosSinCosto: number
+  ventasSinCosto: number
+  devolucionesSinUtilidad: number
 }

@@ -11,6 +11,7 @@ export interface PerfilUsuario {
 export type Tab =
   | 'precios'
   | 'venta'
+  | 'devoluciones'
   | 'stock'
   | 'cascos'
   | 'ia'
@@ -29,7 +30,7 @@ export interface Producto {
   nombre: string
   tipo: string
   precio: number
-  costo: number
+  costo: number | null
   stock: number
   stock_minimo: number
   ubicacion: string
@@ -48,10 +49,13 @@ export interface CarritoItem extends Producto {
 export interface Venta {
   id: string
   created_at: string
+  ticket_id?: string | null
+  folio?: string | null
   producto_id?: string | null
   codigo?: string
   nombre?: string
   precio?: number | string
+  costo_unitario?: number | null
   cantidad?: number | string
   total?: number | string
   metodo_pago?: string
@@ -92,6 +96,24 @@ export interface CorteCaja {
   efectivo?: number | string
   transferencia?: number | string
   tarjeta?: number | string
+  ventas_brutas?: number | string | null
+  total_devoluciones?: number | string | null
+  ventas_netas?: number | string | null
+  ganancia_bruta?: number | string | null
+  utilidad_revertida?: number | string | null
+  ganancia_neta?: number | string | null
+  numero_tickets?: number | null
+  numero_devoluciones?: number | null
+  productos_devueltos?: number | string | null
+  efectivo_bruto?: number | string | null
+  efectivo_devuelto?: number | string | null
+  efectivo_neto?: number | string | null
+  transferencia_bruta?: number | string | null
+  transferencia_devuelta?: number | string | null
+  transferencia_neta?: number | string | null
+  tarjeta_bruta?: number | string | null
+  tarjeta_devuelta?: number | string | null
+  tarjeta_neta?: number | string | null
   [key: string]: unknown
 }
 

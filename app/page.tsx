@@ -21,6 +21,7 @@ import type {
   Tab,
   Venta,
 } from '@/types'
+import type { Devolucion, DevolucionDetalle } from '@/types/devoluciones'
 import { obtenerFechaActualFastLook, obtenerFechaLocal } from '@/utils/fechas'
 import { normalizarTextoBusqueda } from '@/utils/busqueda'
 import { puedeAccederCorteCaja } from '@/lib/permisos/corteCaja'
@@ -44,6 +45,7 @@ import LoadingOverlay from '@/components/LoadingOverlay'
 import SelectorImagen from '@/components/SelectorImagen'
 import CorteCajaDashboard from '@/components/corte/CorteCajaDashboard'
 import CatalogoCascos from '@/components/cascos/CatalogoCascos'
+import Devoluciones from '@/components/devoluciones/Devoluciones'
 import {
   comprobarCodigoProducto,
   esErrorCodigoDuplicado,
@@ -61,6 +63,8 @@ export default function Home() {
   const [productos, setProductos] = useState<Producto[]>([])
   const [errorProductos, setErrorProductos] = useState('')
   const [ventas, setVentas] = useState<Venta[]>([])
+  const [devoluciones, setDevoluciones] = useState<Devolucion[]>([])
+  const [devolucionesDetalle, setDevolucionesDetalle] = useState<DevolucionDetalle[]>([])
   const [busqueda, setBusqueda] = useState('')
   const [carrito, setCarrito] = useState<CarritoItem[]>([])
   const [metodoPago, setMetodoPago] = useState('Efectivo')
@@ -177,10 +181,18 @@ export default function Home() {
   const codigoOriginalEdicionRef = useRef('')
   const tiposProducto = useMemo(() => obtenerTiposProducto(productos.map((producto) => producto.tipo)), [productos])
 
+  const crearIdentificadoresVenta = () => {
+    const ticketId = crypto.randomUUID()
+    const fechaFolio = obtenerFechaActualFastLook().replaceAll('-', '')
+    const sufijo = ticketId.replaceAll('-', '').slice(0, 12).toUpperCase()
+    return { ticketId, folio: `FLV-${fechaFolio}-${sufijo}` }
+  }
+
   useEffect(() => {
     if (!perfilUsuario) return
     fetchProductos()
     fetchVentas()
+    fetchDevoluciones()
     fetchProveedores()
     fetchMovimientos()
     if (puedeAccederCorteCaja(perfilUsuario.correo)) fetchCortes()
@@ -336,6 +348,20 @@ export default function Home() {
     setCortes(resultado.cortes || [])
   }
 
+  const fetchDevoluciones = async (silencioso = false) => {
+    const [cabeceras, detalles] = await Promise.all([
+      supabase.from('devoluciones').select('*').order('created_at', { ascending: false }),
+      supabase.from('devoluciones_detalle').select('*').order('created_at', { ascending: false }),
+    ])
+    if (cabeceras.error || detalles.error) {
+      const mensaje = cabeceras.error?.message || detalles.error?.message || 'Error desconocido.'
+      if (silencioso) throw new Error('No fue posible actualizar las devoluciones: ' + mensaje)
+      return
+    }
+    setDevoluciones((cabeceras.data || []) as Devolucion[])
+    setDevolucionesDetalle((detalles.data || []) as DevolucionDetalle[])
+  }
+
   const fetchClientes = async () => {
   const { data, error } = await supabase
     .from('clientes')
@@ -378,10 +404,10 @@ const fetchMovimientosClientes = async () => {
       await fetchCortes()
     }
 
-    if (perfilUsuario && puedeAccederCorteCaja(perfilUsuario.correo) && ventas.length > 0 && productos.length > 0) {
+    if (perfilUsuario && puedeAccederCorteCaja(perfilUsuario.correo)) {
       void verificarCambioDia()
     }
-  }, [perfilUsuario, ventas, productos, fechaOperativa])
+  }, [perfilUsuario, fechaOperativa])
 
   useEffect(() => {
     const tabsAdmin = ['inventario', 'corte', 'proveedores', 'compras', 'movimientos', 'dashboard', 'usuarios']
@@ -690,6 +716,8 @@ const fetchMovimientosClientes = async () => {
       return
     }
 
+    const { ticketId, folio } = crearIdentificadoresVenta()
+
     for (const item of carrito) {
       if (item.stock < item.cantidad) {
         alert(`No hay suficiente stock de ${item.nombre}`)
@@ -717,10 +745,13 @@ const fetchMovimientosClientes = async () => {
 
       const { error: errorVenta } = await supabase.from('ventas').insert([
         {
+          ticket_id: ticketId,
+          folio,
           producto_id: item.id,
           codigo: item.codigo,
           nombre: item.nombre,
           precio: item.precio,
+          costo_unitario: item.costo ?? null,
           cantidad: item.cantidad,
           total: Number(item.precio) * item.cantidad,
           metodo_pago: metodoPago,
@@ -733,6 +764,7 @@ const fetchMovimientosClientes = async () => {
       }
     }
 
+    await descargarTicket(folio)
     alert(`Venta realizada. Total: $${totalCarrito}`)
     setCarrito([])
     fetchProductos()
@@ -750,7 +782,7 @@ const fetchMovimientosClientes = async () => {
     })
   }
 
-  const descargarTicket = async () => {
+  const descargarTicket = async (folio: string) => {
     if (carrito.length === 0) {
       alert('No hay productos en el ticket')
       return
@@ -768,7 +800,6 @@ const fetchMovimientosClientes = async () => {
 
     let y = 8
 
-    const folio = Date.now().toString().slice(-6)
     const fecha = new Date().toLocaleString('es-MX')
 
     const logoUrl = 'https://i.postimg.cc/T1KLqYXb/Chat-GPT-Image-4-dic-2025-11-34-20-p-m.png'
@@ -1240,12 +1271,16 @@ const limpiarCliente = () => {
 }
 
 const registrarAbonoEnCorte = async (cliente: Cliente, monto: number, concepto: string) => {
+  const { ticketId, folio } = crearIdentificadoresVenta()
   const { error } = await supabase.from('ventas').insert([
     {
+      ticket_id: ticketId,
+      folio,
       producto_id: null,
       codigo: 'ABONO',
       nombre: `${concepto} - ${cliente.nombre}`,
       precio: monto,
+      costo_unitario: null,
       cantidad: 1,
       total: monto,
       metodo_pago: 'Abono',
@@ -1552,6 +1587,18 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
           />
         )}
 
+        {tab === 'devoluciones' && (
+          <Devoluciones
+            ventas={ventas}
+            devoluciones={devoluciones}
+            detalles={devolucionesDetalle}
+            onActualizarDatos={async () => {
+              await Promise.all([fetchVentas(true), fetchProductos(true), fetchDevoluciones(true)])
+              await fetchMovimientos()
+            }}
+          />
+        )}
+
 {tab === 'venta' && (
   <>
     <h2>Generar venta</h2>
@@ -1676,10 +1723,6 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
 
           <button style={styles.bigButton} onClick={finalizarVenta}>
             Finalizar venta
-          </button>
-
-          <button style={styles.blackButton} onClick={descargarTicket}>
-            Descargar ticket
           </button>
 
           <button style={styles.redButton} onClick={enviarWhatsApp}>
@@ -1839,10 +1882,11 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
         {tab === 'corte' && puedeAccederCorteCaja(perfilUsuario.correo) && (
           <CorteCajaDashboard
             ventas={ventas}
-            productos={productos}
+            devoluciones={devoluciones}
+            devolucionesDetalle={devolucionesDetalle}
             cortes={cortes}
             onActualizar={async () => {
-              await Promise.all([fetchVentas(true), fetchProductos(true), fetchCortes(true)])
+              await Promise.all([fetchVentas(true), fetchDevoluciones(true), fetchCortes(true)])
             }}
           />
         )}
