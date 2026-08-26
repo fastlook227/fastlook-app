@@ -1,12 +1,15 @@
 'use client'
 
 import type { CSSProperties } from 'react'
+import { ScanLine } from 'lucide-react'
 import type { Producto } from '@/types'
 
 interface ListaPreciosProps {
   busqueda: string
   productosFiltrados: Producto[]
   onCambiarBusqueda: (busqueda: string) => void
+  onConfirmarBusqueda: (busqueda: string) => void
+  onEscanear: (disparador: HTMLButtonElement) => void
   styles: {
     input: CSSProperties
     card: CSSProperties
@@ -18,16 +21,20 @@ export default function ListaPrecios({
   busqueda,
   productosFiltrados,
   onCambiarBusqueda,
+  onConfirmarBusqueda,
+  onEscanear,
   styles,
 }: ListaPreciosProps) {
   return (
     <>
       <h2>Lista de precios completa</h2>
+      <div className="fl-scanner-actions"><button type="button" onClick={(evento) => onEscanear(evento.currentTarget)}><ScanLine size={18} />Escanear</button></div>
       <input
         style={styles.input}
         placeholder="Buscar producto..."
         value={busqueda}
         onChange={(e) => onCambiarBusqueda(e.target.value)}
+        onKeyDown={(e) => { if (e.key === 'Enter') onConfirmarBusqueda(busqueda) }}
       />
 
       {productosFiltrados.map((p) => (

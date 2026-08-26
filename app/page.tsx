@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Session } from '@supabase/supabase-js'
-import { AlertTriangle, CheckCircle, ChevronDown, ChevronUp, Edit3, Hash, MoreVertical, PackagePlus, Plus, RefreshCw, SlidersHorizontal, X } from 'lucide-react'
+import { AlertTriangle, Barcode, CheckCircle, ChevronDown, ChevronUp, Edit3, Hash, MoreVertical, PackagePlus, Plus, RefreshCw, ScanLine, SlidersHorizontal, X } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import type {
   CarritoItem,
@@ -25,6 +25,7 @@ import { obtenerFechaActualFastLook, obtenerFechaLocal } from '@/utils/fechas'
 import { normalizarTextoBusqueda } from '@/utils/busqueda'
 import { puedeAccederCorteCaja } from '@/lib/permisos/corteCaja'
 import { generarTextoTicket } from '@/utils/ticket'
+import { agregarProductoAlCarrito } from '@/utils/ventas'
 import { generarPdfTicketHistorico } from '@/utils/pdfTicket'
 import { comprimirImagenProducto } from '@/utils/imagenes'
 import PantallaCarga from '@/components/PantallaCarga'
@@ -47,6 +48,9 @@ import CorteCajaDashboard from '@/components/corte/CorteCajaDashboard'
 import CatalogoCascos from '@/components/cascos/CatalogoCascos'
 import Devoluciones from '@/components/devoluciones/Devoluciones'
 import CambiarStockDialog from '@/components/CambiarStockDialog'
+import CodigoBarrasDialog from '@/components/codigos-barras/CodigoBarrasDialog'
+import ScannerCodigoBarras, { type FeedbackScanner } from '@/components/codigos-barras/ScannerCodigoBarras'
+import { crearMapaCodigosBarras, normalizarCodigoBarras } from '@/utils/codigoBarras'
 import {
   comprobarCodigoProducto,
   esErrorCodigoDuplicado,
@@ -68,6 +72,7 @@ export default function Home() {
   const [devolucionesDetalle, setDevolucionesDetalle] = useState<DevolucionDetalle[]>([])
   const [busqueda, setBusqueda] = useState('')
   const [carrito, setCarrito] = useState<CarritoItem[]>([])
+  const carritoRef = useRef<CarritoItem[]>([])
   const [metodoPago, setMetodoPago] = useState('Efectivo')
   const [procesandoVenta, setProcesandoVenta] = useState(false)
   const procesandoVentaRef = useRef(false)
@@ -91,6 +96,13 @@ export default function Home() {
   const [proveedores, setProveedores] = useState<Proveedor[]>([])
   const [movimientos, setMovimientos] = useState<MovimientoInventario[]>([])
   const [productoCambioStock, setProductoCambioStock] = useState<Producto | null>(null)
+  const [productoCodigoBarras, setProductoCodigoBarras] = useState<Producto | null>(null)
+  const [feedbackEscaneo, setFeedbackEscaneo] = useState<{ tipo: 'ok' | 'error'; nombre?: string; codigo?: string; cantidad?: number; mensaje: string } | null>(null)
+  const feedbackEscaneoTimerRef = useRef<number | null>(null)
+  const buscadorVentaRef = useRef<HTMLInputElement>(null)
+  const [scannerContexto, setScannerContexto] = useState<'venta' | 'inventario' | 'precios' | null>(null)
+  const [scannerContinuo, setScannerContinuo] = useState(false)
+  const disparadorScannerRef = useRef<HTMLElement | null>(null)
   const [cortes, setCortes] = useState<CorteCaja[]>([])
   const [avisoCorte, setAvisoCorte] = useState('')
   const [cantidadCompra, setCantidadCompra] = useState(1)
@@ -111,6 +123,12 @@ export default function Home() {
   useEffect(() => {
     const temporizador = window.setInterval(() => setFechaOperativa(obtenerFechaActualFastLook()), 30_000)
     return () => window.clearInterval(temporizador)
+  }, [])
+
+  useEffect(() => { carritoRef.current = carrito }, [carrito])
+
+  useEffect(() => () => {
+    if (feedbackEscaneoTimerRef.current !== null) window.clearTimeout(feedbackEscaneoTimerRef.current)
   }, [])
 
   const abrirCarrito = (disparador: HTMLElement) => {
@@ -501,7 +519,10 @@ const fetchMovimientosClientes = async () => {
     }
   }
 
-  const productosFiltrados = productos.filter((p) => {
+  const productosPorCodigoBarras = useMemo(() => crearMapaCodigosBarras(productos), [productos])
+  const codigoBarrasBuscado = normalizarCodigoBarras(busqueda)
+  const productoBarcodeExacto = codigoBarrasBuscado ? productosPorCodigoBarras.get(codigoBarrasBuscado) : undefined
+  const productosFiltrados = productoBarcodeExacto ? [productoBarcodeExacto] : productos.filter((p) => {
     const texto = normalizarTextoBusqueda(busqueda)
     return (
       normalizarTextoBusqueda(p.nombre).includes(texto) ||
@@ -531,33 +552,60 @@ const fetchMovimientosClientes = async () => {
     setResultadoVenta(null)
   }
 
-  const agregarAlCarrito = (producto: Producto, mostrarAlertas = true): { ok: boolean; mensaje: string } => {
+  const agregarAlCarrito = (producto: Producto, mostrarAlertas = true): { ok: boolean; mensaje: string; cantidad?: number } => {
     if (procesandoVentaRef.current) return { ok: false, mensaje: 'Espera a que termine la venta en curso.' }
     abandonarIntentoVenta()
-    if (producto.stock <= 0) {
-      if (mostrarAlertas) alert('Sin stock disponible')
-      return { ok: false, mensaje: 'Este casco no tiene stock disponible.' }
+    const carritoActual = carritoRef.current
+    const resultado = agregarProductoAlCarrito(carritoActual, producto)
+    if (!resultado.ok) {
+      if (mostrarAlertas) alert(resultado.mensaje)
+      return resultado
     }
+    carritoRef.current = resultado.carrito
+    setCarrito(resultado.carrito)
+    return resultado
+  }
 
-    const existe = carrito.find((item) => item.id === producto.id)
+  const mostrarFeedbackEscaneo = (feedback: NonNullable<typeof feedbackEscaneo>) => {
+    if (feedbackEscaneoTimerRef.current !== null) window.clearTimeout(feedbackEscaneoTimerRef.current)
+    setFeedbackEscaneo(feedback)
+    feedbackEscaneoTimerRef.current = window.setTimeout(() => {
+      setFeedbackEscaneo(null)
+      feedbackEscaneoTimerRef.current = null
+    }, 1800)
+  }
 
-    if (existe) {
-      if (existe.cantidad + 1 > producto.stock) {
-        if (mostrarAlertas) alert('No hay más stock disponible')
-        return { ok: false, mensaje: 'Ya alcanzaste el máximo disponible en el carrito.' }
-      }
-
-      setCarrito(
-        carrito.map((item) =>
-          item.id === producto.id
-            ? { ...item, cantidad: item.cantidad + 1 }
-            : item
-        )
-      )
-    } else {
-      setCarrito([...carrito, { ...producto, cantidad: 1 }])
+  const manejarCodigoDetectado = (codigo: string, contexto: 'venta' | 'inventario' | 'precios'): FeedbackScanner => {
+    const normalizado = normalizarCodigoBarras(codigo)
+    if (!normalizado) return { tipo: 'error', titulo: 'Código no válido' }
+    const producto = productosPorCodigoBarras.get(normalizado)
+    if (!producto || producto.archivado === true) {
+      if (contexto === 'venta') mostrarFeedbackEscaneo({ tipo: 'error', mensaje: 'Código de barras no registrado', codigo: normalizado })
+      return { tipo: 'error', titulo: 'Código no registrado', detalle: normalizado }
     }
-    return { ok: true, mensaje: 'Casco añadido a la venta.' }
+    if (contexto === 'venta') {
+      const resultado = agregarAlCarrito(producto, false)
+      mostrarFeedbackEscaneo(resultado.ok
+        ? { tipo: 'ok', mensaje: 'Producto agregado', nombre: producto.nombre, cantidad: resultado.cantidad }
+        : { tipo: 'error', mensaje: resultado.mensaje, nombre: producto.nombre, codigo: normalizado })
+      setBusqueda('')
+      requestAnimationFrame(() => buscadorVentaRef.current?.focus())
+      return resultado.ok
+        ? { tipo: 'ok', titulo: producto.nombre, detalle: `Cantidad: ${resultado.cantidad}` }
+        : { tipo: 'error', titulo: resultado.mensaje, detalle: producto.nombre }
+    }
+    setBusqueda(normalizado)
+    return { tipo: 'ok', titulo: producto.nombre, detalle: producto.codigo }
+  }
+
+  const abrirScanner = (contexto: 'venta' | 'inventario' | 'precios', disparador: HTMLElement) => {
+    disparadorScannerRef.current = disparador
+    setScannerContexto(contexto)
+  }
+
+  const cerrarScanner = () => {
+    setScannerContexto(null)
+    requestAnimationFrame(() => disparadorScannerRef.current?.focus())
   }
 
   const aumentarCantidad = (id: string) => {
@@ -1502,6 +1550,11 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
             busqueda={busqueda}
             productosFiltrados={productosFiltrados}
             onCambiarBusqueda={setBusqueda}
+            onConfirmarBusqueda={(codigo) => {
+              const normalizado = normalizarCodigoBarras(codigo)
+              if (normalizado && productosPorCodigoBarras.has(normalizado)) setBusqueda(normalizado)
+            }}
+            onEscanear={(disparador) => abrirScanner('precios', disparador)}
             styles={styles}
           />
         )}
@@ -1522,14 +1575,32 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
   <>
     <h2>Generar venta</h2>
 
+    <div className="fl-scanner-actions">
+      <button type="button" onClick={(evento) => abrirScanner('venta', evento.currentTarget)}><ScanLine size={18} />Escanear producto</button>
+      <label><input type="checkbox" checked={scannerContinuo} onChange={(evento) => setScannerContinuo(evento.target.checked)} />Escáner continuo</label>
+    </div>
+
     {resultadoVenta && <section className="fl-sale-result"><CheckCircle size={34} /><div><span>Venta registrada</span><strong>{resultadoVenta.folio}</strong><small>Total: ${resultadoVenta.total.toFixed(2)}</small></div><button type="button" onClick={() => setResultadoVenta(null)}>Nueva venta</button><button type="button" onClick={() => setTab('movimientos')}>Ver movimiento</button></section>}
 
     <input
+      ref={buscadorVentaRef}
       style={styles.input}
       placeholder="Buscar producto para vender..."
       value={busqueda}
       onChange={(e) => setBusqueda(e.target.value)}
+      onKeyDown={(evento) => {
+        if (evento.key !== 'Enter') return
+        evento.preventDefault()
+        manejarCodigoDetectado(busqueda, 'venta')
+      }}
     />
+
+    {feedbackEscaneo && <section className={`fl-scan-feedback is-${feedbackEscaneo.tipo}`} role="status">
+      <strong>{feedbackEscaneo.tipo === 'ok' ? '✓ ' : ''}{feedbackEscaneo.mensaje}</strong>
+      {feedbackEscaneo.nombre && <span>{feedbackEscaneo.nombre}</span>}
+      {feedbackEscaneo.cantidad !== undefined && <small>Cantidad carrito: {feedbackEscaneo.cantidad}</small>}
+      {feedbackEscaneo.codigo && <small>Código: {feedbackEscaneo.codigo}</small>}
+    </section>}
 
     <h3>Productos</h3>
 
@@ -1755,11 +1826,18 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
 
                         <h3>Productos registrados</h3>
 
+            <div className="fl-scanner-actions"><button type="button" onClick={(evento) => abrirScanner('inventario', evento.currentTarget)}><ScanLine size={18} />Escanear</button></div>
+
             <input
             style={styles.input}
             placeholder="Buscar en inventario por nombre, código, tipo, ubicación o proveedor..."
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
+            onKeyDown={(evento) => {
+              if (evento.key !== 'Enter') return
+              const normalizado = normalizarCodigoBarras(busqueda)
+              if (normalizado && productosPorCodigoBarras.has(normalizado)) setBusqueda(normalizado)
+            }}
             />
 
             <p>
@@ -1788,6 +1866,7 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
                       if (!isNaN(cantidad)) void entradaStock(p, cantidad)
                     }}><PackagePlus size={16} />Añadir stock</button>
                     <button type="button" onClick={(evento) => { evento.currentTarget.closest('details')?.removeAttribute('open'); setProductoCambioStock(p) }}><SlidersHorizontal size={16} />Cambiar stock a…</button>
+                    <button type="button" onClick={(evento) => { evento.currentTarget.closest('details')?.removeAttribute('open'); setProductoCodigoBarras(p) }}><Barcode size={16} />Asignar / cambiar código de barras</button>
                   </div>
                 </details>}
             </div>
@@ -1797,6 +1876,12 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
               producto={productoCambioStock}
               onCerrar={() => setProductoCambioStock(null)}
               onRefrescar={async () => { await Promise.all([fetchProductos(true), fetchMovimientos()]) }}
+            />}
+            {usuarioRol === 'Admin' && productoCodigoBarras && <CodigoBarrasDialog
+              producto={productoCodigoBarras}
+              productos={productos}
+              onCerrar={() => setProductoCodigoBarras(null)}
+              onActualizado={() => fetchProductos(true)}
             />}
           </>
         )}
@@ -1902,6 +1987,12 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
         {tab === 'dashboard' && <Dashboard />}
         {tab === 'usuarios' && <GestionUsuarios />}
       </main>
+      <ScannerCodigoBarras
+        abierto={scannerContexto !== null}
+        continuo={scannerContexto === 'venta' && scannerContinuo}
+        onDetect={(codigo) => scannerContexto ? manejarCodigoDetectado(codigo, scannerContexto) : undefined}
+        onCerrar={cerrarScanner}
+      />
       <LoadingOverlay
         visible={subiendoImagen || guardandoProducto || procesandoVenta || Boolean(operacionAbono)}
         titulo={operacionAbono ? 'Registrando abono…' : procesandoVenta ? 'Procesando venta…' : guardandoProducto ? (form.id ? 'Actualizando producto…' : 'Guardando producto…') : faseImagen}

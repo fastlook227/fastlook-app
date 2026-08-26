@@ -9,11 +9,13 @@ import type {
 } from '@/types/asistente'
 import type { RolUsuario } from '@/types'
 import { normalizarTextoBusqueda } from '@/utils/busqueda'
+import { normalizarCodigoBarras } from '@/utils/codigoBarras'
 
 interface ProductoConsultado {
   id: string
   nombre: string | null
   codigo: string | null
+  codigo_barras: string | null
   precio: number | null
   costo: number | null
   stock: number | null
@@ -104,13 +106,25 @@ export async function buscarProductos(
 }> {
   const { data: productos, error: errorProductos } = await supabase
     .from('productos')
-    .select('id,nombre,codigo,precio,costo,stock,ubicacion,proveedor,tipo')
+    .select('id,nombre,codigo,codigo_barras,precio,costo,stock,ubicacion,proveedor,tipo')
 
   if (errorProductos) {
     throw new Error(`No fue posible consultar productos: ${errorProductos.message}`)
   }
 
-  const resultados = (productos as ProductoConsultado[] | null || [])
+  const productosConsultados = productos as ProductoConsultado[] | null || []
+  const barcodeBuscado = normalizarCodigoBarras(termino)
+  const coincidenciaBarcode = barcodeBuscado
+    ? productosConsultados.find((producto) => normalizarCodigoBarras(producto.codigo_barras) === barcodeBuscado)
+    : undefined
+  if (coincidenciaBarcode) {
+    return {
+      coincidencias: [{ producto: presentarProducto(coincidenciaBarcode, rol), puntaje: 1, motivoCoincidencia: 'Coincidencia exacta por código de barras' }],
+      productosParecidos: [],
+    }
+  }
+
+  const resultados = productosConsultados
     .map((producto): ResultadoBusquedaProducto => {
       const campos = [
         { etiqueta: 'nombre', valor: producto.nombre || '', peso: 1 },
@@ -151,7 +165,7 @@ export async function buscarProductoPorId(
 ): Promise<ProductoAsistente | null> {
   const { data, error } = await supabase
     .from('productos')
-    .select('id,nombre,codigo,precio,costo,stock,ubicacion,proveedor,tipo')
+    .select('id,nombre,codigo,codigo_barras,precio,costo,stock,ubicacion,proveedor,tipo')
     .eq('id', productoId)
     .maybeSingle()
 

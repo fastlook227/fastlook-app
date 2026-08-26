@@ -27,6 +27,7 @@ export type Tab =
 export interface Producto {
   id: string
   codigo: string
+  codigo_barras?: string | null
   nombre: string
   tipo: string
   precio: number

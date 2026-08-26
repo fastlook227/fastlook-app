@@ -184,6 +184,63 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .fl-stock-dialog button:disabled { cursor: not-allowed; opacity: .5; }
 .fl-movement-line.is-stock-adjustment { padding: 12px; background: #fff; border-left: 4px solid var(--fl-red); border-radius: 8px; }
 .fl-movement-kind { display: block; margin-bottom: 9px; }
+.fl-scan-feedback { display: grid; gap: 3px; margin: 10px 0 14px; padding: 12px 14px; border: 1px solid; border-radius: 11px; }
+.fl-scan-feedback.is-ok { color: #176b3a; background: #ebf9f0; border-color: #a6dfbb; }
+.fl-scan-feedback.is-error { color: #9b1c1c; background: #fff0f0; border-color: #efb4b4; }
+.fl-scan-feedback span, .fl-scan-feedback small { display: block; }
+.fl-barcode-dialog-backdrop { position: fixed; inset: 0; z-index: 1200; display: grid; place-items: center; padding: 18px; background: rgba(0,0,0,.68); backdrop-filter: blur(6px); }
+.fl-barcode-dialog { width: min(500px, 96vw); max-height: 92vh; overflow-y: auto; background: var(--fl-white); border-radius: var(--fl-radius-lg); box-shadow: 0 28px 80px rgba(0,0,0,.4); }
+.fl-barcode-dialog > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 18px 20px; border-bottom: 1px solid var(--fl-gray-200); }
+.fl-barcode-dialog > header span { color: var(--fl-red); font-size: 10px; font-weight: 900; letter-spacing: 1px; }
+.fl-barcode-dialog > header h2 { margin: 3px 0 0; font-size: 21px; }
+.fl-barcode-dialog > header button { display: grid; width: 42px; height: 42px; place-items: center; color: white; background: var(--fl-black); border: 0; border-radius: 11px; cursor: pointer; }
+.fl-barcode-dialog-body { display: grid; gap: 16px; padding: 20px; }
+.fl-barcode-dialog-body > strong { font-size: 17px; }
+.fl-barcode-dialog-body dl { display: grid; gap: 7px; margin: 0; }
+.fl-barcode-dialog-body dl div { display: flex; justify-content: space-between; gap: 12px; padding: 10px 12px; background: var(--fl-gray-100); border-radius: 9px; }
+.fl-barcode-dialog-body dt { color: var(--fl-gray-700); }
+.fl-barcode-dialog-body dd { margin: 0; overflow-wrap: anywhere; font-weight: 900; text-align: right; }
+.fl-barcode-dialog-body label { display: grid; gap: 6px; font-size: 12px; font-weight: 800; }
+.fl-barcode-dialog-body label > div { display: flex; align-items: center; gap: 8px; min-height: 48px; padding: 0 11px; border: 1px solid var(--fl-gray-300); border-radius: 10px; }
+.fl-barcode-dialog-body label input { min-width: 0; flex: 1; padding: 11px 0; border: 0; outline: 0; font-size: 16px; }
+.fl-barcode-dialog-body label small { color: var(--fl-gray-700); font-weight: 600; }
+.fl-barcode-duplicate { display: grid; gap: 4px; padding: 12px; color: #8a5600; background: #fff4d6; border-radius: 10px; }
+.fl-barcode-error { margin: 0; color: #9b1c1c; font-weight: 800; }
+.fl-barcode-result { padding: 28px 20px; color: #176b3a; text-align: center; }
+.fl-barcode-result h3 { margin: 9px 0; }
+.fl-barcode-result p { overflow-wrap: anywhere; color: var(--fl-gray-900); }
+.fl-barcode-dialog > footer { display: flex; justify-content: flex-end; gap: 8px; padding: 15px 20px; border-top: 1px solid var(--fl-gray-200); }
+.fl-barcode-dialog > footer button { display: inline-flex; min-height: 44px; align-items: center; justify-content: center; gap: 6px; padding: 9px 14px; border: 0; border-radius: 10px; cursor: pointer; font-weight: 800; }
+.fl-barcode-dialog > footer .is-cancel { background: var(--fl-gray-200); }
+.fl-barcode-dialog > footer .is-remove { color: #9b1c1c; background: #fff0f0; }
+.fl-barcode-dialog > footer .is-primary { color: white; background: var(--fl-red); }
+.fl-barcode-dialog button:disabled { cursor: not-allowed; opacity: .5; }
+.fl-scanner-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; margin: 8px 0 12px; }
+.fl-scanner-actions button { display: inline-flex; min-height: 44px; align-items: center; justify-content: center; gap: 7px; padding: 9px 14px; color: white; background: var(--fl-black); border: 0; border-radius: 10px; cursor: pointer; font-weight: 800; }
+.fl-scanner-actions label { display: inline-flex; min-height: 44px; align-items: center; gap: 8px; padding: 8px 12px; background: var(--fl-gray-100); border: 1px solid var(--fl-gray-200); border-radius: 10px; font-size: 12px; font-weight: 800; }
+.fl-scanner-actions input { width: 18px; height: 18px; accent-color: var(--fl-red); }
+.fl-scanner-backdrop { position: fixed; inset: 0; z-index: 1300; display: grid; place-items: center; padding: 18px; background: rgba(0,0,0,.82); backdrop-filter: blur(7px); }
+.fl-scanner { width: min(620px, 96vw); max-height: 94vh; overflow-y: auto; color: white; background: #111; border: 1px solid #333; border-radius: 20px; box-shadow: 0 30px 90px rgba(0,0,0,.55); }
+.fl-scanner > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 18px; }
+.fl-scanner > header span { color: #ff5959; font-size: 10px; font-weight: 900; letter-spacing: 1px; }
+.fl-scanner > header h2 { margin: 3px 0 0; color: white; font-size: 21px; }
+.fl-scanner > header button { display: grid; width: 42px; height: 42px; place-items: center; color: white; background: #2a2a2a; border: 0; border-radius: 11px; cursor: pointer; }
+.fl-scanner-preview { position: relative; min-height: 280px; overflow: hidden; background: #050505; }
+.fl-scanner-preview video { display: block; width: 100%; height: min(58vh, 460px); object-fit: cover; }
+.fl-scanner-frame { position: absolute; top: 50%; left: 50%; width: min(82%, 450px); height: 145px; border: 3px solid rgba(255,255,255,.9); border-radius: 16px; box-shadow: 0 0 0 100vmax rgba(0,0,0,.34); transform: translate(-50%, -50%); }
+.fl-scanner-feedback { position: absolute; right: 14px; bottom: 14px; left: 14px; display: grid; gap: 3px; padding: 11px 13px; color: #111; background: rgba(255,255,255,.94); border-radius: 11px; box-shadow: 0 8px 24px rgba(0,0,0,.3); }
+.fl-scanner-feedback.is-ok { border-left: 5px solid #21864d; }
+.fl-scanner-feedback.is-error { border-left: 5px solid var(--fl-red); }
+.fl-scanner-status { display: flex; align-items: center; gap: 10px; padding: 14px 18px; color: #ddd; }
+.fl-scanner-status > svg { flex: 0 0 auto; }
+.fl-scanner-status div { display: grid; gap: 2px; }
+.fl-scanner-status small { color: #999; }
+.fl-scanner-status.is-error { color: #ff8b8b; }
+.fl-scanner-status .is-spinning { animation: fl-spin .9s linear infinite; }
+.fl-scanner > footer { display: flex; justify-content: flex-end; gap: 8px; padding: 13px 18px 17px; }
+.fl-scanner > footer button { display: inline-flex; min-height: 44px; align-items: center; justify-content: center; gap: 7px; padding: 9px 14px; color: white; background: #2b2b2b; border: 0; border-radius: 10px; cursor: pointer; font-weight: 800; }
+.fl-scanner > footer .is-switch { background: var(--fl-red); }
+@keyframes fl-spin { to { transform: rotate(360deg); } }
 
 @media (max-width: 600px) {
   .fl-stock-dialog-backdrop { align-items: end; padding: 0; }
@@ -193,6 +250,16 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .fl-inventory-actions, .fl-inventory-actions summary { width: 100%; }
   .fl-inventory-actions summary { justify-content: center; }
   .fl-inventory-actions > div { right: 0; left: auto; width: min(100%, 260px); }
+  .fl-barcode-dialog-backdrop { align-items: end; padding: 0; }
+  .fl-barcode-dialog { width: 100%; max-height: 94vh; border-radius: 22px 22px 0 0; }
+  .fl-barcode-dialog > footer { display: grid; grid-template-columns: 1fr 1fr; position: sticky; bottom: 0; background: white; }
+  .fl-barcode-dialog > footer .is-primary:last-child { grid-column: 1 / -1; }
+  .fl-scanner-actions, .fl-scanner-actions button { width: 100%; }
+  .fl-scanner-actions label { width: 100%; }
+  .fl-scanner-backdrop { align-items: end; padding: 0; }
+  .fl-scanner { width: 100%; max-height: 96vh; border-radius: 22px 22px 0 0; }
+  .fl-scanner-preview video { height: 52vh; }
+  .fl-scanner > footer { display: grid; grid-template-columns: 1fr 1fr; position: sticky; bottom: 0; background: #111; }
 }
 
 .fl-corte-dashboard { padding: 8px 0 30px; }
