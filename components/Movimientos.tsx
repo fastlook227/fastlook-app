@@ -32,7 +32,21 @@ export default function Movimientos({ movimientos, styles, onGenerarTicket }: {
     const esVenta = Boolean(m.ticket_id) && lineasTicket.some((item) => item.tipo_movimiento?.toLocaleLowerCase('es-MX') === 'venta')
     return <div key={m.ticket_id || m.id} style={styles.ticketItem}>
       {esVenta && <p><b>Venta {m.folio || ''}</b></p>}
-      {lineasTicket.map((linea) => <div key={linea.id} className="fl-movement-line"><p><b>{linea.nombre}</b></p><p>Código: {linea.codigo}</p><p>Tipo: {linea.tipo_movimiento}</p><p>Cantidad: {linea.cantidad}</p><p>Stock anterior: {linea.stock_anterior}</p><p>Stock nuevo: {linea.stock_nuevo}</p><p>Nota: {linea.nota}</p></div>)}
+      {lineasTicket.map((linea) => {
+        const esAjusteStock = linea.tipo_movimiento === 'AJUSTE_STOCK'
+        const diferencia = Number(linea.cantidad || 0)
+        const motivo = linea.nota?.replace(/^Cambio manual de stock:\s*/i, '')
+        return <div key={linea.id} className={`fl-movement-line${esAjusteStock ? ' is-stock-adjustment' : ''}`}>
+          {esAjusteStock ? <>
+            <span className="fl-movement-kind">AJUSTE DE STOCK</span>
+            <p><b>{linea.nombre}</b></p>
+            <p>Código: {linea.codigo}</p>
+            <p>Stock: <strong>{linea.stock_anterior} → {linea.stock_nuevo}</strong></p>
+            <p>Diferencia: <strong>{diferencia > 0 ? '+' : ''}{diferencia}</strong></p>
+            <p>Motivo: {motivo && motivo !== 'Cambio manual de stock' ? motivo : 'Sin motivo especificado'}</p>
+          </> : <><p><b>{linea.nombre}</b></p><p>Código: {linea.codigo}</p><p>Tipo: {linea.tipo_movimiento}</p><p>Cantidad: {linea.cantidad}</p><p>Stock anterior: {linea.stock_anterior}</p><p>Stock nuevo: {linea.stock_nuevo}</p><p>Nota: {linea.nota}</p></>}
+        </div>
+      })}
       <p>Fecha: {formatearFechaHoraFastLook(m.created_at)}</p>
       {esVenta && m.ticket_id && <button type="button" className="fl-movement-ticket-button" disabled={Boolean(generando)} onClick={() => void generar(m.ticket_id!)}><ReceiptText size={17} />{generando === m.ticket_id ? 'Generando…' : 'Ticket'}</button>}
     </div>

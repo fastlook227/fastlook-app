@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Session } from '@supabase/supabase-js'
-import { AlertTriangle, CheckCircle, ChevronDown, ChevronUp, Hash, Plus, RefreshCw, X } from 'lucide-react'
+import { AlertTriangle, CheckCircle, ChevronDown, ChevronUp, Edit3, Hash, MoreVertical, PackagePlus, Plus, RefreshCw, SlidersHorizontal, X } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import type {
   CarritoItem,
@@ -46,6 +46,7 @@ import SelectorImagen from '@/components/SelectorImagen'
 import CorteCajaDashboard from '@/components/corte/CorteCajaDashboard'
 import CatalogoCascos from '@/components/cascos/CatalogoCascos'
 import Devoluciones from '@/components/devoluciones/Devoluciones'
+import CambiarStockDialog from '@/components/CambiarStockDialog'
 import {
   comprobarCodigoProducto,
   esErrorCodigoDuplicado,
@@ -89,6 +90,7 @@ export default function Home() {
   const [notificacionImagen, setNotificacionImagen] = useState<{ tipo: 'ok' | 'error'; mensaje: string } | null>(null)
   const [proveedores, setProveedores] = useState<Proveedor[]>([])
   const [movimientos, setMovimientos] = useState<MovimientoInventario[]>([])
+  const [productoCambioStock, setProductoCambioStock] = useState<Producto | null>(null)
   const [cortes, setCortes] = useState<CorteCaja[]>([])
   const [avisoCorte, setAvisoCorte] = useState('')
   const [cantidadCompra, setCantidadCompra] = useState(1)
@@ -686,42 +688,6 @@ const fetchMovimientosClientes = async () => {
 
     fetchProductos()
     alert('Stock actualizado')
-  }
-
-  const ajustarStock = async (producto: Producto, nuevoStock: number) => {
-    if (usuarioRol !== 'Admin') {
-      alert('Solo el administrador puede modificar stock')
-      return
-    }
-
-    if (nuevoStock < 0) {
-      alert('El stock no puede ser negativo')
-      return
-    }
-
-    const stockAnterior = Number(producto.stock || 0)
-
-    const { error } = await supabase
-      .from('productos')
-      .update({ stock: nuevoStock })
-      .eq('id', producto.id)
-
-    if (error) {
-      alert('Error al ajustar stock: ' + error.message)
-      return
-    }
-
-    await registrarMovimiento(
-      producto,
-      'Ajuste',
-      nuevoStock - stockAnterior,
-      stockAnterior,
-      nuevoStock,
-      'Ajuste manual de inventario'
-    )
-
-    fetchProductos()
-    alert('Stock ajustado')
   }
 
   const totalCarrito = carrito.reduce(
@@ -1812,31 +1778,26 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
                 <p><b>Stock:</b> {p.stock}</p>
                 <p><b>Stock mínimo:</b> {p.stock_minimo || 5}</p>
 
-                <button style={styles.redButton} onClick={() => editarProducto(p)}>
-                Editar
-                </button>
-
-                <button
-                style={styles.blackButton}
-                onClick={() => {
-                    const cantidad = Number(prompt('¿Cuántas piezas entraron?'))
-                    if (!isNaN(cantidad)) entradaStock(p, cantidad)
-                }}
-                >
-                Entrada de stock
-                </button>
-
-                <button
-                style={styles.grayButton}
-                onClick={() => {
-                    const nuevoStock = Number(prompt('Nuevo stock total'))
-                    if (!isNaN(nuevoStock)) ajustarStock(p, nuevoStock)
-                }}
-                >
-                Ajustar stock
-                </button>
+                {usuarioRol === 'Admin' && <details className="fl-inventory-actions">
+                  <summary aria-label={`Acciones para ${p.nombre}`}><MoreVertical size={20} />Acciones</summary>
+                  <div>
+                    <button type="button" onClick={(evento) => { evento.currentTarget.closest('details')?.removeAttribute('open'); editarProducto(p) }}><Edit3 size={16} />Editar</button>
+                    <button type="button" onClick={(evento) => {
+                      evento.currentTarget.closest('details')?.removeAttribute('open')
+                      const cantidad = Number(prompt('¿Cuántas piezas entraron?'))
+                      if (!isNaN(cantidad)) void entradaStock(p, cantidad)
+                    }}><PackagePlus size={16} />Añadir stock</button>
+                    <button type="button" onClick={(evento) => { evento.currentTarget.closest('details')?.removeAttribute('open'); setProductoCambioStock(p) }}><SlidersHorizontal size={16} />Cambiar stock a…</button>
+                  </div>
+                </details>}
             </div>
             ))}
+
+            {usuarioRol === 'Admin' && productoCambioStock && <CambiarStockDialog
+              producto={productoCambioStock}
+              onCerrar={() => setProductoCambioStock(null)}
+              onRefrescar={async () => { await Promise.all([fetchProductos(true), fetchMovimientos()]) }}
+            />}
           </>
         )}
 
