@@ -204,6 +204,9 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .fl-barcode-dialog-body label > div { display: flex; align-items: center; gap: 8px; min-height: 48px; padding: 0 11px; border: 1px solid var(--fl-gray-300); border-radius: 10px; }
 .fl-barcode-dialog-body label input { min-width: 0; flex: 1; padding: 11px 0; border: 0; outline: 0; font-size: 16px; }
 .fl-barcode-dialog-body label small { color: var(--fl-gray-700); font-weight: 600; }
+.fl-barcode-camera-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; }
+.fl-barcode-camera-actions button { display: inline-flex; min-height: 44px; align-items: center; justify-content: center; gap: 7px; padding: 9px 13px; color: white; background: var(--fl-black); border: 0; border-radius: 10px; cursor: pointer; font-weight: 800; }
+.fl-barcode-camera-actions span { color: #176b3a; font-size: 12px; font-weight: 800; }
 .fl-barcode-duplicate { display: grid; gap: 4px; padding: 12px; color: #8a5600; background: #fff4d6; border-radius: 10px; }
 .fl-barcode-error { margin: 0; color: #9b1c1c; font-weight: 800; }
 .fl-barcode-result { padding: 28px 20px; color: #176b3a; text-align: center; }
@@ -254,6 +257,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .fl-barcode-dialog { width: 100%; max-height: 94vh; border-radius: 22px 22px 0 0; }
   .fl-barcode-dialog > footer { display: grid; grid-template-columns: 1fr 1fr; position: sticky; bottom: 0; background: white; }
   .fl-barcode-dialog > footer .is-primary:last-child { grid-column: 1 / -1; }
+  .fl-barcode-camera-actions, .fl-barcode-camera-actions button { width: 100%; }
   .fl-scanner-actions, .fl-scanner-actions button { width: 100%; }
   .fl-scanner-actions label { width: 100%; }
   .fl-scanner-backdrop { align-items: end; padding: 0; }

@@ -1,10 +1,11 @@
 'use client'
 
-import { Barcode, CheckCircle, Trash2, X } from 'lucide-react'
+import { Barcode, Camera, CheckCircle, Trash2, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import type { Producto } from '@/types'
 import { normalizarCodigoBarras } from '@/utils/codigoBarras'
+import ScannerCodigoBarras, { type FeedbackScanner } from '@/components/codigos-barras/ScannerCodigoBarras'
 
 type RespuestaBarcode = {
   ok?: boolean
@@ -39,6 +40,8 @@ export default function CodigoBarrasDialog({ producto, productos, onCerrar, onAc
   const [error, setError] = useState('')
   const [duplicado, setDuplicado] = useState<Producto | null>(null)
   const [resultado, setResultado] = useState<{ anterior: string | null; nuevo: string | null; sinCambios: boolean } | null>(null)
+  const [scannerAbierto, setScannerAbierto] = useState(false)
+  const [codigoDetectadoCamara, setCodigoDetectadoCamara] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => { inputRef.current?.focus() }, [])
@@ -47,6 +50,21 @@ export default function CodigoBarrasDialog({ producto, productos, onCerrar, onAc
     const temporizador = window.setTimeout(onCerrar, 1600)
     return () => window.clearTimeout(temporizador)
   }, [onCerrar, resultado])
+
+  const cerrarScanner = () => {
+    setScannerAbierto(false)
+    requestAnimationFrame(() => inputRef.current?.focus())
+  }
+
+  const recibirCodigoCamara = (valor: string): FeedbackScanner => {
+    const detectado = normalizarCodigoBarras(valor)
+    if (!detectado) return { tipo: 'error', titulo: 'Código no válido' }
+    setCodigo(detectado)
+    setCodigoDetectadoCamara(true)
+    setError('')
+    setDuplicado(null)
+    return { tipo: 'ok', titulo: 'Código detectado', detalle: detectado }
+  }
 
   const guardar = async (codigoSolicitado: string | null) => {
     if (guardandoRef.current || resultado) return
@@ -109,11 +127,13 @@ export default function CodigoBarrasDialog({ producto, productos, onCerrar, onAc
       {resultado ? <div className="fl-barcode-result" role="status"><CheckCircle size={38} /><h3>{resultado.sinCambios ? 'Código sin cambios' : resultado.nuevo ? 'Código actualizado' : 'Código eliminado'}</h3><p>{resultado.anterior || 'Sin código'} → {resultado.nuevo || 'Sin código'}</p></div> : <div className="fl-barcode-dialog-body">
         <strong>{producto.nombre}</strong>
         <dl><div><dt>Código Fast Look</dt><dd>{producto.codigo}</dd></div><div><dt>Código de barras actual</dt><dd>{producto.codigo_barras || 'Sin código asignado'}</dd></div></dl>
-        <label><span>Nuevo código</span><div><Barcode size={20} /><input ref={inputRef} value={codigo} onChange={(evento) => { setCodigo(evento.target.value); setError(''); setDuplicado(null) }} onKeyDown={(evento) => { if (evento.key === 'Enter') { evento.preventDefault(); void guardar(codigo) } }} placeholder="Escanea o escribe el código" /></div><small>El lector puede escribir aquí y confirmar con Enter.</small></label>
+        <label><span>Nuevo código</span><div><Barcode size={20} /><input ref={inputRef} value={codigo} onChange={(evento) => { setCodigo(evento.target.value); setCodigoDetectadoCamara(false); setError(''); setDuplicado(null) }} onKeyDown={(evento) => { if (evento.key === 'Enter') { evento.preventDefault(); void guardar(codigo) } }} placeholder="Escanea o escribe el código" /></div><small>El lector puede escribir aquí y confirmar con Enter.</small></label>
+        <div className="fl-barcode-camera-actions"><button type="button" onClick={() => setScannerAbierto(true)} disabled={guardando}><Camera size={18} />{codigoDetectadoCamara ? 'Escanear nuevamente' : 'Escanear con cámara'}</button>{codigoDetectadoCamara && <span role="status">✓ Código detectado con cámara</span>}</div>
         {duplicado && <div className="fl-barcode-duplicate" role="alert"><b>Este código ya pertenece a:</b><strong>{duplicado.nombre}</strong><span>{duplicado.codigo}</span></div>}
         {error && <p className="fl-barcode-error" role="alert">{error}</p>}
       </div>}
       <footer><button type="button" className="is-cancel" onClick={onCerrar} disabled={guardando}>Cancelar</button>{!resultado && producto.codigo_barras && <button type="button" className="is-remove" onClick={() => void guardar(null)} disabled={guardando}><Trash2 size={16} />Quitar código</button>}{!resultado && <button type="button" className="is-primary" onClick={() => void guardar(codigo)} disabled={guardando || !normalizarCodigoBarras(codigo)}>{guardando ? 'Guardando…' : 'Guardar código'}</button>}</footer>
     </section>
+    <ScannerCodigoBarras abierto={scannerAbierto} onDetect={recibirCodigoCamara} onCerrar={cerrarScanner} />
   </div>
 }
