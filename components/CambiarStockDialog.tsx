@@ -4,6 +4,7 @@ import { AlertTriangle, CheckCircle, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import type { Producto } from '@/types'
+import { crearArgumentosCambioStock, interpretarStockNuevo } from '@/utils/stock'
 
 type RespuestaCambioStock = {
   ok?: boolean
@@ -63,10 +64,9 @@ export default function CambiarStockDialog({ producto, onCerrar, onRefrescar }: 
   const actualizandoRef = useRef(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
-  const stockValido = /^\d+$/.test(stockNuevo)
-  const stockNumerico = stockValido ? Number(stockNuevo) : null
+  const interpretacionStock = interpretarStockNuevo(stockNuevo)
   const motivoValido = motivo.length <= 500
-  const diferencia = stockNumerico === null ? null : stockNumerico - stockEsperado
+  const diferencia = interpretacionStock.valido ? interpretacionStock.numero - stockEsperado : null
 
   const resumen = useMemo(() => {
     if (diferencia === null) return ''
@@ -86,7 +86,13 @@ export default function CambiarStockDialog({ producto, onCerrar, onRefrescar }: 
   const confirmar = async () => {
     if (actualizandoRef.current || resultado) return
     setError('')
-    if (!stockValido || stockNumerico === null || !Number.isSafeInteger(stockNumerico)) {
+    const argumentosRpc = crearArgumentosCambioStock({
+      productoId: producto.id,
+      stockEsperado,
+      stockNuevoTexto: stockNuevo,
+      motivo,
+    })
+    if (!argumentosRpc) {
       setError('El stock debe ser un número entero válido.')
       return
     }
@@ -98,12 +104,7 @@ export default function CambiarStockDialog({ producto, onCerrar, onRefrescar }: 
     actualizandoRef.current = true
     setActualizando(true)
     try {
-      const { data, error: errorRpc } = await supabase.rpc('cambiar_stock_producto', {
-        p_producto_id: producto.id,
-        p_stock_esperado: stockEsperado,
-        p_stock_nuevo: stockNumerico,
-        p_motivo: motivo.trim() || null,
-      })
+      const { data, error: errorRpc } = await supabase.rpc('cambiar_stock_producto', argumentosRpc)
       if (errorRpc) {
         setError(mensajeSeguro(errorRpc))
         return
@@ -131,6 +132,18 @@ export default function CambiarStockDialog({ producto, onCerrar, onRefrescar }: 
         const stockAnterior = Number(respuesta.stock_anterior)
         const stockFinal = Number(respuesta.stock_nuevo)
         const diferenciaFinal = Number(respuesta.diferencia || 0)
+        const respuestaCoherente =
+          Number.isInteger(stockAnterior) &&
+          Number.isInteger(stockFinal) &&
+          stockAnterior === argumentosRpc.p_stock_esperado &&
+          stockFinal === argumentosRpc.p_stock_nuevo &&
+          diferenciaFinal === stockFinal - stockAnterior &&
+          (respuesta.codigo !== 'STOCK_SIN_CAMBIOS' || stockAnterior === stockFinal)
+        if (!respuestaCoherente) {
+          await onRefrescar().catch(() => undefined)
+          setError('La respuesta no coincide con el ajuste solicitado. El inventario fue actualizado; revísalo antes de reintentar.')
+          return
+        }
         setResultado({
           codigo: respuesta.codigo,
           stockAnterior,
@@ -182,7 +195,7 @@ export default function CambiarStockDialog({ producto, onCerrar, onRefrescar }: 
         <div className="fl-stock-current"><span>Stock actual</span><strong>{stockEsperado}</strong></div>
         <label>
           <span>Cambiar stock a</span>
-          <input ref={inputRef} type="text" inputMode="numeric" value={stockNuevo} onChange={(evento) => { setStockNuevo(evento.target.value); setError('') }} aria-invalid={Boolean(error) && !stockValido} />
+          <input ref={inputRef} type="text" inputMode="numeric" value={stockNuevo} onChange={(evento) => { setStockNuevo(evento.target.value); setError('') }} aria-invalid={Boolean(error) && !interpretacionStock.valido} />
         </label>
         <label>
           <span>Motivo opcional</span>
@@ -195,7 +208,7 @@ export default function CambiarStockDialog({ producto, onCerrar, onRefrescar }: 
 
       <footer>
         <button type="button" className="is-cancel" onClick={onCerrar} disabled={actualizando}>Cancelar</button>
-        {conflicto ? <button type="button" className="is-primary" onClick={usarStockActualizado}>Usar stock actualizado</button> : !resultado && <button type="button" className="is-primary" onClick={() => void confirmar()} disabled={actualizando || !stockValido || !motivoValido}>{actualizando ? 'Actualizando…' : 'Cambiar stock'}</button>}
+        {conflicto ? <button type="button" className="is-primary" onClick={usarStockActualizado}>Usar stock actualizado</button> : !resultado && <button type="button" className="is-primary" onClick={() => void confirmar()} disabled={actualizando || !interpretacionStock.valido || !motivoValido}>{actualizando ? 'Actualizando…' : 'Cambiar stock'}</button>}
       </footer>
     </section>
   </div>
