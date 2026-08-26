@@ -41,8 +41,11 @@ const mensajesError: Record<string, string> = {
 }
 
 const mensajeSeguro = (error: { code?: string; message?: string }) => {
-  if (error.code === '22P02' || error.code === '42883') {
+  if (error.code === '22P02') {
     return 'El stock debe ser un número entero válido.'
+  }
+  if (error.code === '42883') {
+    return 'No se pudo ejecutar el ajuste de stock. Actualiza la página e inténtalo nuevamente.'
   }
   const codigo = Object.keys(mensajesError).find((clave) => error.message?.includes(`${clave}:`))
   return codigo ? mensajesError[codigo] : 'No fue posible cambiar el stock. Intenta nuevamente.'
@@ -106,6 +109,14 @@ export default function CambiarStockDialog({ producto, onCerrar, onRefrescar }: 
     try {
       const { data, error: errorRpc } = await supabase.rpc('cambiar_stock_producto', argumentosRpc)
       if (errorRpc) {
+        if (process.env.NODE_ENV !== 'production') {
+          console.error('Error controlado en cambiar_stock_producto:', {
+            code: errorRpc.code,
+            message: errorRpc.message,
+            details: errorRpc.details,
+            hint: errorRpc.hint,
+          })
+        }
         setError(mensajeSeguro(errorRpc))
         return
       }
