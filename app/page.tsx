@@ -49,6 +49,7 @@ import CatalogoCascos from '@/components/cascos/CatalogoCascos'
 import Devoluciones from '@/components/devoluciones/Devoluciones'
 import CambiarStockDialog from '@/components/CambiarStockDialog'
 import CodigoBarrasDialog from '@/components/codigos-barras/CodigoBarrasDialog'
+import HerramientasCodigosBarras from '@/components/codigos-barras/HerramientasCodigosBarras'
 import ScannerCodigoBarras, { type FeedbackScanner } from '@/components/codigos-barras/ScannerCodigoBarras'
 import { crearMapaCodigosBarras, normalizarCodigoBarras } from '@/utils/codigoBarras'
 import {
@@ -1816,6 +1817,11 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
                 </section>
               </div>
             )}
+
+            {usuarioRol === 'Admin' && <HerramientasCodigosBarras
+              productos={productos}
+              onActualizar={() => fetchProductos(true)}
+            />}
 
                         <h3>Productos registrados</h3>
 
