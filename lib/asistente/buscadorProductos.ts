@@ -9,7 +9,7 @@ import type {
 } from '@/types/asistente'
 import type { RolUsuario } from '@/types'
 import { normalizarTextoBusqueda } from '@/utils/busqueda'
-import { normalizarCodigoBarras } from '@/utils/codigoBarras'
+import { buscarCodigoBarrasExacto } from '@/utils/codigoBarras'
 
 interface ProductoConsultado {
   id: string
@@ -113,10 +113,7 @@ export async function buscarProductos(
   }
 
   const productosConsultados = productos as ProductoConsultado[] | null || []
-  const barcodeBuscado = normalizarCodigoBarras(termino)
-  const coincidenciaBarcode = barcodeBuscado
-    ? productosConsultados.find((producto) => normalizarCodigoBarras(producto.codigo_barras) === barcodeBuscado)
-    : undefined
+  const coincidenciaBarcode = buscarCodigoBarrasExacto(productosConsultados, termino)
   if (coincidenciaBarcode) {
     return {
       coincidencias: [{ producto: presentarProducto(coincidenciaBarcode, rol), puntaje: 1, motivoCoincidencia: 'Coincidencia exacta por código de barras' }],
@@ -131,6 +128,7 @@ export async function buscarProductos(
         { etiqueta: 'código', valor: producto.codigo || '', peso: 1 },
         { etiqueta: 'categoría', valor: producto.tipo || '', peso: 0.88 },
         { etiqueta: 'proveedor', valor: producto.proveedor || '', peso: 0.84 },
+        { etiqueta: 'ubicación', valor: producto.ubicacion || '', peso: 0.84 },
       ]
       const mejorCampo = campos
         .map((campo) => ({
@@ -194,13 +192,18 @@ export async function buscarProductosMasivos(
     throw new Error(`No fue posible consultar productos: ${error.message}`)
   }
 
-  const productos = (data as ProductoConsultado[] | null || []).filter((producto) => {
+  const consultados = data as ProductoConsultado[] | null || []
+  const barcodeExacto = filtros.textoBusqueda
+    ? buscarCodigoBarrasExacto(consultados, filtros.textoBusqueda)
+    : undefined
+  const candidatos = barcodeExacto ? [barcodeExacto] : consultados
+  const productos = candidatos.filter((producto) => {
     if (filtros.soloNoArchivados && (producto.archivado === true || producto.activo === false)) {
       return false
     }
-    const textoGeneral = [producto.nombre, producto.codigo, producto.tipo, producto.proveedor]
+    const textoGeneral = [producto.nombre, producto.codigo, producto.tipo, producto.proveedor, producto.ubicacion]
       .filter(Boolean).join(' ')
-    return contieneFiltro(textoGeneral, filtros.textoBusqueda)
+    return (barcodeExacto || contieneFiltro(textoGeneral, filtros.textoBusqueda))
       && contieneFiltro(producto.tipo, filtros.categoria)
       && contieneFiltro(producto.proveedor, filtros.proveedor)
       && contieneFiltro(producto.nombre, filtros.color)

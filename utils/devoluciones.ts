@@ -1,6 +1,7 @@
-import type { Venta } from '@/types'
+import type { Producto, Venta } from '@/types'
 import type { DevolucionDetalle, EstadoDevolucionVenta, TicketDevolucion, VentaConDevolucion } from '@/types/devoluciones'
 import { normalizarTextoBusqueda } from '@/utils/busqueda'
+import { buscarCodigoBarrasExacto } from '@/utils/codigoBarras'
 
 const numero = (valor: unknown) => {
   const resultado = Number(valor || 0)
@@ -55,9 +56,15 @@ export const agruparVentasPorTicket = (ventas: Venta[], detalles: DevolucionDeta
   return { tickets: lista, heredadas: heredadas.sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at)) }
 }
 
-export const filtrarTicketsDevolucion = (tickets: TicketDevolucion[], busqueda: string) => {
+export const filtrarTicketsDevolucion = (tickets: TicketDevolucion[], busqueda: string, productos: Producto[] = []) => {
   const termino = normalizarTextoBusqueda(busqueda)
   if (!termino) return tickets
+  const productoBarcode = buscarCodigoBarrasExacto(productos, busqueda)
+  if (productoBarcode) {
+    return tickets.filter((ticket) => ticket.lineas.some(
+      (linea) => String(linea.producto_id || '') === String(productoBarcode.id)
+    ))
+  }
   return tickets.filter((ticket) => normalizarTextoBusqueda([
     ticket.folio,
     ...ticket.lineas.flatMap((linea) => [linea.codigo || '', linea.nombre || '']),

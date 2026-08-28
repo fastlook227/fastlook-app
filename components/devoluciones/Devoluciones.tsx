@@ -2,7 +2,7 @@
 
 import { CheckCircle2, History, RotateCcw, Search } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { Venta } from '@/types'
+import type { Producto, Venta } from '@/types'
 import type { Devolucion, DevolucionDetalle, MotivoDevolucion, PeriodoDevoluciones, ResultadoDevolucion, TicketDevolucion } from '@/types/devoluciones'
 import { supabase } from '@/lib/supabase'
 import { agruparVentasPorTicket, esErrorCantidadExcedida, filtrarTicketsDevolucion, mensajeErrorDevolucion, monedaDevolucion } from '@/utils/devoluciones'
@@ -15,7 +15,7 @@ import HistorialDevoluciones from '@/components/devoluciones/HistorialDevolucion
 
 const motivos: MotivoDevolucion[] = ['Producto incorrecto', 'No le quedó', 'Defecto', 'Cambio de opinión', 'Cambio por otro producto', 'Otro']
 
-export default function Devoluciones({ ventas, devoluciones, detalles, onActualizarDatos }: { ventas: Venta[]; devoluciones: Devolucion[]; detalles: DevolucionDetalle[]; onActualizarDatos: () => Promise<void> }) {
+export default function Devoluciones({ ventas, productos, devoluciones, detalles, onActualizarDatos }: { ventas: Venta[]; productos: Producto[]; devoluciones: Devolucion[]; detalles: DevolucionDetalle[]; onActualizarDatos: () => Promise<void> }) {
   const [vista, setVista] = useState<'buscar' | 'historial'>('buscar')
   const [busqueda, setBusqueda] = useState('')
   const [ticketSeleccionado, setTicketSeleccionado] = useState<TicketDevolucion | null>(null)
@@ -48,7 +48,7 @@ export default function Devoluciones({ ventas, devoluciones, detalles, onActuali
   }
 
   const agrupadas = useMemo(() => agruparVentasPorTicket(ventas, detalles), [ventas, detalles])
-  const ticketsVisibles = useMemo(() => filtrarTicketsDevolucion(agrupadas.tickets, busqueda), [agrupadas.tickets, busqueda])
+  const ticketsVisibles = useMemo(() => filtrarTicketsDevolucion(agrupadas.tickets, busqueda, productos), [agrupadas.tickets, busqueda, productos])
 
   useEffect(() => {
     if (!ticketSeleccionado) return

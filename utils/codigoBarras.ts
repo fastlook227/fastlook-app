@@ -1,18 +1,20 @@
-import type { Producto } from '@/types'
+// @ts-expect-error Node ejecuta las pruebas TypeScript nativas y requiere la extensión explícita.
+import { buscarCodigoBarrasExacto, normalizarCodigoBarras } from './busqueda.ts'
 
-export const normalizarCodigoBarras = (valor: unknown) =>
-  typeof valor === 'string' ? valor.trim() : ''
+// @ts-expect-error Node ejecuta las pruebas TypeScript nativas y requiere la extensión explícita.
+export { buscarCodigoBarrasExacto, normalizarCodigoBarras } from './busqueda.ts'
 
-export const esCodigoBarrasExacto = (producto: Producto, codigo: string) => {
+export interface ProductoConCodigoBarras {
+  codigo_barras?: string | null
+}
+
+export const esCodigoBarrasExacto = (producto: ProductoConCodigoBarras, codigo: string) => {
   const buscado = normalizarCodigoBarras(codigo)
   return buscado !== '' && normalizarCodigoBarras(producto.codigo_barras) === buscado
 }
 
-export const buscarCodigoBarrasExacto = (productos: Producto[], codigo: string) =>
-  productos.find((producto) => esCodigoBarrasExacto(producto, codigo))
-
-export const crearMapaCodigosBarras = (productos: Producto[]) => {
-  const mapa = new Map<string, Producto>()
+export const crearMapaCodigosBarras = <T extends ProductoConCodigoBarras>(productos: readonly T[]) => {
+  const mapa = new Map<string, T>()
   productos.forEach((producto) => {
     const codigo = normalizarCodigoBarras(producto.codigo_barras)
     if (codigo) mapa.set(codigo, producto)

@@ -22,7 +22,7 @@ import type {
 } from '@/types'
 import type { Devolucion, DevolucionDetalle } from '@/types/devoluciones'
 import { obtenerFechaActualFastLook, obtenerFechaLocal } from '@/utils/fechas'
-import { normalizarTextoBusqueda } from '@/utils/busqueda'
+import { filtrarProductosPorBusqueda } from '@/utils/busqueda'
 import { puedeAccederCorteCaja } from '@/lib/permisos/corteCaja'
 import { generarTextoTicket } from '@/utils/ticket'
 import { agregarProductoAlCarrito } from '@/utils/ventas'
@@ -520,18 +520,10 @@ const fetchMovimientosClientes = async () => {
   }
 
   const productosPorCodigoBarras = useMemo(() => crearMapaCodigosBarras(productos), [productos])
-  const codigoBarrasBuscado = normalizarCodigoBarras(busqueda)
-  const productoBarcodeExacto = codigoBarrasBuscado ? productosPorCodigoBarras.get(codigoBarrasBuscado) : undefined
-  const productosFiltrados = productoBarcodeExacto ? [productoBarcodeExacto] : productos.filter((p) => {
-    const texto = normalizarTextoBusqueda(busqueda)
-    return (
-      normalizarTextoBusqueda(p.nombre).includes(texto) ||
-      normalizarTextoBusqueda(p.codigo).includes(texto) ||
-      normalizarTextoBusqueda(p.tipo).includes(texto) ||
-      normalizarTextoBusqueda(p.ubicacion).includes(texto) ||
-      normalizarTextoBusqueda(p.proveedor).includes(texto)
-    )
-  })
+  const productosFiltrados = useMemo(
+    () => filtrarProductosPorBusqueda(productos, busqueda),
+    [productos, busqueda]
+  )
 
   const clientesFiltrados = clientes.filter((c) => {
   const texto = busquedaClientes.toLowerCase()
@@ -1562,6 +1554,7 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
         {tab === 'devoluciones' && (
           <Devoluciones
             ventas={ventas}
+            productos={productos}
             devoluciones={devoluciones}
             detalles={devolucionesDetalle}
             onActualizarDatos={async () => {
