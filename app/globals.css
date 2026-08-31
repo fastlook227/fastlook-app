@@ -268,7 +268,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .fl-bulk-barcode-dialog > footer .is-cancel { background: var(--fl-gray-200); }
 .fl-bulk-barcode-dialog > footer .is-primary { color: white; background: var(--fl-red); }
 .fl-product-barcode-pdf-backdrop { position: fixed; inset: 0; z-index: 1250; display: grid; place-items: center; padding: 20px; background: rgba(0,0,0,.72); backdrop-filter: blur(6px); }
-.fl-product-barcode-pdf-dialog { display: grid; width: min(980px, 96vw); max-height: 92vh; grid-template-rows: auto auto auto minmax(180px, 1fr) auto; overflow: hidden; background: white; border-radius: var(--fl-radius-lg); box-shadow: 0 28px 80px rgba(0,0,0,.4); }
+.fl-product-barcode-pdf-dialog { display: grid; width: min(980px, 96vw); max-height: 92vh; grid-template-rows: auto auto auto auto minmax(180px, 1fr) auto; overflow: hidden; background: white; border-radius: var(--fl-radius-lg); box-shadow: 0 28px 80px rgba(0,0,0,.4); }
 .fl-product-barcode-pdf-dialog > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; padding: 18px 20px 14px; border-bottom: 1px solid var(--fl-gray-200); }
 .fl-product-barcode-pdf-dialog > header span { color: var(--fl-red); font-size: 10px; font-weight: 900; letter-spacing: 1px; }
 .fl-product-barcode-pdf-dialog > header h2 { margin: 3px 0; font-size: 22px; }
@@ -278,6 +278,13 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .fl-product-barcode-pdf-search input { min-width: 0; min-height: 46px; flex: 1; border: 0; outline: 0; }
 .fl-product-barcode-pdf-actions { display: flex; flex-wrap: wrap; gap: 8px; padding: 11px 20px; border-bottom: 1px solid var(--fl-gray-200); }
 .fl-product-barcode-pdf-actions button { display: inline-flex; min-height: 38px; align-items: center; gap: 7px; padding: 8px 11px; color: var(--fl-red); background: var(--fl-red-soft); border: 0; border-radius: 9px; cursor: pointer; font-size: 12px; font-weight: 800; }
+.fl-product-barcode-pdf-format { display: flex; align-items: stretch; gap: 9px; margin: 0; padding: 11px 20px; background: var(--fl-gray-100); border: 0; border-bottom: 1px solid var(--fl-gray-200); }
+.fl-product-barcode-pdf-format legend { width: 100%; padding: 0 0 7px; font-size: 11px; font-weight: 900; }
+.fl-product-barcode-pdf-format label { display: flex; min-width: 180px; align-items: center; gap: 9px; padding: 9px 12px; background: white; border: 1px solid var(--fl-gray-200); border-radius: 10px; cursor: pointer; }
+.fl-product-barcode-pdf-format label.is-active { background: var(--fl-red-soft); border-color: rgba(214,0,0,.4); }
+.fl-product-barcode-pdf-format input { accent-color: var(--fl-red); }
+.fl-product-barcode-pdf-format strong, .fl-product-barcode-pdf-format small { display: block; }
+.fl-product-barcode-pdf-format small { margin-top: 2px; color: var(--fl-gray-700); font-size: 10px; }
 .fl-product-barcode-pdf-list { display: grid; align-content: start; gap: 8px; overflow-y: auto; padding: 13px 20px; }
 .fl-product-barcode-pdf-list > label { display: grid; grid-template-columns: auto 64px minmax(0, 1fr) auto; align-items: center; gap: 11px; padding: 9px 11px; border: 1px solid var(--fl-gray-200); border-radius: 11px; cursor: pointer; }
 .fl-product-barcode-pdf-list > label.is-selected { background: var(--fl-red-soft); border-color: rgba(214,0,0,.35); }
@@ -346,10 +353,12 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .fl-barcode-tools > div:last-child { display: grid; }
   .fl-bulk-barcode-backdrop, .fl-product-barcode-pdf-backdrop { align-items: end; padding: 0; }
   .fl-bulk-barcode-dialog, .fl-product-barcode-pdf-dialog { width: 100%; max-height: 94vh; border-radius: 22px 22px 0 0; }
-  .fl-product-barcode-pdf-dialog > header, .fl-product-barcode-pdf-actions, .fl-product-barcode-pdf-list, .fl-product-barcode-pdf-dialog > footer { padding-inline: 13px; }
+  .fl-product-barcode-pdf-dialog > header, .fl-product-barcode-pdf-actions, .fl-product-barcode-pdf-format, .fl-product-barcode-pdf-list, .fl-product-barcode-pdf-dialog > footer { padding-inline: 13px; }
   .fl-product-barcode-pdf-search { margin-inline: 13px; }
   .fl-product-barcode-pdf-actions { display: grid; }
   .fl-product-barcode-pdf-actions button { justify-content: center; }
+  .fl-product-barcode-pdf-format { display: grid; grid-template-columns: 1fr 1fr; }
+  .fl-product-barcode-pdf-format label { min-width: 0; }
   .fl-product-barcode-pdf-list > label { grid-template-columns: auto 54px minmax(0, 1fr); }
   .fl-product-barcode-pdf-thumb { width: 54px; height: 50px; }
   .fl-product-barcode-pdf-list label > span:last-child { grid-column: 3; justify-self: start; }

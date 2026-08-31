@@ -5,7 +5,7 @@ import { obtenerValorBarcodeExacto } from '../utils/barcodeGrafico.ts'
 // @ts-expect-error Node ejecuta TypeScript nativo y requiere la extensión explícita.
 import { cargarImagenPdfOpcional } from '../utils/imagenesPdf.ts'
 // @ts-expect-error Node ejecuta TypeScript nativo y requiere la extensión explícita.
-import { alternarIdSeleccionado, calcularPaginasEtiquetas, dividirEtiquetasEnPaginas, seleccionarIdsConCodigoBarras, seleccionarIdsProductos, separarProductosPorCodigoBarras } from '../utils/seleccionCodigosBarras.ts'
+import { agregarIdsSeleccionados, alternarIdSeleccionado, calcularGeometriaPDF, calcularPaginasEtiquetas, calcularPaginasPDF, dividirEtiquetasEnPaginas, quitarIdsSeleccionados, reconciliarIdsSeleccionados, seleccionarIdsConCodigoBarras, seleccionarIdsProductos, separarProductosPorCodigoBarras } from '../utils/seleccionCodigosBarras.ts'
 
 test('calcula páginas con un máximo exacto de ocho etiquetas', () => {
   assert.equal(calcularPaginasEtiquetas(1), 1)
@@ -45,4 +45,40 @@ test('una imagen fallida se convierte en ausencia opcional sin cancelar el lote'
     throw new Error('CORS')
   })
   assert.equal(resultado, null)
+})
+
+test('modo etiquetas pagina en grupos máximos de 24', () => {
+  assert.equal(calcularPaginasPDF(1, 'etiquetas'), 1)
+  assert.equal(calcularPaginasPDF(24, 'etiquetas'), 1)
+  assert.equal(calcularPaginasPDF(25, 'etiquetas'), 2)
+  assert.equal(calcularPaginasPDF(48, 'etiquetas'), 2)
+  assert.equal(calcularPaginasPDF(49, 'etiquetas'), 3)
+  assert.deepEqual(dividirEtiquetasEnPaginas(Array.from({ length: 49 }, (_, i) => i), 'etiquetas').map((pagina) => pagina.length), [24, 24, 1])
+})
+
+test('seleccionar visibles agrega y deseleccionar visibles conserva lo no visible', () => {
+  const seleccionInicial = new Set(['aceite', 'foco', 'punos'])
+  const palancas = ['a', 'b', 'c', 'd'].map((id) => ({ id: `palanca-${id}` }))
+  const ampliada = agregarIdsSeleccionados(seleccionInicial, palancas)
+  assert.equal(ampliada.size, 7)
+  assert.deepEqual([...quitarIdsSeleccionados(ampliada, palancas)], ['aceite', 'foco', 'punos'])
+  assert.equal(new Set<string>().size, 0)
+})
+
+test('búsqueda y cambio de modo no alteran IDs; la reconciliación elimina inexistentes', () => {
+  const seleccion = new Set(['1', '2', 'archivado'])
+  assert.deepEqual([...seleccion], ['1', '2', 'archivado'])
+  assert.equal(calcularPaginasPDF(seleccion.size, 'clasico'), 1)
+  assert.equal(calcularPaginasPDF(seleccion.size, 'etiquetas'), 1)
+  assert.deepEqual([...reconciliarIdsSeleccionados(seleccion, [{ id: '1' }, { id: '2' }])], ['1', '2'])
+})
+
+test('las geometrías 2×4 y 3×8 permanecen dentro del A4', () => {
+  for (const modo of ['clasico', 'etiquetas'] as const) {
+    const geometria = calcularGeometriaPDF(modo)
+    const bordeDerecho = geometria.margenX + geometria.columnas * geometria.anchoEtiqueta + (geometria.columnas - 1) * geometria.separacionX
+    const bordeInferior = geometria.inicioY + geometria.filas * geometria.altoEtiqueta + (geometria.filas - 1) * geometria.separacionY
+    assert.ok(bordeDerecho <= 210)
+    assert.ok(bordeInferior <= 297 - geometria.margenInferior + 1e-9)
+  }
 })

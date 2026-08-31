@@ -1,16 +1,18 @@
 'use client'
 
-import { Barcode, CheckSquare, FileDown, ImageOff, Search, Square, X } from 'lucide-react'
-import { useMemo, useRef, useState } from 'react'
+import { CheckSquare, FileDown, ImageOff, Search, Square, X } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Producto } from '@/types'
 import { filtrarProductosPorBusqueda } from '@/utils/busqueda'
 import { generarPdfCodigosBarrasProductos } from '@/utils/pdfCodigosBarrasProductos'
 import {
   alternarIdSeleccionado,
-  calcularPaginasEtiquetas,
-  seleccionarIdsConCodigoBarras,
-  seleccionarIdsProductos,
+  agregarIdsSeleccionados,
+  calcularPaginasPDF,
+  quitarIdsSeleccionados,
+  reconciliarIdsSeleccionados,
   separarProductosPorCodigoBarras,
+  type ModoPDFCodigosBarras,
 } from '@/utils/seleccionCodigosBarras'
 
 export default function SelectorPDFProductos({ productos, onCerrar, onAsignarFaltantes }: {
@@ -20,6 +22,7 @@ export default function SelectorPDFProductos({ productos, onCerrar, onAsignarFal
 }) {
   const [busqueda, setBusqueda] = useState('')
   const [seleccionados, setSeleccionados] = useState<Set<string>>(new Set())
+  const [modo, setModo] = useState<ModoPDFCodigosBarras>('clasico')
   const [generando, setGenerando] = useState(false)
   const [progreso, setProgreso] = useState({ procesados: 0, total: 0 })
   const [error, setError] = useState('')
@@ -30,7 +33,11 @@ export default function SelectorPDFProductos({ productos, onCerrar, onAsignarFal
     [productos, seleccionados]
   )
   const { sinCodigo: seleccionadosSinBarcode } = separarProductosPorCodigoBarras(productosSeleccionados)
-  const paginas = calcularPaginasEtiquetas(productosSeleccionados.length)
+  const paginas = calcularPaginasPDF(productosSeleccionados.length, modo)
+
+  useEffect(() => {
+    setSeleccionados((actuales) => reconciliarIdsSeleccionados(actuales, productos))
+  }, [productos])
 
   const generar = async () => {
     if (generandoRef.current || !productosSeleccionados.length || seleccionadosSinBarcode.length) return
@@ -39,7 +46,7 @@ export default function SelectorPDFProductos({ productos, onCerrar, onAsignarFal
     setError('')
     setProgreso({ procesados: 0, total: productosSeleccionados.length })
     try {
-      await generarPdfCodigosBarrasProductos(productosSeleccionados, (procesados, total) => setProgreso({ procesados, total }))
+      await generarPdfCodigosBarrasProductos(productosSeleccionados, modo, (procesados, total) => setProgreso({ procesados, total }))
     } catch (causa) {
       setError(causa instanceof Error ? causa.message : 'No fue posible generar el PDF.')
     } finally {
@@ -50,13 +57,14 @@ export default function SelectorPDFProductos({ productos, onCerrar, onAsignarFal
 
   return <div className="fl-product-barcode-pdf-backdrop" role="presentation" onMouseDown={(evento) => { if (evento.target === evento.currentTarget && !generando) onCerrar() }}>
     <section className="fl-product-barcode-pdf-dialog" role="dialog" aria-modal="true" aria-labelledby="titulo-pdf-productos">
-      <header><div><span>FAST LOOK · INVENTARIO</span><h2 id="titulo-pdf-productos">Códigos de barras de productos PDF</h2><p>Seleccionados: <b>{productosSeleccionados.length}</b> · Páginas: <b>{paginas}</b></p></div><button type="button" aria-label="Cerrar" onClick={onCerrar} disabled={generando}><X size={21} /></button></header>
+      <header><div><span>FAST LOOK · INVENTARIO</span><h2 id="titulo-pdf-productos">Códigos de barras de productos PDF</h2><p>Visibles: <b>{visibles.length}</b> · Seleccionados totales: <b>{productosSeleccionados.length}</b> · Páginas: <b>{paginas}</b></p></div><button type="button" aria-label="Cerrar" onClick={onCerrar} disabled={generando}><X size={21} /></button></header>
       <div className="fl-product-barcode-pdf-search"><Search size={18} /><input value={busqueda} onChange={(evento) => setBusqueda(evento.target.value)} placeholder="Buscar por nombre, código Fast Look o código de barras" /></div>
       <div className="fl-product-barcode-pdf-actions">
-        <button type="button" onClick={() => setSeleccionados(seleccionarIdsProductos(visibles))}><CheckSquare size={17} />Seleccionar todos</button>
-        <button type="button" onClick={() => setSeleccionados(new Set())}><Square size={17} />Deseleccionar todos</button>
-        <button type="button" onClick={() => setSeleccionados(seleccionarIdsConCodigoBarras(visibles))}><Barcode size={17} />Seleccionar con código</button>
+        <button type="button" onClick={() => setSeleccionados((actuales) => agregarIdsSeleccionados(actuales, visibles))}><CheckSquare size={17} />Seleccionar visibles</button>
+        <button type="button" onClick={() => setSeleccionados((actuales) => quitarIdsSeleccionados(actuales, visibles))}><Square size={17} />Deseleccionar visibles</button>
+        <button type="button" onClick={() => setSeleccionados(new Set())}><X size={17} />Limpiar selección</button>
       </div>
+      <fieldset className="fl-product-barcode-pdf-format"><legend>Formato de impresión</legend><label className={modo === 'clasico' ? 'is-active' : ''}><input type="radio" name="formato-pdf-barcode" value="clasico" checked={modo === 'clasico'} onChange={() => setModo('clasico')} /><span><strong>Clásico</strong><small>8 por hoja · imagen y barcode</small></span></label><label className={modo === 'etiquetas' ? 'is-active' : ''}><input type="radio" name="formato-pdf-barcode" value="etiquetas" checked={modo === 'etiquetas'} onChange={() => setModo('etiquetas')} /><span><strong>Etiquetas</strong><small>24 por hoja · formato compacto</small></span></label></fieldset>
       <div className="fl-product-barcode-pdf-list">
         {visibles.map((producto) => <label key={producto.id} className={seleccionados.has(producto.id) ? 'is-selected' : ''}>
           <input type="checkbox" checked={seleccionados.has(producto.id)} onChange={() => setSeleccionados((actuales) => alternarIdSeleccionado(actuales, producto.id))} />
