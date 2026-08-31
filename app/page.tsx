@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Session } from '@supabase/supabase-js'
-import { AlertTriangle, Barcode, CheckCircle, ChevronDown, ChevronUp, Edit3, Hash, MoreVertical, PackagePlus, Plus, RefreshCw, ScanLine, SlidersHorizontal, X } from 'lucide-react'
+import { AlertTriangle, Barcode, CheckCircle, ChevronDown, ChevronUp, Edit3, Hash, MoreVertical, PackagePlus, Plus, RefreshCw, ScanLine, SlidersHorizontal, Trash2, X } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import type {
   CarritoItem,
@@ -50,6 +50,7 @@ import Devoluciones from '@/components/devoluciones/Devoluciones'
 import CambiarStockDialog from '@/components/CambiarStockDialog'
 import CodigoBarrasDialog from '@/components/codigos-barras/CodigoBarrasDialog'
 import HerramientasCodigosBarras from '@/components/codigos-barras/HerramientasCodigosBarras'
+import EliminarProductoDialog from '@/components/EliminarProductoDialog'
 import ScannerCodigoBarras, { type FeedbackScanner } from '@/components/codigos-barras/ScannerCodigoBarras'
 import { crearMapaCodigosBarras, normalizarCodigoBarras } from '@/utils/codigoBarras'
 import {
@@ -63,6 +64,7 @@ import {
   normalizarTipoProducto,
   obtenerTiposProducto,
 } from '@/utils/tiposProducto'
+import { obtenerProductosActivos } from '@/utils/productos'
 
 export default function Home() {
   const [tab, setTab] = useState<Tab>('precios')
@@ -98,6 +100,7 @@ export default function Home() {
   const [movimientos, setMovimientos] = useState<MovimientoInventario[]>([])
   const [productoCambioStock, setProductoCambioStock] = useState<Producto | null>(null)
   const [productoCodigoBarras, setProductoCodigoBarras] = useState<Producto | null>(null)
+  const [productoEliminar, setProductoEliminar] = useState<Producto | null>(null)
   const [feedbackEscaneo, setFeedbackEscaneo] = useState<{ tipo: 'ok' | 'error'; nombre?: string; codigo?: string; cantidad?: number; mensaje: string } | null>(null)
   const feedbackEscaneoTimerRef = useRef<number | null>(null)
   const buscadorVentaRef = useRef<HTMLInputElement>(null)
@@ -520,10 +523,11 @@ const fetchMovimientosClientes = async () => {
     }
   }
 
-  const productosPorCodigoBarras = useMemo(() => crearMapaCodigosBarras(productos), [productos])
+  const productosActivos = useMemo(() => obtenerProductosActivos(productos), [productos])
+  const productosPorCodigoBarras = useMemo(() => crearMapaCodigosBarras(productosActivos), [productosActivos])
   const productosFiltrados = useMemo(
-    () => filtrarProductosPorBusqueda(productos, busqueda),
-    [productos, busqueda]
+    () => filtrarProductosPorBusqueda(productosActivos, busqueda),
+    [productosActivos, busqueda]
   )
 
   const clientesFiltrados = clientes.filter((c) => {
@@ -536,7 +540,7 @@ const fetchMovimientosClientes = async () => {
   )
 })
 
-  const productosBajoStock = productos.filter(
+  const productosBajoStock = productosActivos.filter(
     (p) => Number(p.stock) <= Number(p.stock_minimo || 5)
   )
 
@@ -547,6 +551,7 @@ const fetchMovimientosClientes = async () => {
 
   const agregarAlCarrito = (producto: Producto, mostrarAlertas = true): { ok: boolean; mensaje: string; cantidad?: number } => {
     if (procesandoVentaRef.current) return { ok: false, mensaje: 'Espera a que termine la venta en curso.' }
+    if (producto.archivado === true) return { ok: false, mensaje: 'Este producto fue eliminado y no está disponible para venta.' }
     abandonarIntentoVenta()
     const carritoActual = carritoRef.current
     const resultado = agregarProductoAlCarrito(carritoActual, producto)
@@ -1391,7 +1396,7 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
   window.open(`https://wa.me/52${numeroLimpio}?text=${mensaje}`, '_blank')
 }
 
-  const productosParaComprar = productos.filter((p) => {
+  const productosParaComprar = productosActivos.filter((p) => {
     return Number(p.stock) <= Number(p.stock_minimo || 5)
   })
 
@@ -1819,7 +1824,7 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
             )}
 
             {usuarioRol === 'Admin' && <HerramientasCodigosBarras
-              productos={productos}
+              productos={productosActivos}
               onActualizar={() => fetchProductos(true)}
             />}
 
@@ -1840,7 +1845,7 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
             />
 
             <p>
-            Mostrando <b>{productosFiltrados.length}</b> de <b>{productos.length}</b> productos
+            Mostrando <b>{productosFiltrados.length}</b> de <b>{productosActivos.length}</b> productos
             </p>
 
             {productosFiltrados.map((p) => (
@@ -1866,6 +1871,7 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
                     }}><PackagePlus size={16} />Añadir stock</button>
                     <button type="button" onClick={(evento) => { evento.currentTarget.closest('details')?.removeAttribute('open'); setProductoCambioStock(p) }}><SlidersHorizontal size={16} />Cambiar stock a…</button>
                     <button type="button" onClick={(evento) => { evento.currentTarget.closest('details')?.removeAttribute('open'); setProductoCodigoBarras(p) }}><Barcode size={16} />Asignar / cambiar código de barras</button>
+                    <button type="button" className="is-danger" onClick={(evento) => { evento.currentTarget.closest('details')?.removeAttribute('open'); setProductoEliminar(p) }}><Trash2 size={16} />Eliminar producto</button>
                   </div>
                 </details>}
             </div>
@@ -1881,6 +1887,17 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
               productos={productos}
               onCerrar={() => setProductoCodigoBarras(null)}
               onActualizado={() => fetchProductos(true)}
+            />}
+            {usuarioRol === 'Admin' && productoEliminar && <EliminarProductoDialog
+              producto={productoEliminar}
+              onCancelar={() => setProductoEliminar(null)}
+              onRefrescar={() => fetchProductos(true)}
+              onArchivado={async () => {
+                setProductos((actuales) => actuales.map((producto) => producto.id === productoEliminar.id ? { ...producto, archivado: true } : producto))
+                setProductoEliminar(null)
+                setNotificacionOperacion({ tipo: 'ok', mensaje: 'Producto eliminado correctamente.' })
+                await fetchProductos(true).catch(() => setNotificacionOperacion({ tipo: 'error', mensaje: 'El producto fue eliminado, pero no fue posible refrescar el inventario.' }))
+              }}
             />}
           </>
         )}

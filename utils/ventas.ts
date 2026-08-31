@@ -6,6 +6,7 @@ export const agregarProductoAlCarrito = (carrito: CarritoItem[], producto: Produ
   cantidad?: number
   mensaje: string
 } => {
+  if (producto.archivado === true) return { carrito, ok: false, mensaje: 'Este producto fue eliminado y no está disponible para venta.' }
   if (Number(producto.stock) <= 0) return { carrito, ok: false, mensaje: 'Este producto no tiene stock disponible.' }
   const existente = carrito.find((item) => item.id === producto.id)
   if (existente && existente.cantidad >= Number(producto.stock)) {

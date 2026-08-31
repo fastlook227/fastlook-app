@@ -54,6 +54,13 @@ test('tres escaneos rápidos acumulan ×3 y respetan el stock máximo', () => {
   assert.equal(excedente.carrito[0]?.cantidad, 3)
 })
 
+test('un producto archivado nunca puede agregarse a una venta nueva', () => {
+  const archivado = { ...producto('4', '7500000000004'), archivado: true }
+  const resultado = agregarProductoAlCarrito([], archivado)
+  assert.equal(resultado.ok, false)
+  assert.deepEqual(resultado.carrito, [])
+})
+
 test('modo continuo exige ausencia antes de repetir el mismo código', () => {
   const primera = evaluarLecturaContinua(null, '7501', 0, 900)
   assert.equal(primera.aceptar, true)

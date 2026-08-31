@@ -106,7 +106,8 @@ export async function buscarProductos(
 }> {
   const { data: productos, error: errorProductos } = await supabase
     .from('productos')
-    .select('id,nombre,codigo,codigo_barras,precio,costo,stock,ubicacion,proveedor,tipo')
+    .select('id,nombre,codigo,codigo_barras,precio,costo,stock,ubicacion,proveedor,tipo,archivado')
+    .or('archivado.is.null,archivado.eq.false')
 
   if (errorProductos) {
     throw new Error(`No fue posible consultar productos: ${errorProductos.message}`)
@@ -163,8 +164,9 @@ export async function buscarProductoPorId(
 ): Promise<ProductoAsistente | null> {
   const { data, error } = await supabase
     .from('productos')
-    .select('id,nombre,codigo,codigo_barras,precio,costo,stock,ubicacion,proveedor,tipo')
+    .select('id,nombre,codigo,codigo_barras,precio,costo,stock,ubicacion,proveedor,tipo,archivado')
     .eq('id', productoId)
+    .or('archivado.is.null,archivado.eq.false')
     .maybeSingle()
 
   if (error) {

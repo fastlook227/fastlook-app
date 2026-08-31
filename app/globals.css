@@ -149,6 +149,26 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .fl-inventory-actions > div button { display: flex; min-height: 45px; align-items: center; gap: 9px; padding: 10px 13px; color: var(--fl-gray-900); background: var(--fl-white); border: 0; border-bottom: 1px solid var(--fl-gray-200); cursor: pointer; text-align: left; }
 .fl-inventory-actions > div button:last-child { border-bottom: 0; }
 .fl-inventory-actions > div button:hover { background: var(--fl-gray-100); }
+.fl-inventory-actions > div button.is-danger { color: #a11212; }
+.fl-inventory-actions > div button.is-danger:hover { background: #fff0f0; }
+.fl-delete-product-backdrop { position: fixed; inset: 0; z-index: 1300; display: grid; place-items: center; padding: 18px; background: rgba(0,0,0,.68); backdrop-filter: blur(6px); }
+.fl-delete-product-dialog { width: min(500px, 96vw); max-height: 92vh; overflow-y: auto; background: var(--fl-white); border-radius: var(--fl-radius-lg); box-shadow: 0 28px 80px rgba(0,0,0,.4); }
+.fl-delete-product-dialog > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 18px 20px; border-bottom: 1px solid var(--fl-gray-200); }
+.fl-delete-product-dialog > header span { color: var(--fl-red); font-size: 10px; font-weight: 900; letter-spacing: 1px; }
+.fl-delete-product-dialog > header h2 { margin: 3px 0 0; font-size: 21px; }
+.fl-delete-product-dialog > header button { display: grid; width: 42px; height: 42px; flex: 0 0 auto; place-items: center; color: white; background: var(--fl-black); border: 0; border-radius: 11px; cursor: pointer; }
+.fl-delete-product-body { display: grid; gap: 8px; padding: 22px 20px; }
+.fl-delete-product-body > svg { color: var(--fl-red); }
+.fl-delete-product-body > strong { margin-top: 3px; font-size: 18px; }
+.fl-delete-product-body > small { color: var(--fl-gray-700); font-weight: 800; }
+.fl-delete-product-body > p { margin: 8px 0 0; color: var(--fl-gray-700); line-height: 1.55; }
+.fl-delete-product-body > p + p { margin-top: 0; }
+.fl-delete-product-body .fl-delete-product-error { color: #a11212; font-weight: 800; }
+.fl-delete-product-dialog > footer { display: flex; justify-content: flex-end; gap: 9px; padding: 15px 20px; border-top: 1px solid var(--fl-gray-200); }
+.fl-delete-product-dialog > footer button { display: inline-flex; min-height: 44px; align-items: center; justify-content: center; gap: 7px; padding: 9px 15px; border: 0; border-radius: 10px; cursor: pointer; font-weight: 800; }
+.fl-delete-product-dialog > footer .is-cancel { background: var(--fl-gray-200); }
+.fl-delete-product-dialog > footer .is-delete { color: white; background: var(--fl-red); }
+.fl-delete-product-dialog button:disabled { cursor: not-allowed; opacity: .5; }
 .fl-stock-dialog-backdrop { position: fixed; inset: 0; z-index: 1200; display: grid; place-items: center; padding: 18px; background: rgba(0,0,0,.68); backdrop-filter: blur(6px); }
 .fl-stock-dialog { width: min(460px, 96vw); max-height: 92vh; overflow-y: auto; background: var(--fl-white); border-radius: var(--fl-radius-lg); box-shadow: 0 28px 80px rgba(0,0,0,.4); }
 .fl-stock-dialog > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 18px 20px; border-bottom: 1px solid var(--fl-gray-200); }
@@ -314,6 +334,9 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .fl-inventory-actions, .fl-inventory-actions summary { width: 100%; }
   .fl-inventory-actions summary { justify-content: center; }
   .fl-inventory-actions > div { right: 0; left: auto; width: min(100%, 260px); }
+  .fl-delete-product-backdrop { align-items: end; padding: 0; }
+  .fl-delete-product-dialog { width: 100%; max-height: 94vh; border-radius: 22px 22px 0 0; }
+  .fl-delete-product-dialog > footer { display: grid; grid-template-columns: 1fr 1fr; }
   .fl-barcode-dialog-backdrop { align-items: end; padding: 0; }
   .fl-barcode-dialog { width: 100%; max-height: 94vh; border-radius: 22px 22px 0 0; }
   .fl-barcode-dialog > footer { display: grid; grid-template-columns: 1fr 1fr; position: sticky; bottom: 0; background: white; }
