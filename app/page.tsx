@@ -5,7 +5,6 @@ import type { Session } from '@supabase/supabase-js'
 import { AlertTriangle, Barcode, CheckCircle, ChevronDown, ChevronUp, Edit3, Hash, MoreVertical, PackagePlus, Plus, RefreshCw, ScanLine, SlidersHorizontal, Trash2, X } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import type {
-  CarritoItem,
   Cliente,
   CorteCaja,
   FormCliente,
@@ -24,9 +23,10 @@ import type { Devolucion, DevolucionDetalle } from '@/types/devoluciones'
 import { obtenerFechaActualFastLook, obtenerFechaLocal } from '@/utils/fechas'
 import { filtrarProductosPorBusqueda } from '@/utils/busqueda'
 import { aplicarFiltrosProductos, crearFiltrosProductosVacios, esProductoStockBajo } from '@/utils/filtrosProductos'
+import { crearIntentoCobro, intentarBloquearCobro, liberarBloqueoCobro } from '@/utils/ventaRapida'
+import { agregarProductoAVenta, agregarVentaPendiente, actualizarVenta, cambiarCantidadEnVenta, cerrarVentaPendiente, crearEstadoVentasInicial, eliminarProductoDeVenta, obtenerVentaActiva, reconciliarVentasPendientes, restaurarVentasPendientes, type EstadoVentasPendientes } from '@/utils/ventasPendientes'
 import { puedeAccederCorteCaja } from '@/lib/permisos/corteCaja'
 import { generarTextoTicket } from '@/utils/ticket'
-import { agregarProductoAlCarrito } from '@/utils/ventas'
 import { generarPdfTicketHistorico } from '@/utils/pdfTicket'
 import { comprimirImagenProducto } from '@/utils/imagenes'
 import PantallaCarga from '@/components/PantallaCarga'
@@ -53,6 +53,8 @@ import CodigoBarrasDialog from '@/components/codigos-barras/CodigoBarrasDialog'
 import HerramientasCodigosBarras from '@/components/codigos-barras/HerramientasCodigosBarras'
 import EliminarProductoDialog from '@/components/EliminarProductoDialog'
 import FiltrosProductos from '@/components/FiltrosProductos'
+import VentaRapida from '@/components/VentaRapida'
+import VentasPendientesTabs from '@/components/VentasPendientesTabs'
 import ScannerCodigoBarras, { type FeedbackScanner } from '@/components/codigos-barras/ScannerCodigoBarras'
 import { crearMapaCodigosBarras, normalizarCodigoBarras } from '@/utils/codigoBarras'
 import {
@@ -80,12 +82,15 @@ export default function Home() {
   const [busquedaInventario, setBusquedaInventario] = useState('')
   const [filtrosVenta, setFiltrosVenta] = useState(crearFiltrosProductosVacios)
   const [filtrosInventario, setFiltrosInventario] = useState(crearFiltrosProductosVacios)
-  const [carrito, setCarrito] = useState<CarritoItem[]>([])
-  const carritoRef = useRef<CarritoItem[]>([])
-  const [metodoPago, setMetodoPago] = useState('Efectivo')
+  const [estadoVentas, setEstadoVentas] = useState<EstadoVentasPendientes>(crearEstadoVentasInicial)
+  const estadoVentasRef = useRef<EstadoVentasPendientes>(estadoVentas)
+  const [ventasHidratadas, setVentasHidratadas] = useState(false)
+  const [ventaCerrarId, setVentaCerrarId] = useState<string | null>(null)
+  const [modoVenta, setModoVenta] = useState<'normal' | 'rapida'>('normal')
   const [procesandoVenta, setProcesandoVenta] = useState(false)
   const procesandoVentaRef = useRef(false)
-  const intentoVentaRef = useRef<{ idempotencyKey: string; metodoPago: string; lineas: Array<{ producto_id: string; cantidad: number }> } | null>(null)
+  const intentosVentaRef = useRef(new Map<string, { idempotencyKey: string; metodoPago: string; lineas: Array<{ producto_id: string; cantidad: number }> }>())
+  const ventaProcesandoIdRef = useRef<string | null>(null)
   const [resultadoVenta, setResultadoVenta] = useState<{ ticketId: string; folio: string; total: number } | null>(null)
   const [guardandoProducto, setGuardandoProducto] = useState(false)
   const guardandoProductoRef = useRef(false)
@@ -136,7 +141,27 @@ export default function Home() {
     return () => window.clearInterval(temporizador)
   }, [])
 
-  useEffect(() => { carritoRef.current = carrito }, [carrito])
+  const ventaActiva = obtenerVentaActiva(estadoVentas)
+  const carrito = ventaActiva.carrito
+  const metodoPago = ventaActiva.metodoPago
+
+  const establecerEstadoVentas = (siguiente: EstadoVentasPendientes) => {
+    estadoVentasRef.current = siguiente
+    setEstadoVentas(siguiente)
+  }
+
+  const setMetodoPago = (valor: string) => establecerEstadoVentas(actualizarVenta(estadoVentasRef.current, estadoVentasRef.current.activaId, (venta) => ({ ...venta, metodoPago: valor, updatedAt: Date.now() })))
+
+  useEffect(() => {
+    const restaurado = restaurarVentasPendientes(window.localStorage.getItem('fastlook_ventas_pendientes_v1'))
+    if (restaurado) establecerEstadoVentas(restaurado)
+    setVentasHidratadas(true)
+  }, [])
+
+  useEffect(() => {
+    if (!ventasHidratadas) return
+    window.localStorage.setItem('fastlook_ventas_pendientes_v1', JSON.stringify(estadoVentas))
+  }, [estadoVentas, ventasHidratadas])
 
   useEffect(() => () => {
     if (feedbackEscaneoTimerRef.current !== null) window.clearTimeout(feedbackEscaneoTimerRef.current)
@@ -531,6 +556,14 @@ const fetchMovimientosClientes = async () => {
   }
 
   const productosActivos = useMemo(() => obtenerProductosActivos(productos), [productos])
+  useEffect(() => {
+    if (!ventasHidratadas || !productosActivos.length) return
+    const resultado = reconciliarVentasPendientes(estadoVentasRef.current, productosActivos)
+    establecerEstadoVentas(resultado.estado)
+    if (resultado.retirados || resultado.ajustados) setNotificacionOperacion({ tipo: 'error', mensaje: `Carritos recuperados: ${resultado.retirados} producto(s) retirado(s) y ${resultado.ajustados} cantidad(es) ajustada(s) al stock actual.` })
+  }, [productosActivos, ventasHidratadas])
+  const establecerVentasReconciliadas = (siguiente: EstadoVentasPendientes) =>
+    establecerEstadoVentas(reconciliarVentasPendientes(siguiente, productosActivos).estado)
   const productosPorCodigoBarras = useMemo(() => crearMapaCodigosBarras(productosActivos), [productosActivos])
   const productosFiltrados = useMemo(
     () => filtrarProductosPorBusqueda(productosActivos, busqueda),
@@ -565,23 +598,24 @@ const fetchMovimientosClientes = async () => {
 
   const productosBajoStock = productosActivos.filter(esProductoStockBajo)
 
-  const abandonarIntentoVenta = () => {
-    intentoVentaRef.current = null
+  const abandonarIntentoVenta = (ventaId = estadoVentasRef.current.activaId) => {
+    intentosVentaRef.current.delete(ventaId)
     setResultadoVenta(null)
   }
 
+  const carritoActivoProcesando = () => ventaProcesandoIdRef.current === estadoVentasRef.current.activaId
+
   const agregarAlCarrito = (producto: Producto, mostrarAlertas = true): { ok: boolean; mensaje: string; cantidad?: number } => {
-    if (procesandoVentaRef.current) return { ok: false, mensaje: 'Espera a que termine la venta en curso.' }
+    if (carritoActivoProcesando()) return { ok: false, mensaje: 'Espera a que termine el cobro de este cliente.' }
     if (producto.archivado === true) return { ok: false, mensaje: 'Este producto fue eliminado y no está disponible para venta.' }
-    abandonarIntentoVenta()
-    const carritoActual = carritoRef.current
-    const resultado = agregarProductoAlCarrito(carritoActual, producto)
+    const ventaId = estadoVentasRef.current.activaId
+    abandonarIntentoVenta(ventaId)
+    const resultado = agregarProductoAVenta(estadoVentasRef.current, ventaId, producto)
     if (!resultado.ok) {
       if (mostrarAlertas) alert(resultado.mensaje)
       return resultado
     }
-    carritoRef.current = resultado.carrito
-    setCarrito(resultado.carrito)
+    establecerVentasReconciliadas(resultado.estado)
     return resultado
   }
 
@@ -631,67 +665,56 @@ const fetchMovimientosClientes = async () => {
     requestAnimationFrame(() => disparadorScannerRef.current?.focus())
   }
 
-  const aumentarCantidad = (id: string) => {
-    if (procesandoVentaRef.current) return
-    abandonarIntentoVenta()
-    setCarrito(
-      carrito.map((item) => {
-        if (item.id === id) {
-          if (item.cantidad + 1 > item.stock) {
-            alert('No hay más stock disponible')
-            return item
-          }
-          return { ...item, cantidad: item.cantidad + 1 }
-        }
-        return item
-      })
-    )
+  const aumentarCantidad = (id: string, mostrarAlerta = true) => {
+    if (carritoActivoProcesando()) return
+    const estado = estadoVentasRef.current
+    const ventaId = estado.activaId
+    const item = obtenerVentaActiva(estado).carrito.find((producto) => producto.id === id)
+    if (!item) return
+    const stockTotal = Number(productosActivos.find((producto) => producto.id === id)?.stock ?? 0)
+    abandonarIntentoVenta(ventaId)
+    const resultado = cambiarCantidadEnVenta(estado, ventaId, id, item.cantidad + 1, stockTotal)
+    establecerVentasReconciliadas(resultado.estado)
+    if (resultado.cantidad === item.cantidad) {
+      if (mostrarAlerta) alert('No hay más stock disponible')
+      else mostrarFeedbackEscaneo({ tipo: 'error', mensaje: `Disponibles para esta venta: ${resultado.disponible}`, nombre: item.nombre })
+    }
   }
 
   const disminuirCantidad = (id: string) => {
-    if (procesandoVentaRef.current) return
-    abandonarIntentoVenta()
-    setCarrito(
-      carrito
-        .map((item) =>
-          item.id === id
-            ? { ...item, cantidad: item.cantidad - 1 }
-            : item
-        )
-        .filter((item) => item.cantidad > 0)
-    )
+    if (carritoActivoProcesando()) return
+    const estado = estadoVentasRef.current
+    const ventaId = estado.activaId
+    const item = obtenerVentaActiva(estado).carrito.find((producto) => producto.id === id)
+    if (!item) return
+    const stockTotal = Number(productosActivos.find((producto) => producto.id === id)?.stock ?? 0)
+    abandonarIntentoVenta(ventaId)
+    establecerVentasReconciliadas(item.cantidad <= 1 ? eliminarProductoDeVenta(estado, ventaId, id) : cambiarCantidadEnVenta(estado, ventaId, id, item.cantidad - 1, stockTotal).estado)
   }
 
-  const cambiarCantidad = (id: string, cantidad: number) => {
-    if (procesandoVentaRef.current) return
-    abandonarIntentoVenta()
-    setCarrito(
-      carrito.map((item) => {
-        if (item.id === id) {
-          if (cantidad > item.stock) {
-            alert('No hay suficiente stock')
-            return item
-          }
-          return { ...item, cantidad: cantidad < 1 ? 1 : cantidad }
-        }
-        return item
-      })
-    )
+  const cambiarCantidad = (id: string, cantidad: number, mostrarAlerta = true) => {
+    if (carritoActivoProcesando()) return
+    const estado = estadoVentasRef.current
+    const ventaId = estado.activaId
+    const item = obtenerVentaActiva(estado).carrito.find((producto) => producto.id === id)
+    if (!item) return
+    const stockTotal = Number(productosActivos.find((producto) => producto.id === id)?.stock ?? 0)
+    abandonarIntentoVenta(ventaId)
+    const resultado = cambiarCantidadEnVenta(estado, ventaId, id, cantidad, stockTotal)
+    if (mostrarAlerta && resultado.cantidad !== Math.trunc(cantidad)) alert('No hay suficiente stock')
+    establecerVentasReconciliadas(resultado.estado)
   }
 
   const eliminarDelCarrito = (id: string) => {
-    if (procesandoVentaRef.current) return
-    abandonarIntentoVenta()
-    setCarrito(carrito.filter((item) => item.id !== id))
+    if (carritoActivoProcesando()) return
+    const ventaId = estadoVentasRef.current.activaId
+    abandonarIntentoVenta(ventaId)
+    establecerVentasReconciliadas(eliminarProductoDeVenta(estadoVentasRef.current, ventaId, id))
   }
 
   const cancelarTicket = () => {
-    if (procesandoVentaRef.current) return
-    if (confirm('¿Cancelar ticket actual?')) {
-      abandonarIntentoVenta()
-      setCarrito([])
-      setCarritoAbierto(false)
-    }
+    if (carritoActivoProcesando()) return
+    setVentaCerrarId(estadoVentasRef.current.activaId)
   }
 
 
@@ -776,20 +799,24 @@ const fetchMovimientosClientes = async () => {
     SIN_SESION: 'Tu sesión terminó. Inicia sesión nuevamente.', ROL_NO_PERMITIDO: 'Tu usuario no puede registrar ventas.', USUARIO_INACTIVO: 'Tu usuario está inactivo.', PERFIL_INVALIDO: 'Tu perfil no está completo.', IDEMPOTENCIA_INVALIDA: 'No fue posible identificar la operación.', METODO_INVALIDO: 'Selecciona un método de pago válido.', CARRITO_VACIO: 'Agrega al menos un producto.', LINEAS_INVALIDAS: 'Revisa los productos y cantidades.', PRODUCTO_INEXISTENTE: 'Uno de los productos ya no existe.', PRODUCTO_ARCHIVADO: 'Uno de los productos está archivado.', PRECIO_INVALIDO: 'Uno de los productos no tiene un precio válido.', STOCK_INVALIDO: 'Uno de los productos no tiene un stock válido.', STOCK_INSUFICIENTE: 'No hay stock suficiente. El inventario fue actualizado.',
   }
 
-  const finalizarVenta = async () => {
-    if (procesandoVentaRef.current) return
-    if (carrito.length === 0) { setNotificacionOperacion({ tipo: 'error', mensaje: 'El carrito está vacío.' }); return }
-    procesandoVentaRef.current = true; setProcesandoVenta(true); setNotificacionOperacion(null)
-    if (!intentoVentaRef.current) intentoVentaRef.current = { idempotencyKey: crypto.randomUUID(), metodoPago, lineas: carrito.map((item) => ({ producto_id: item.id, cantidad: item.cantidad })) }
-    const intento = intentoVentaRef.current
+  const finalizarVenta = async (metodoSeleccionado = metodoPago): Promise<boolean> => {
+    const ventaIdProcesada = estadoVentasRef.current.activaId
+    const carritoProcesado = obtenerVentaActiva(estadoVentasRef.current).carrito
+    if (carritoProcesado.length === 0) { setNotificacionOperacion({ tipo: 'error', mensaje: 'El carrito está vacío.' }); return false }
+    if (!intentarBloquearCobro(procesandoVentaRef)) return false
+    ventaProcesandoIdRef.current = ventaIdProcesada
+    setProcesandoVenta(true); setNotificacionOperacion(null)
+    if (!intentosVentaRef.current.has(ventaIdProcesada)) intentosVentaRef.current.set(ventaIdProcesada, crearIntentoCobro(carritoProcesado, metodoSeleccionado, crypto.randomUUID()))
+    const intento = intentosVentaRef.current.get(ventaIdProcesada)!
     try {
       const { data, error } = await supabase.rpc('procesar_venta', { p_idempotency_key: intento.idempotencyKey, p_metodo_pago: intento.metodoPago, p_lineas: intento.lineas })
       if (error) throw error
       const respuesta = data as { ok?: boolean; ticket_id?: string; folio?: string; total?: number | string }
       if (!respuesta.ok || !respuesta.ticket_id || !respuesta.folio) throw new Error('RESULTADO_INCIERTO: La venta no fue confirmada.')
       setResultadoVenta({ ticketId: respuesta.ticket_id, folio: respuesta.folio, total: Number(respuesta.total || 0) })
-      intentoVentaRef.current = null
-      setCarrito([]); setCarritoAbierto(false)
+      intentosVentaRef.current.delete(ventaIdProcesada)
+      establecerEstadoVentas(cerrarVentaPendiente(estadoVentasRef.current, ventaIdProcesada, crypto.randomUUID()))
+      setCarritoAbierto(false)
       const actualizaciones = await Promise.allSettled([fetchProductos(true), fetchVentas(true), fetchMovimientos()])
       const refrescoIncompleto = actualizaciones.some((actualizacion) => actualizacion.status === 'rejected')
       setNotificacionOperacion({
@@ -798,15 +825,80 @@ const fetchMovimientosClientes = async () => {
           ? `Venta registrada. Folio ${respuesta.folio}. No se pudo refrescar toda la información; vuelve a cargar la vista.`
           : `Venta registrada. Folio ${respuesta.folio}.`,
       })
+      return true
     } catch (causa) {
       const mensajeOriginal = causa && typeof causa === 'object' && 'message' in causa ? String(causa.message) : String(causa)
       const prefijo = Object.keys(mensajesVenta).find((clave) => mensajeOriginal.includes(`${clave}:`))
       setNotificacionOperacion({ tipo: 'error', mensaje: prefijo ? mensajesVenta[prefijo] : 'No se confirmó la venta. Reintenta: se conservará la misma operación.' })
       if (prefijo === 'STOCK_INSUFICIENTE') await fetchProductos(true)
+      return false
     } finally {
-      procesandoVentaRef.current = false; setProcesandoVenta(false)
+      ventaProcesandoIdRef.current = null
+      liberarBloqueoCobro(procesandoVentaRef); setProcesandoVenta(false)
     }
   }
+
+  const agregarProductoVentaRapida = (producto: Producto) => {
+    const resultado = agregarAlCarrito(producto, false)
+    mostrarFeedbackEscaneo(resultado.ok
+      ? { tipo: 'ok', mensaje: 'Agregado', nombre: producto.nombre, cantidad: resultado.cantidad }
+      : { tipo: 'error', mensaje: Number(producto.stock) <= 0 ? 'Producto sin stock' : resultado.mensaje.includes('máximo') ? `Stock máximo disponible: ${producto.stock}` : resultado.mensaje, nombre: producto.nombre })
+  }
+
+  const cambiarCantidadVentaRapida = (id: string, cantidad: number) => {
+    const item = obtenerVentaActiva(estadoVentasRef.current).carrito.find((producto) => producto.id === id)
+    if (item && cantidad > Number(item.stock)) mostrarFeedbackEscaneo({ tipo: 'error', mensaje: `Stock máximo disponible: ${item.stock}`, nombre: item.nombre })
+    cambiarCantidad(id, cantidad, false)
+  }
+
+  const cobrarVentaRapida = async (metodo: string) => {
+    if (metodo !== metodoPago) abandonarIntentoVenta(estadoVentasRef.current.activaId)
+    setMetodoPago(metodo)
+    return finalizarVenta(metodo)
+  }
+
+  const nuevaVentaPendiente = () => {
+    const siguiente = agregarVentaPendiente(estadoVentasRef.current, crypto.randomUUID())
+    establecerEstadoVentas(siguiente)
+    setCarritoAbierto(false)
+  }
+
+  const seleccionarVentaPendiente = (ventaId: string) => {
+    if (!estadoVentasRef.current.ventas.some((venta) => venta.id === ventaId)) return
+    establecerEstadoVentas({ ...estadoVentasRef.current, activaId: ventaId })
+    setCarritoAbierto(false)
+  }
+
+  const solicitarCerrarVentaPendiente = (ventaId: string) => {
+    if (ventaProcesandoIdRef.current === ventaId) return
+    const venta = estadoVentasRef.current.ventas.find((item) => item.id === ventaId)
+    if (!venta) return
+    if (!venta.carrito.length) {
+      intentosVentaRef.current.delete(ventaId)
+      establecerVentasReconciliadas(cerrarVentaPendiente(estadoVentasRef.current, ventaId, crypto.randomUUID()))
+      return
+    }
+    setVentaCerrarId(ventaId)
+  }
+
+  const descartarVentaPendiente = () => {
+    if (!ventaCerrarId || ventaProcesandoIdRef.current === ventaCerrarId) return
+    intentosVentaRef.current.delete(ventaCerrarId)
+    establecerVentasReconciliadas(cerrarVentaPendiente(estadoVentasRef.current, ventaCerrarId, crypto.randomUUID()))
+    setVentaCerrarId(null)
+    setCarritoAbierto(false)
+  }
+
+  useEffect(() => {
+    const atajoNuevaVenta = (evento: KeyboardEvent) => {
+      if (!(evento.ctrlKey && evento.altKey && evento.key.toLowerCase() === 'n')) return
+      if (evento.target instanceof HTMLInputElement || evento.target instanceof HTMLTextAreaElement || evento.target instanceof HTMLSelectElement) return
+      evento.preventDefault()
+      nuevaVentaPendiente()
+    }
+    document.addEventListener('keydown', atajoNuevaVenta)
+    return () => document.removeEventListener('keydown', atajoNuevaVenta)
+  }, [])
 
   const generarTicketPorId = async (ticketId: string) => {
     try {
@@ -1459,6 +1551,7 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
     },
     {}
   )
+  const procesandoCarritoActivo = procesandoVenta && ventaProcesandoIdRef.current === ventaActiva.id
 
   const generarMensajeCompra = (proveedor: string, productosProveedor: any[]) => {
     let mensaje = `Hola, necesito cotizar/resurtir estos productos para Fast Look:\n\n`
@@ -1599,6 +1692,37 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
   <>
     <h2>Generar venta</h2>
 
+    <VentasPendientesTabs ventas={estadoVentas.ventas} activaId={estadoVentas.activaId} procesandoId={ventaProcesandoIdRef.current} onSeleccionar={seleccionarVentaPendiente} onNueva={nuevaVentaPendiente} onCerrar={solicitarCerrarVentaPendiente} />
+
+    <div className="fl-sale-mode" role="group" aria-label="Modo de venta">
+      <button type="button" className={modoVenta === 'normal' ? 'is-active' : ''} onClick={() => setModoVenta('normal')}>Venta normal</button>
+      <button type="button" className={modoVenta === 'rapida' ? 'is-active' : ''} onClick={() => setModoVenta('rapida')}>Venta rápida</button>
+    </div>
+
+    {modoVenta === 'rapida' ? <VentaRapida
+      productos={productosActivos}
+      resultados={productosVentaFiltrados}
+      ventas={ventas}
+      carrito={carrito}
+      busqueda={busquedaVenta}
+      filtros={filtrosVenta}
+      procesando={procesandoCarritoActivo}
+      scannerContinuo={scannerContinuo}
+      esAdmin={usuarioRol === 'Admin'}
+      feedback={feedbackEscaneo}
+      onBusqueda={setBusquedaVenta}
+      onFiltros={setFiltrosVenta}
+      onAgregar={agregarProductoVentaRapida}
+      onAumentar={(id) => aumentarCantidad(id, false)}
+      onDisminuir={disminuirCantidad}
+      onCantidad={cambiarCantidadVentaRapida}
+      onEliminar={eliminarDelCarrito}
+      onEscanear={(elemento) => abrirScanner('venta', elemento)}
+      onScannerContinuo={setScannerContinuo}
+      onEnter={() => manejarCodigoDetectado(busquedaVenta, 'venta')}
+      onCobrar={cobrarVentaRapida}
+    /> : <>
+
     <div className="fl-scanner-actions">
       <button type="button" onClick={(evento) => abrirScanner('venta', evento.currentTarget)}><ScanLine size={18} />Escanear producto</button>
       <label><input type="checkbox" checked={scannerContinuo} onChange={(evento) => setScannerContinuo(evento.target.checked)} />Escáner continuo</label>
@@ -1640,7 +1764,7 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
 
         <button
           style={styles.redButton}
-          disabled={procesandoVenta}
+          disabled={procesandoCarritoActivo}
           onClick={(evento) => {
             agregarAlCarrito(p)
             abrirCarrito(evento.currentTarget)
@@ -1677,7 +1801,7 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
 
           <select
             value={metodoPago}
-            disabled={procesandoVenta}
+            disabled={procesandoCarritoActivo}
             onChange={(e) => { abandonarIntentoVenta(); setMetodoPago(e.target.value) }}
             style={styles.input}
           >
@@ -1698,7 +1822,7 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
               <div style={styles.qtyRow}>
                 <button
                   style={styles.qtyBtn}
-                  disabled={procesandoVenta}
+                  disabled={procesandoCarritoActivo}
                   onClick={() => disminuirCantidad(item.id)}
                 >
                   -
@@ -1706,7 +1830,7 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
 
                 <input
                   type="number"
-                  disabled={procesandoVenta}
+                  disabled={procesandoCarritoActivo}
                   value={item.cantidad}
                   onChange={(e) => cambiarCantidad(item.id, Number(e.target.value))}
                   style={styles.qtyInput}
@@ -1714,7 +1838,7 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
 
                 <button
                   style={styles.qtyBtn}
-                  disabled={procesandoVenta}
+                  disabled={procesandoCarritoActivo}
                   onClick={() => aumentarCantidad(item.id)}
                 >
                   +
@@ -1725,7 +1849,7 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
 
               <button
                 style={styles.blackButton}
-                disabled={procesandoVenta}
+                disabled={procesandoCarritoActivo}
                 onClick={() => eliminarDelCarrito(item.id)}
               >
                 Eliminar
@@ -1743,20 +1867,22 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
             <p>Método de pago: {metodoPago}</p>
           </div>
 
-          <button style={styles.bigButton} onClick={finalizarVenta} disabled={procesandoVenta || carrito.length === 0}>
-            {procesandoVenta ? 'Procesando venta…' : 'Finalizar venta'}
+          <button style={styles.bigButton} onClick={() => void finalizarVenta()} disabled={procesandoCarritoActivo || carrito.length === 0}>
+            {procesandoCarritoActivo ? 'Procesando venta…' : 'Finalizar venta'}
           </button>
 
-          <button style={styles.redButton} onClick={enviarWhatsApp} disabled={procesandoVenta}>
+          <button style={styles.redButton} onClick={enviarWhatsApp} disabled={procesandoCarritoActivo}>
             Enviar por WhatsApp
           </button>
 
-          <button style={styles.grayButton} onClick={cancelarTicket} disabled={procesandoVenta}>
+          <button style={styles.grayButton} onClick={cancelarTicket} disabled={procesandoCarritoActivo}>
             Cancelar ticket
           </button>
         </div>
       </div>
     )}
+    </>}
+    {ventaCerrarId && estadoVentas.ventas.find((venta) => venta.id === ventaCerrarId)?.carrito.length ? <div className="fl-pending-close-backdrop" role="presentation"><section className="fl-pending-close-dialog" role="alertdialog" aria-modal="true" aria-labelledby="titulo-cerrar-venta"><h2 id="titulo-cerrar-venta">Esta venta tiene productos pendientes</h2><p>Si la descartas se eliminarán sus productos y cantidades de este dispositivo.</p><div><button type="button" onClick={() => setVentaCerrarId(null)}>Seguir atendiendo</button><button type="button" className="is-danger" onClick={descartarVentaPendiente}>Descartar venta</button></div></section></div> : null}
   </>
 )}
 
@@ -2031,9 +2157,9 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
         onCerrar={cerrarScanner}
       />
       <LoadingOverlay
-        visible={subiendoImagen || guardandoProducto || procesandoVenta || Boolean(operacionAbono)}
-        titulo={operacionAbono ? 'Registrando abono…' : procesandoVenta ? 'Procesando venta…' : guardandoProducto ? (form.id ? 'Actualizando producto…' : 'Guardando producto…') : faseImagen}
-        detalle={operacionAbono ? 'Actualizando el cliente y registrando el movimiento en Corte.' : procesandoVenta ? 'Validando inventario y registrando el ticket de forma segura.' : guardandoProducto ? 'Guardando la información del producto.' : 'Estamos optimizando y guardando la fotografía del producto.'}
+        visible={subiendoImagen || guardandoProducto || Boolean(operacionAbono)}
+        titulo={operacionAbono ? 'Registrando abono…' : guardandoProducto ? (form.id ? 'Actualizando producto…' : 'Guardando producto…') : faseImagen}
+        detalle={operacionAbono ? 'Actualizando el cliente y registrando el movimiento en Corte.' : guardandoProducto ? 'Guardando la información del producto.' : 'Estamos optimizando y guardando la fotografía del producto.'}
       />
       {notificacionOperacion && <div className={`fl-operation-toast is-${notificacionOperacion.tipo}`} role="status"><span>{notificacionOperacion.mensaje}</span><button type="button" aria-label="Cerrar notificación" onClick={() => setNotificacionOperacion(null)}><X size={17} /></button></div>}
     </Navegacion>
