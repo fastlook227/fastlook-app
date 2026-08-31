@@ -23,6 +23,7 @@ import type {
 import type { Devolucion, DevolucionDetalle } from '@/types/devoluciones'
 import { obtenerFechaActualFastLook, obtenerFechaLocal } from '@/utils/fechas'
 import { filtrarProductosPorBusqueda } from '@/utils/busqueda'
+import { aplicarFiltrosProductos, crearFiltrosProductosVacios, esProductoStockBajo } from '@/utils/filtrosProductos'
 import { puedeAccederCorteCaja } from '@/lib/permisos/corteCaja'
 import { generarTextoTicket } from '@/utils/ticket'
 import { agregarProductoAlCarrito } from '@/utils/ventas'
@@ -51,6 +52,7 @@ import CambiarStockDialog from '@/components/CambiarStockDialog'
 import CodigoBarrasDialog from '@/components/codigos-barras/CodigoBarrasDialog'
 import HerramientasCodigosBarras from '@/components/codigos-barras/HerramientasCodigosBarras'
 import EliminarProductoDialog from '@/components/EliminarProductoDialog'
+import FiltrosProductos from '@/components/FiltrosProductos'
 import ScannerCodigoBarras, { type FeedbackScanner } from '@/components/codigos-barras/ScannerCodigoBarras'
 import { crearMapaCodigosBarras, normalizarCodigoBarras } from '@/utils/codigoBarras'
 import {
@@ -74,6 +76,10 @@ export default function Home() {
   const [devoluciones, setDevoluciones] = useState<Devolucion[]>([])
   const [devolucionesDetalle, setDevolucionesDetalle] = useState<DevolucionDetalle[]>([])
   const [busqueda, setBusqueda] = useState('')
+  const [busquedaVenta, setBusquedaVenta] = useState('')
+  const [busquedaInventario, setBusquedaInventario] = useState('')
+  const [filtrosVenta, setFiltrosVenta] = useState(crearFiltrosProductosVacios)
+  const [filtrosInventario, setFiltrosInventario] = useState(crearFiltrosProductosVacios)
   const [carrito, setCarrito] = useState<CarritoItem[]>([])
   const carritoRef = useRef<CarritoItem[]>([])
   const [metodoPago, setMetodoPago] = useState('Efectivo')
@@ -105,6 +111,7 @@ export default function Home() {
   const feedbackEscaneoTimerRef = useRef<number | null>(null)
   const buscadorVentaRef = useRef<HTMLInputElement>(null)
   const [scannerContexto, setScannerContexto] = useState<'venta' | 'inventario' | 'precios' | null>(null)
+  const [productoEscaneadoInventarioId, setProductoEscaneadoInventarioId] = useState<string | null>(null)
   const [scannerContinuo, setScannerContinuo] = useState(false)
   const disparadorScannerRef = useRef<HTMLElement | null>(null)
   const [cortes, setCortes] = useState<CorteCaja[]>([])
@@ -529,6 +536,22 @@ const fetchMovimientosClientes = async () => {
     () => filtrarProductosPorBusqueda(productosActivos, busqueda),
     [productosActivos, busqueda]
   )
+  const productosVentaFiltrados = useMemo(
+    () => aplicarFiltrosProductos(productosActivos, busquedaVenta, filtrosVenta),
+    [productosActivos, busquedaVenta, filtrosVenta]
+  )
+  const productosInventarioFiltrados = useMemo(() => {
+    if (productoEscaneadoInventarioId) {
+      const escaneado = productosActivos.find((producto) => producto.id === productoEscaneadoInventarioId)
+      if (escaneado) return [escaneado]
+    }
+    return aplicarFiltrosProductos(productosActivos, busquedaInventario, filtrosInventario, {
+      permitirBarcode: true,
+      permitirImagen: true,
+      permitirPrecio: true,
+      permitirCosto: usuarioRol === 'Admin',
+    })
+  }, [productosActivos, busquedaInventario, filtrosInventario, usuarioRol, productoEscaneadoInventarioId])
 
   const clientesFiltrados = clientes.filter((c) => {
   const texto = busquedaClientes.toLowerCase()
@@ -540,9 +563,7 @@ const fetchMovimientosClientes = async () => {
   )
 })
 
-  const productosBajoStock = productosActivos.filter(
-    (p) => Number(p.stock) <= Number(p.stock_minimo || 5)
-  )
+  const productosBajoStock = productosActivos.filter(esProductoStockBajo)
 
   const abandonarIntentoVenta = () => {
     intentoVentaRef.current = null
@@ -586,13 +607,17 @@ const fetchMovimientosClientes = async () => {
       mostrarFeedbackEscaneo(resultado.ok
         ? { tipo: 'ok', mensaje: 'Producto agregado', nombre: producto.nombre, cantidad: resultado.cantidad }
         : { tipo: 'error', mensaje: resultado.mensaje, nombre: producto.nombre, codigo: normalizado })
-      setBusqueda('')
+      setBusquedaVenta('')
       requestAnimationFrame(() => buscadorVentaRef.current?.focus())
       return resultado.ok
         ? { tipo: 'ok', titulo: producto.nombre, detalle: `Cantidad: ${resultado.cantidad}` }
         : { tipo: 'error', titulo: resultado.mensaje, detalle: producto.nombre }
     }
-    setBusqueda(normalizado)
+    if (contexto === 'inventario') {
+      setProductoEscaneadoInventarioId(producto.id)
+      setBusquedaInventario(normalizado)
+    }
+    else setBusqueda(normalizado)
     return { tipo: 'ok', titulo: producto.nombre, detalle: producto.codigo }
   }
 
@@ -1581,17 +1606,17 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
 
     {resultadoVenta && <section className="fl-sale-result"><CheckCircle size={34} /><div><span>Venta registrada</span><strong>{resultadoVenta.folio}</strong><small>Total: ${resultadoVenta.total.toFixed(2)}</small></div><button type="button" onClick={() => setResultadoVenta(null)}>Nueva venta</button><button type="button" onClick={() => setTab('movimientos')}>Ver movimiento</button></section>}
 
-    <input
-      ref={buscadorVentaRef}
-      style={styles.input}
-      placeholder="Buscar producto para vender..."
-      value={busqueda}
-      onChange={(e) => setBusqueda(e.target.value)}
-      onKeyDown={(evento) => {
-        if (evento.key !== 'Enter') return
-        evento.preventDefault()
-        manejarCodigoDetectado(busqueda, 'venta')
-      }}
+    <FiltrosProductos
+      contexto="venta"
+      productos={productosActivos}
+      busqueda={busquedaVenta}
+      filtros={filtrosVenta}
+      totalResultados={productosVentaFiltrados.length}
+      esAdmin={usuarioRol === 'Admin'}
+      inputRef={buscadorVentaRef}
+      onBusqueda={setBusquedaVenta}
+      onFiltros={setFiltrosVenta}
+      onEnter={() => manejarCodigoDetectado(busquedaVenta, 'venta')}
     />
 
     {feedbackEscaneo && <section className={`fl-scan-feedback is-${feedbackEscaneo.tipo}`} role="status">
@@ -1603,7 +1628,7 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
 
     <h3>Productos</h3>
 
-    {productosFiltrados.map((p) => (
+    {productosVentaFiltrados.map((p) => (
       <div key={p.id} style={styles.card}>
         {p.imagen_url && (
           <img src={p.imagen_url} alt={p.nombre} style={styles.image} />
@@ -1832,23 +1857,19 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
 
             <div className="fl-scanner-actions"><button type="button" onClick={(evento) => abrirScanner('inventario', evento.currentTarget)}><ScanLine size={18} />Escanear</button></div>
 
-            <input
-            style={styles.input}
-            placeholder="Buscar en inventario por nombre, código, tipo, ubicación o proveedor..."
-            value={busqueda}
-            onChange={(e) => setBusqueda(e.target.value)}
-            onKeyDown={(evento) => {
-              if (evento.key !== 'Enter') return
-              const normalizado = normalizarCodigoBarras(busqueda)
-              if (normalizado && productosPorCodigoBarras.has(normalizado)) setBusqueda(normalizado)
-            }}
+            <FiltrosProductos
+              contexto="inventario"
+              productos={productosActivos}
+              busqueda={busquedaInventario}
+              filtros={filtrosInventario}
+              totalResultados={productosInventarioFiltrados.length}
+              esAdmin={usuarioRol === 'Admin'}
+              onBusqueda={(valor) => { setProductoEscaneadoInventarioId(null); setBusquedaInventario(valor) }}
+              onFiltros={(valor) => { setProductoEscaneadoInventarioId(null); setFiltrosInventario(valor) }}
+              onEnter={() => manejarCodigoDetectado(busquedaInventario, 'inventario')}
             />
 
-            <p>
-            Mostrando <b>{productosFiltrados.length}</b> de <b>{productosActivos.length}</b> productos
-            </p>
-
-            {productosFiltrados.map((p) => (
+            {productosInventarioFiltrados.map((p) => (
             <div key={p.id} style={styles.card}>
                 {p.imagen_url && <img src={p.imagen_url} alt={p.nombre} style={styles.image} />}
                 <h3>{p.nombre}</h3>
