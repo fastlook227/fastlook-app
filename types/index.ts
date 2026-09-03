@@ -23,6 +23,7 @@ export type Tab =
   | 'movimientos'
   | 'dashboard'
   | 'usuarios'
+  | 'productos-personalizados'
 
 export interface Producto {
   id: string

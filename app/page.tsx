@@ -55,6 +55,7 @@ import EliminarProductoDialog from '@/components/EliminarProductoDialog'
 import FiltrosProductos from '@/components/FiltrosProductos'
 import VentaRapida from '@/components/VentaRapida'
 import VentasPendientesTabs from '@/components/VentasPendientesTabs'
+import ProductosPersonalizados from '@/components/ProductosPersonalizados'
 import ScannerCodigoBarras, { type FeedbackScanner } from '@/components/codigos-barras/ScannerCodigoBarras'
 import { crearMapaCodigosBarras, normalizarCodigoBarras } from '@/utils/codigoBarras'
 import {
@@ -469,7 +470,7 @@ const fetchMovimientosClientes = async () => {
   }, [perfilUsuario, fechaOperativa])
 
   useEffect(() => {
-    const tabsAdmin = ['inventario', 'corte', 'proveedores', 'compras', 'movimientos', 'dashboard', 'usuarios']
+    const tabsAdmin = ['inventario', 'corte', 'proveedores', 'compras', 'movimientos', 'dashboard', 'usuarios', 'productos-personalizados']
 
     if (tab === 'corte' && !puedeAccederCorteCaja(perfilUsuario?.correo)) {
       setAvisoCorte('No tienes permiso para acceder a Corte de caja.')
@@ -2149,6 +2150,7 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
 
         {tab === 'dashboard' && <Dashboard />}
         {tab === 'usuarios' && <GestionUsuarios />}
+        {tab === 'productos-personalizados' && usuarioRol === 'Admin' && <ProductosPersonalizados />}
       </main>
       <ScannerCodigoBarras
         abierto={scannerContexto !== null}

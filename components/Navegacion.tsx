@@ -8,6 +8,7 @@ import {
   Gauge,
   History,
   Package,
+  SlidersHorizontal,
   ShoppingCart,
   Undo2,
   Shield,
@@ -52,6 +53,7 @@ const itemsAdmin: NavigationItem[] = [
   { tab: 'movimientos', label: 'Movimientos', icon: History },
   { tab: 'dashboard', label: 'Dashboard', icon: Gauge },
   { tab: 'usuarios', label: 'Usuarios', icon: UserCog },
+  { tab: 'productos-personalizados', label: 'Productos personalizados', icon: SlidersHorizontal },
 ]
 
 export default function Navegacion({
