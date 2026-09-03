@@ -1,140 +1,22 @@
-import type { CarritoItem, Producto } from '../types/index.ts'
+import type { CarritoLinea, LineaInventario, Producto } from '../types/index.ts'
 // @ts-expect-error Node ejecuta pruebas TypeScript nativas y requiere extensión explícita.
-import { agregarProductoAlCarrito } from './ventas.ts'
+import { agregarLineaPersonalizada, crearLineaInventario, esLineaInventario, esLineaPersonalizada, type NuevaLineaPersonalizada } from './carritoMixto.ts'
 
-export interface VentaPendiente {
-  id: string
-  nombre: string
-  carrito: CarritoItem[]
-  metodoPago: string
-  createdAt: number
-  updatedAt: number
-}
-
-export interface EstadoVentasPendientes {
-  ventas: VentaPendiente[]
-  activaId: string
-}
-
-export const crearVentaPendiente = (id: string, indice: number, ahora = Date.now()): VentaPendiente => ({
-  id,
-  nombre: `Cliente ${indice}`,
-  carrito: [],
-  metodoPago: 'Efectivo',
-  createdAt: ahora,
-  updatedAt: ahora,
-})
-
-export const crearEstadoVentasInicial = (): EstadoVentasPendientes => {
-  const venta = crearVentaPendiente('venta-inicial', 1, 0)
-  return { ventas: [venta], activaId: venta.id }
-}
-
-export const obtenerVentaActiva = (estado: EstadoVentasPendientes) =>
-  estado.ventas.find((venta) => venta.id === estado.activaId) ?? estado.ventas[0]
-
-export const actualizarVenta = (
-  estado: EstadoVentasPendientes,
-  ventaId: string,
-  cambio: (venta: VentaPendiente) => VentaPendiente
-): EstadoVentasPendientes => ({ ...estado, ventas: estado.ventas.map((venta) => venta.id === ventaId ? cambio(venta) : venta) })
-
-export const cantidadComprometidaOtros = (estado: EstadoVentasPendientes, ventaId: string, productoId: string) =>
-  estado.ventas.reduce((total, venta) => total + (venta.id === ventaId ? 0 : venta.carrito.find((item) => item.id === productoId)?.cantidad ?? 0), 0)
-
-export const disponibleParaVenta = (estado: EstadoVentasPendientes, ventaId: string, producto: Pick<Producto, 'id' | 'stock'>) =>
-  Math.max(0, Number(producto.stock) - cantidadComprometidaOtros(estado, ventaId, producto.id))
-
-export const agregarProductoAVenta = (estado: EstadoVentasPendientes, ventaId: string, producto: Producto, ahora = Date.now()) => {
-  const venta = estado.ventas.find((item) => item.id === ventaId)
-  if (!venta) return { estado, ok: false, mensaje: 'La venta activa ya no existe.' }
-  const disponible = disponibleParaVenta(estado, ventaId, producto)
-  const resultado = agregarProductoAlCarrito(venta.carrito, { ...producto, stock: disponible })
-  if (!resultado.ok) return { estado, ok: false, mensaje: disponible <= 0 ? 'No hay unidades disponibles para esta venta.' : `Disponibles para esta venta: ${disponible}` }
-  return {
-    estado: actualizarVenta(estado, ventaId, (actual) => ({ ...actual, carrito: resultado.carrito, updatedAt: ahora })),
-    ok: true,
-    mensaje: resultado.mensaje,
-    cantidad: resultado.cantidad,
-    disponible,
-  }
-}
-
-export const cambiarCantidadEnVenta = (estado: EstadoVentasPendientes, ventaId: string, productoId: string, cantidad: number, stockTotal: number, ahora = Date.now()) => {
-  const venta = estado.ventas.find((item) => item.id === ventaId)
-  const item = venta?.carrito.find((producto) => producto.id === productoId)
-  if (!venta || !item) return { estado, cantidad: 0, disponible: 0 }
-  const productoBase = { id: item.id, stock: stockTotal }
-  const disponible = disponibleParaVenta(estado, ventaId, productoBase)
-  const segura = Math.max(1, Math.min(Number.isFinite(cantidad) ? Math.trunc(cantidad) : 1, disponible))
-  return {
-    estado: actualizarVenta(estado, ventaId, (actual) => ({ ...actual, carrito: actual.carrito.map((producto) => producto.id === productoId ? { ...producto, cantidad: segura, stock: disponible } : producto), updatedAt: ahora })),
-    cantidad: segura,
-    disponible,
-  }
-}
-
-export const eliminarProductoDeVenta = (estado: EstadoVentasPendientes, ventaId: string, productoId: string, ahora = Date.now()) =>
-  actualizarVenta(estado, ventaId, (venta) => ({ ...venta, carrito: venta.carrito.filter((item) => item.id !== productoId), updatedAt: ahora }))
-
-export const agregarVentaPendiente = (estado: EstadoVentasPendientes, id: string, ahora = Date.now()): EstadoVentasPendientes => {
-  const nueva = crearVentaPendiente(id, estado.ventas.length + 1, ahora)
-  return { ventas: [...estado.ventas, nueva], activaId: nueva.id }
-}
-
-export const cerrarVentaPendiente = (estado: EstadoVentasPendientes, ventaId: string, nuevoId: string, ahora = Date.now()): EstadoVentasPendientes => {
-  const restantes = estado.ventas.filter((venta) => venta.id !== ventaId)
-  if (!restantes.length) {
-    const nueva = crearVentaPendiente(nuevoId, 1, ahora)
-    return { ventas: [nueva], activaId: nueva.id }
-  }
-  const indiceCerrado = estado.ventas.findIndex((venta) => venta.id === ventaId)
-  const activa = estado.activaId === ventaId ? restantes[Math.min(indiceCerrado, restantes.length - 1)].id : estado.activaId
-  return { ventas: restantes.map((venta, indice) => ({ ...venta, nombre: `Cliente ${indice + 1}` })), activaId: activa }
-}
-
-export const reconciliarVentasPendientes = (estado: EstadoVentasPendientes, productos: readonly Producto[], ahora = Date.now()) => {
-  const activos = new Map(productos.filter((producto) => producto.archivado !== true).map((producto) => [producto.id, producto]))
-  const comprometido = new Map<string, number>()
-  let retirados = 0
-  let ajustados = 0
-  const ventasAjustadas = estado.ventas.map((venta) => {
-    const carrito = venta.carrito.flatMap((item) => {
-      const actual = activos.get(item.id)
-      if (!actual || Number(actual.stock) <= 0) { retirados += 1; return [] }
-      const restante = Math.max(0, Number(actual.stock) - (comprometido.get(item.id) ?? 0))
-      if (restante <= 0) { retirados += 1; return [] }
-      const cantidad = Math.min(Math.max(1, Math.trunc(Number(item.cantidad) || 1)), restante)
-      if (cantidad !== Number(item.cantidad)) ajustados += 1
-      comprometido.set(item.id, (comprometido.get(item.id) ?? 0) + cantidad)
-      return [{ ...actual, cantidad, stock: restante } as CarritoItem]
-    })
-    return { ...venta, carrito, updatedAt: carrito.length === venta.carrito.length && !ajustados ? venta.updatedAt : ahora }
-  })
-  const totalesComprometidos = new Map<string, number>()
-  ventasAjustadas.forEach((venta) => venta.carrito.forEach((item) => totalesComprometidos.set(item.id, (totalesComprometidos.get(item.id) ?? 0) + item.cantidad)))
-  const ventas = ventasAjustadas.map((venta) => ({ ...venta, carrito: venta.carrito.map((item) => {
-    const stockTotal = Number(activos.get(item.id)?.stock ?? 0)
-    const otros = (totalesComprometidos.get(item.id) ?? 0) - item.cantidad
-    return { ...item, stock: Math.max(0, stockTotal - otros) }
-  }) }))
-  const activaId = ventas.some((venta) => venta.id === estado.activaId) ? estado.activaId : ventas[0]?.id
-  return { estado: ventas.length ? { ventas, activaId } : crearEstadoVentasInicial(), retirados, ajustados }
-}
-
-const esVentaValida = (valor: unknown): valor is VentaPendiente => {
-  if (!valor || typeof valor !== 'object') return false
-  const venta = valor as Partial<VentaPendiente>
-  return typeof venta.id === 'string' && typeof venta.nombre === 'string' && Array.isArray(venta.carrito)
-    && venta.carrito.every((item) => item && typeof item.id === 'string' && Number.isFinite(Number(item.cantidad)))
-}
-
-export const restaurarVentasPendientes = (texto: string | null): EstadoVentasPendientes | null => {
-  if (!texto) return null
-  try {
-    const valor = JSON.parse(texto) as Partial<EstadoVentasPendientes>
-    if (!Array.isArray(valor.ventas) || !valor.ventas.length || !valor.ventas.every(esVentaValida) || typeof valor.activaId !== 'string') return null
-    if (!valor.ventas.some((venta) => venta.id === valor.activaId)) return null
-    return { ventas: valor.ventas.map((venta) => ({ ...venta, metodoPago: ['Efectivo', 'Transferencia', 'Tarjeta'].includes(venta.metodoPago) ? venta.metodoPago : 'Efectivo', createdAt: Number.isFinite(Number(venta.createdAt)) ? Number(venta.createdAt) : Date.now(), updatedAt: Number.isFinite(Number(venta.updatedAt)) ? Number(venta.updatedAt) : Date.now() })), activaId: valor.activaId }
-  } catch { return null }
-}
+export interface VentaPendiente { id:string; nombre:string; carrito:CarritoLinea[]; metodoPago:string; createdAt:number; updatedAt:number }
+export interface EstadoVentasPendientes { ventas:VentaPendiente[]; activaId:string }
+export const crearVentaPendiente=(id:string,i:number,ahora=Date.now()):VentaPendiente=>({id,nombre:`Cliente ${i}`,carrito:[],metodoPago:'Efectivo',createdAt:ahora,updatedAt:ahora})
+export const crearEstadoVentasInicial=():EstadoVentasPendientes=>{const v=crearVentaPendiente('venta-inicial',1,0);return{ventas:[v],activaId:v.id}}
+export const obtenerVentaActiva=(e:EstadoVentasPendientes)=>e.ventas.find(v=>v.id===e.activaId)??e.ventas[0]
+export const actualizarVenta=(e:EstadoVentasPendientes,id:string,c:(v:VentaPendiente)=>VentaPendiente):EstadoVentasPendientes=>({...e,ventas:e.ventas.map(v=>v.id===id?c(v):v)})
+export const cantidadComprometidaOtros=(e:EstadoVentasPendientes,ventaId:string,productoId:string)=>e.ventas.reduce((t,v)=>t+(v.id===ventaId?0:v.carrito.reduce((s,l)=>s+(esLineaInventario(l)&&l.producto.id===productoId?l.cantidad:0),0)),0)
+export const disponibleParaVenta=(e:EstadoVentasPendientes,ventaId:string,p:Pick<Producto,'id'|'stock'>)=>Math.max(0,Number(p.stock)-cantidadComprometidaOtros(e,ventaId,p.id))
+export const agregarProductoAVenta=(e:EstadoVentasPendientes,ventaId:string,p:Producto,ahora=Date.now())=>{const v=e.ventas.find(x=>x.id===ventaId);if(!v)return{estado:e,ok:false,mensaje:'La venta activa ya no existe.'};const disponible=disponibleParaVenta(e,ventaId,p),existente=v.carrito.find((l):l is LineaInventario=>esLineaInventario(l)&&l.producto.id===p.id);if(p.archivado||disponible<=0||(existente?.cantidad??0)>=disponible)return{estado:e,ok:false,mensaje:disponible<=0?'No hay unidades disponibles para esta venta.':`Disponibles para esta venta: ${disponible}`};const cantidad=(existente?.cantidad??0)+1,carrito=existente?v.carrito.map(l=>l===existente?{...l,cantidad,producto:{...l.producto,stock:disponible}}:l):[...v.carrito,crearLineaInventario({...p,stock:disponible})];return{estado:actualizarVenta(e,ventaId,x=>({...x,carrito,updatedAt:ahora})),ok:true,mensaje:'Producto añadido a la venta.',cantidad,disponible}}
+export const agregarPersonalizadoAVenta=(e:EstadoVentasPendientes,ventaId:string,linea:NuevaLineaPersonalizada,ahora=Date.now())=>actualizarVenta(e,ventaId,v=>({...v,carrito:agregarLineaPersonalizada(v.carrito,linea),updatedAt:ahora}))
+export const cambiarCantidadEnVenta=(e:EstadoVentasPendientes,ventaId:string,id:string,cantidad:number,stockTotal:number,ahora=Date.now())=>{const v=e.ventas.find(x=>x.id===ventaId),l=v?.carrito.find(x=>esLineaInventario(x)?x.producto.id===id:x.idLocal===id);if(!v||!l)return{estado:e,cantidad:0,disponible:0};if(esLineaPersonalizada(l)){const segura=Math.max(1,Math.min(Math.trunc(Number(cantidad)||1),2147483647));return{estado:actualizarVenta(e,ventaId,x=>({...x,carrito:x.carrito.map(y=>y===l?{...y,cantidad:segura}:y),updatedAt:ahora})),cantidad:segura,disponible:2147483647}}const disponible=disponibleParaVenta(e,ventaId,{id,stock:stockTotal}),segura=Math.max(1,Math.min(Math.trunc(Number(cantidad)||1),disponible));return{estado:actualizarVenta(e,ventaId,x=>({...x,carrito:x.carrito.map(y=>esLineaInventario(y)&&y.producto.id===id?{...y,cantidad:segura,producto:{...y.producto,stock:disponible}}:y),updatedAt:ahora})),cantidad:segura,disponible}}
+export const eliminarProductoDeVenta=(e:EstadoVentasPendientes,ventaId:string,id:string,ahora=Date.now())=>actualizarVenta(e,ventaId,v=>({...v,carrito:v.carrito.filter(l=>esLineaInventario(l)?l.producto.id!==id:l.idLocal!==id),updatedAt:ahora}))
+export const agregarVentaPendiente=(e:EstadoVentasPendientes,id:string,ahora=Date.now()):EstadoVentasPendientes=>({ventas:[...e.ventas,crearVentaPendiente(id,e.ventas.length+1,ahora)],activaId:id})
+export const cerrarVentaPendiente=(e:EstadoVentasPendientes,id:string,nuevoId:string,ahora=Date.now()):EstadoVentasPendientes=>{const r=e.ventas.filter(v=>v.id!==id);if(!r.length){const n=crearVentaPendiente(nuevoId,1,ahora);return{ventas:[n],activaId:n.id}}const i=e.ventas.findIndex(v=>v.id===id);return{ventas:r.map((v,n)=>({...v,nombre:`Cliente ${n+1}`})),activaId:e.activaId===id?r[Math.min(i,r.length-1)].id:e.activaId}}
+export const reconciliarVentasPendientes=(e:EstadoVentasPendientes,productos:readonly Producto[],ahora=Date.now())=>{const activos=new Map(productos.filter(p=>!p.archivado).map(p=>[p.id,p])),comp=new Map<string,number>();let retirados=0,ajustados=0;const ventas=e.ventas.map(v=>({...v,carrito:v.carrito.flatMap((l):CarritoLinea[]=>{if(esLineaPersonalizada(l))return[l];const p=activos.get(l.producto.id);if(!p){retirados++;return[]}const restante=Math.max(0,Number(p.stock)-(comp.get(p.id)??0));if(!restante){retirados++;return[]}const cantidad=Math.min(Math.max(1,Math.trunc(l.cantidad)),restante);if(cantidad!==l.cantidad)ajustados++;comp.set(p.id,(comp.get(p.id)??0)+cantidad);return[{tipoLinea:'inventario',producto:{...p,stock:restante},cantidad}]}),updatedAt:ahora}));return{estado:ventas.length?{ventas,activaId:ventas.some(v=>v.id===e.activaId)?e.activaId:ventas[0].id}:crearEstadoVentasInicial(),retirados,ajustados}}
+const esLinea=(v:unknown):v is CarritoLinea=>{if(!v||typeof v!=='object')return false;const l=v as Partial<CarritoLinea>;if(!Number.isFinite(Number(l.cantidad))||Number(l.cantidad)<1)return false;return l.tipoLinea==='inventario'?Boolean(l.producto&&typeof l.producto.id==='string'):l.tipoLinea==='personalizado'&&typeof l.idLocal==='string'&&typeof l.tipoPersonalizado==='string'&&Boolean(l.configuracion&&typeof l.configuracion==='object')}
+const normalizarLinea=(v:unknown):CarritoLinea|null=>{if(esLinea(v))return v;if(!v||typeof v!=='object')return null;const x=v as Record<string,unknown>;if(typeof x.id!=='string'||typeof x.nombre!=='string'||!Number.isFinite(Number(x.cantidad)))return null;const producto:Producto={...x,id:x.id,nombre:x.nombre,codigo:String(x.codigo??''),tipo:String(x.tipo??''),precio:Number(x.precio??0),costo:x.costo===null?null:Number(x.costo??0),stock:Number(x.stock??0),stock_minimo:Number(x.stock_minimo??0),ubicacion:String(x.ubicacion??''),proveedor:String(x.proveedor??''),imagen_url:String(x.imagen_url??'')};return crearLineaInventario(producto,Math.max(1,Math.trunc(Number(x.cantidad))))}
+export const restaurarVentasPendientes=(texto:string|null):EstadoVentasPendientes|null=>{if(!texto)return null;try{const x=JSON.parse(texto) as Partial<EstadoVentasPendientes>;if(!Array.isArray(x.ventas)||!x.ventas.length||typeof x.activaId!=='string')return null;const ventas=x.ventas.map(v=>({...v,carrito:Array.isArray(v.carrito)?v.carrito.map(normalizarLinea).filter((l):l is CarritoLinea=>Boolean(l)):[]}));if(!ventas.every(v=>typeof v.id==='string'&&typeof v.nombre==='string')||!ventas.some(v=>v.id===x.activaId))return null;return{ventas:ventas.map(v=>({...v,metodoPago:['Efectivo','Transferencia','Tarjeta'].includes(v.metodoPago)?v.metodoPago:'Efectivo',createdAt:Number.isFinite(Number(v.createdAt))?Number(v.createdAt):Date.now(),updatedAt:Number.isFinite(Number(v.updatedAt))?Number(v.updatedAt):Date.now()})),activaId:x.activaId}}catch{return null}}

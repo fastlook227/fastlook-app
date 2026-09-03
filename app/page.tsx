@@ -23,8 +23,9 @@ import type { Devolucion, DevolucionDetalle } from '@/types/devoluciones'
 import { obtenerFechaActualFastLook, obtenerFechaLocal } from '@/utils/fechas'
 import { filtrarProductosPorBusqueda } from '@/utils/busqueda'
 import { aplicarFiltrosProductos, crearFiltrosProductosVacios, esProductoStockBajo } from '@/utils/filtrosProductos'
-import { crearIntentoCobro, intentarBloquearCobro, liberarBloqueoCobro } from '@/utils/ventaRapida'
-import { agregarProductoAVenta, agregarVentaPendiente, actualizarVenta, cambiarCantidadEnVenta, cerrarVentaPendiente, crearEstadoVentasInicial, eliminarProductoDeVenta, obtenerVentaActiva, reconciliarVentasPendientes, restaurarVentasPendientes, type EstadoVentasPendientes } from '@/utils/ventasPendientes'
+import { intentarBloquearCobro, liberarBloqueoCobro } from '@/utils/ventaRapida'
+import { agregarPersonalizadoAVenta, agregarProductoAVenta, agregarVentaPendiente, actualizarVenta, cambiarCantidadEnVenta, cerrarVentaPendiente, crearEstadoVentasInicial, eliminarProductoDeVenta, obtenerVentaActiva, reconciliarVentasPendientes, restaurarVentasPendientes, type EstadoVentasPendientes } from '@/utils/ventasPendientes'
+import { claveLinea, construirPayloadVenta, esLineaInventario, obtenerNombreLinea, obtenerPrecioLinea, resumirCarritoMixto, seleccionarRpcVenta, type NuevaLineaPersonalizada } from '@/utils/carritoMixto'
 import { puedeAccederCorteCaja } from '@/lib/permisos/corteCaja'
 import { generarTextoTicket } from '@/utils/ticket'
 import { generarPdfTicketHistorico } from '@/utils/pdfTicket'
@@ -55,7 +56,7 @@ import EliminarProductoDialog from '@/components/EliminarProductoDialog'
 import FiltrosProductos from '@/components/FiltrosProductos'
 import VentaRapida from '@/components/VentaRapida'
 import VentasPendientesTabs from '@/components/VentasPendientesTabs'
-import ProductosPersonalizados from '@/components/ProductosPersonalizados'
+import CalculadorasPersonalizadas from '@/components/CalculadorasPersonalizadas'
 import ScannerCodigoBarras, { type FeedbackScanner } from '@/components/codigos-barras/ScannerCodigoBarras'
 import { crearMapaCodigosBarras, normalizarCodigoBarras } from '@/utils/codigoBarras'
 import {
@@ -90,7 +91,7 @@ export default function Home() {
   const [modoVenta, setModoVenta] = useState<'normal' | 'rapida'>('normal')
   const [procesandoVenta, setProcesandoVenta] = useState(false)
   const procesandoVentaRef = useRef(false)
-  const intentosVentaRef = useRef(new Map<string, { idempotencyKey: string; metodoPago: string; lineas: Array<{ producto_id: string; cantidad: number }> }>())
+  const intentosVentaRef = useRef(new Map<string, { idempotencyKey: string; metodoPago: string; rpc: 'procesar_venta' | 'procesar_venta_mixta'; lineasNormales: Array<{ producto_id: string; cantidad: number }>; lineasPersonalizadas: Array<{ tipo_personalizado: string; cantidad: number; configuracion: Record<string, unknown> }> }>())
   const ventaProcesandoIdRef = useRef<string | null>(null)
   const [resultadoVenta, setResultadoVenta] = useState<{ ticketId: string; folio: string; total: number } | null>(null)
   const [guardandoProducto, setGuardandoProducto] = useState(false)
@@ -670,15 +671,15 @@ const fetchMovimientosClientes = async () => {
     if (carritoActivoProcesando()) return
     const estado = estadoVentasRef.current
     const ventaId = estado.activaId
-    const item = obtenerVentaActiva(estado).carrito.find((producto) => producto.id === id)
+    const item = obtenerVentaActiva(estado).carrito.find((linea) => claveLinea(linea) === id)
     if (!item) return
-    const stockTotal = Number(productosActivos.find((producto) => producto.id === id)?.stock ?? 0)
+    const stockTotal = esLineaInventario(item) ? Number(productosActivos.find((producto) => producto.id === item.producto.id)?.stock ?? 0) : 2147483647
     abandonarIntentoVenta(ventaId)
     const resultado = cambiarCantidadEnVenta(estado, ventaId, id, item.cantidad + 1, stockTotal)
     establecerVentasReconciliadas(resultado.estado)
     if (resultado.cantidad === item.cantidad) {
       if (mostrarAlerta) alert('No hay más stock disponible')
-      else mostrarFeedbackEscaneo({ tipo: 'error', mensaje: `Disponibles para esta venta: ${resultado.disponible}`, nombre: item.nombre })
+      else mostrarFeedbackEscaneo({ tipo: 'error', mensaje: `Disponibles para esta venta: ${resultado.disponible}`, nombre: obtenerNombreLinea(item) })
     }
   }
 
@@ -686,9 +687,9 @@ const fetchMovimientosClientes = async () => {
     if (carritoActivoProcesando()) return
     const estado = estadoVentasRef.current
     const ventaId = estado.activaId
-    const item = obtenerVentaActiva(estado).carrito.find((producto) => producto.id === id)
+    const item = obtenerVentaActiva(estado).carrito.find((linea) => claveLinea(linea) === id)
     if (!item) return
-    const stockTotal = Number(productosActivos.find((producto) => producto.id === id)?.stock ?? 0)
+    const stockTotal = esLineaInventario(item) ? Number(productosActivos.find((producto) => producto.id === item.producto.id)?.stock ?? 0) : 2147483647
     abandonarIntentoVenta(ventaId)
     establecerVentasReconciliadas(item.cantidad <= 1 ? eliminarProductoDeVenta(estado, ventaId, id) : cambiarCantidadEnVenta(estado, ventaId, id, item.cantidad - 1, stockTotal).estado)
   }
@@ -697,9 +698,9 @@ const fetchMovimientosClientes = async () => {
     if (carritoActivoProcesando()) return
     const estado = estadoVentasRef.current
     const ventaId = estado.activaId
-    const item = obtenerVentaActiva(estado).carrito.find((producto) => producto.id === id)
+    const item = obtenerVentaActiva(estado).carrito.find((linea) => claveLinea(linea) === id)
     if (!item) return
-    const stockTotal = Number(productosActivos.find((producto) => producto.id === id)?.stock ?? 0)
+    const stockTotal = esLineaInventario(item) ? Number(productosActivos.find((producto) => producto.id === item.producto.id)?.stock ?? 0) : 2147483647
     abandonarIntentoVenta(ventaId)
     const resultado = cambiarCantidadEnVenta(estado, ventaId, id, cantidad, stockTotal)
     if (mostrarAlerta && resultado.cantidad !== Math.trunc(cantidad)) alert('No hay suficiente stock')
@@ -716,6 +717,13 @@ const fetchMovimientosClientes = async () => {
   const cancelarTicket = () => {
     if (carritoActivoProcesando()) return
     setVentaCerrarId(estadoVentasRef.current.activaId)
+  }
+
+  const agregarPersonalizado = (linea: NuevaLineaPersonalizada) => {
+    const ventaId = estadoVentasRef.current.activaId
+    abandonarIntentoVenta(ventaId)
+    establecerEstadoVentas(agregarPersonalizadoAVenta(estadoVentasRef.current, ventaId, linea))
+    setNotificacionOperacion({ tipo: 'ok', mensaje: `${linea.nombre} agregado a la venta activa.` })
   }
 
 
@@ -785,14 +793,11 @@ const fetchMovimientosClientes = async () => {
     alert('Stock actualizado')
   }
 
-  const totalCarrito = carrito.reduce(
-    (total, item) => total + Number(item.precio) * item.cantidad,
-    0
-  )
+  const totalCarrito = resumirCarritoMixto(carrito).total
 
   const gananciaCarrito = carrito.reduce(
     (total, item) =>
-      total + (Number(item.precio) - Number(item.costo || 0)) * item.cantidad,
+      total + (esLineaInventario(item) ? (Number(item.producto.precio) - Number(item.producto.costo || 0)) * item.cantidad : 0),
     0
   )
 
@@ -807,10 +812,15 @@ const fetchMovimientosClientes = async () => {
     if (!intentarBloquearCobro(procesandoVentaRef)) return false
     ventaProcesandoIdRef.current = ventaIdProcesada
     setProcesandoVenta(true); setNotificacionOperacion(null)
-    if (!intentosVentaRef.current.has(ventaIdProcesada)) intentosVentaRef.current.set(ventaIdProcesada, crearIntentoCobro(carritoProcesado, metodoSeleccionado, crypto.randomUUID()))
+    if (!intentosVentaRef.current.has(ventaIdProcesada)) {
+      const payload = construirPayloadVenta(carritoProcesado)
+      intentosVentaRef.current.set(ventaIdProcesada, { idempotencyKey: crypto.randomUUID(), metodoPago: metodoSeleccionado, rpc: seleccionarRpcVenta(carritoProcesado), ...payload })
+    }
     const intento = intentosVentaRef.current.get(ventaIdProcesada)!
     try {
-      const { data, error } = await supabase.rpc('procesar_venta', { p_idempotency_key: intento.idempotencyKey, p_metodo_pago: intento.metodoPago, p_lineas: intento.lineas })
+      const { data, error } = intento.rpc === 'procesar_venta_mixta'
+        ? await supabase.rpc('procesar_venta_mixta', { p_idempotency_key: intento.idempotencyKey, p_metodo_pago: intento.metodoPago, p_lineas_normales: intento.lineasNormales, p_lineas_personalizadas: intento.lineasPersonalizadas })
+        : await supabase.rpc('procesar_venta', { p_idempotency_key: intento.idempotencyKey, p_metodo_pago: intento.metodoPago, p_lineas: intento.lineasNormales })
       if (error) throw error
       const respuesta = data as { ok?: boolean; ticket_id?: string; folio?: string; total?: number | string }
       if (!respuesta.ok || !respuesta.ticket_id || !respuesta.folio) throw new Error('RESULTADO_INCIERTO: La venta no fue confirmada.')
@@ -847,8 +857,8 @@ const fetchMovimientosClientes = async () => {
   }
 
   const cambiarCantidadVentaRapida = (id: string, cantidad: number) => {
-    const item = obtenerVentaActiva(estadoVentasRef.current).carrito.find((producto) => producto.id === id)
-    if (item && cantidad > Number(item.stock)) mostrarFeedbackEscaneo({ tipo: 'error', mensaje: `Stock máximo disponible: ${item.stock}`, nombre: item.nombre })
+    const item = obtenerVentaActiva(estadoVentasRef.current).carrito.find((linea) => claveLinea(linea) === id)
+    if (item && esLineaInventario(item) && cantidad > Number(item.producto.stock)) mostrarFeedbackEscaneo({ tipo: 'error', mensaje: `Stock máximo disponible: ${item.producto.stock}`, nombre: item.producto.nombre })
     cambiarCantidad(id, cantidad, false)
   }
 
@@ -1815,16 +1825,21 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
             <div style={styles.alert}>Aún no hay productos en el ticket.</div>
           )}
 
-          {carrito.map((item) => (
-            <div key={item.id} style={styles.ticketItem}>
-              <p><b>{item.nombre}</b></p>
-              <p>Precio: ${item.precio}</p>
+          {carrito.map((item) => {
+            const id = claveLinea(item)
+            const nombre = obtenerNombreLinea(item)
+            const precio = obtenerPrecioLinea(item)
+            return (
+            <div key={id} style={styles.ticketItem}>
+              <p><b>{nombre}</b></p>
+              <p>Precio: ${precio}</p>
+              {!esLineaInventario(item) && <p>Personalizado · Sin reserva de stock</p>}
 
               <div style={styles.qtyRow}>
                 <button
                   style={styles.qtyBtn}
                   disabled={procesandoCarritoActivo}
-                  onClick={() => disminuirCantidad(item.id)}
+                  onClick={() => disminuirCantidad(id)}
                 >
                   -
                 </button>
@@ -1833,30 +1848,30 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
                   type="number"
                   disabled={procesandoCarritoActivo}
                   value={item.cantidad}
-                  onChange={(e) => cambiarCantidad(item.id, Number(e.target.value))}
+                  onChange={(e) => cambiarCantidad(id, Number(e.target.value))}
                   style={styles.qtyInput}
                 />
 
                 <button
                   style={styles.qtyBtn}
                   disabled={procesandoCarritoActivo}
-                  onClick={() => aumentarCantidad(item.id)}
+                  onClick={() => aumentarCantidad(id)}
                 >
                   +
                 </button>
               </div>
 
-              <p>Subtotal: ${Number(item.precio) * item.cantidad}</p>
+              <p>Subtotal: ${precio * item.cantidad}</p>
 
               <button
                 style={styles.blackButton}
                 disabled={procesandoCarritoActivo}
-                onClick={() => eliminarDelCarrito(item.id)}
+                onClick={() => eliminarDelCarrito(id)}
               >
                 Eliminar
               </button>
             </div>
-          ))}
+          )})}
 
           <div style={styles.ticketBox}>
             <h2>Total: ${totalCarrito}</h2>
@@ -2150,7 +2165,7 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
 
         {tab === 'dashboard' && <Dashboard />}
         {tab === 'usuarios' && <GestionUsuarios />}
-        {tab === 'productos-personalizados' && usuarioRol === 'Admin' && <ProductosPersonalizados />}
+        {tab === 'productos-personalizados' && usuarioRol === 'Admin' && <CalculadorasPersonalizadas onAgregar={agregarPersonalizado} />}
       </main>
       <ScannerCodigoBarras
         abierto={scannerContexto !== null}

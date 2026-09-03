@@ -1,4 +1,6 @@
-import type { Producto, Venta } from '../types/index.ts'
+import type { CarritoLinea, LineaInventario, Producto, Venta } from '../types/index.ts'
+// @ts-expect-error Node ejecuta pruebas TypeScript nativas y requiere extensión explícita.
+import { obtenerTotalLinea } from './carritoMixto.ts'
 
 const cantidadVenta = (venta: Venta) => {
   const cantidad = Number(venta.cantidad ?? 0)
@@ -45,9 +47,9 @@ export const limitarCantidadAStock = (cantidad: number, stock: number) => {
   return Math.max(1, Math.min(Math.trunc(cantidad), Math.max(1, Math.trunc(stock))))
 }
 
-export const resumirCarritoVenta = (carrito: readonly { cantidad: number; precio: number }[]) => ({
+export const resumirCarritoVenta = (carrito: readonly CarritoLinea[]) => ({
   unidades: carrito.reduce((total, item) => total + item.cantidad, 0),
-  total: carrito.reduce((total, item) => total + Number(item.precio) * item.cantidad, 0),
+  total: carrito.reduce((total, item) => total + obtenerTotalLinea(item), 0),
 })
 
 export const intentarBloquearCobro = (control: { current: boolean }) => {
@@ -59,13 +61,13 @@ export const intentarBloquearCobro = (control: { current: boolean }) => {
 export const liberarBloqueoCobro = (control: { current: boolean }) => { control.current = false }
 
 export const crearIntentoCobro = (
-  carrito: readonly { id: string; cantidad: number }[],
+  carrito: readonly LineaInventario[],
   metodoPago: string,
   idempotencyKey: string
 ) => ({
   idempotencyKey,
   metodoPago,
-  lineas: carrito.map((item) => ({ producto_id: item.id, cantidad: item.cantidad })),
+  lineas: carrito.map((item) => ({ producto_id: item.producto.id, cantidad: item.cantidad })),
 })
 
 export const carritoDespuesDeCobro = <T>(carrito: readonly T[], exitoso: boolean): T[] =>

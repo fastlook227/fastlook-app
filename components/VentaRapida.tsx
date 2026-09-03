@@ -2,17 +2,18 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Minus, Plus, ScanLine, ShoppingCart, Trash2, X } from 'lucide-react'
-import type { CarritoItem, Producto, Venta } from '@/types'
+import type { CarritoLinea, Producto, Venta } from '@/types'
 import type { FiltrosProductos as EstadoFiltrosProductos } from '@/utils/filtrosProductos'
 import { contarFiltrosActivos } from '@/utils/filtrosProductos'
 import { obtenerProductosFrecuentes, obtenerUltimosProductosVendidos, resumirCarritoVenta } from '@/utils/ventaRapida'
+import { claveLinea, esLineaInventario, obtenerNombreLinea, obtenerPrecioLinea } from '@/utils/carritoMixto'
 import FiltrosProductos from '@/components/FiltrosProductos'
 
 interface Props {
   productos: readonly Producto[]
   resultados: readonly Producto[]
   ventas: readonly Venta[]
-  carrito: readonly CarritoItem[]
+  carrito: readonly CarritoLinea[]
   busqueda: string
   filtros: EstadoFiltrosProductos
   procesando: boolean
@@ -78,5 +79,5 @@ function CarruselProductos({ titulo, productos, onAgregar }: { titulo: string; p
 }
 
 function CarritoRapido(props: Pick<Props, 'carrito' | 'procesando' | 'onAumentar' | 'onDisminuir' | 'onCantidad' | 'onEliminar'> & { resumen: { unidades: number; total: number }; onCobrar: () => void }) {
-  return <div className="fl-quick-cart"><div className="fl-quick-cart-items">{props.carrito.length ? props.carrito.map((item) => <article key={item.id}><div><strong>{item.nombre}</strong><small>${Number(item.precio).toFixed(2)} · Máx. {item.stock}</small></div><div className="fl-quick-quantity"><button type="button" disabled={props.procesando} onClick={() => props.onDisminuir(item.id)}><Minus /></button><input type="number" min="1" max={item.stock} inputMode="numeric" disabled={props.procesando} value={item.cantidad} aria-label={`Cantidad de ${item.nombre}`} onChange={(e) => props.onCantidad(item.id, Number(e.target.value))} /><button type="button" disabled={props.procesando || item.cantidad >= Number(item.stock)} onClick={() => props.onAumentar(item.id)}><Plus /></button></div><strong>${(Number(item.precio) * item.cantidad).toFixed(2)}</strong><button type="button" className="is-remove" disabled={props.procesando} onClick={() => props.onEliminar(item.id)} aria-label={`Eliminar ${item.nombre}`}><Trash2 /></button></article>) : <div className="fl-quick-cart-empty">Agrega un producto para comenzar.</div>}</div><footer><span><small>{props.resumen.unidades} unidades</small><strong>${props.resumen.total.toFixed(2)}</strong></span><button type="button" disabled={props.procesando || !props.carrito.length} onClick={props.onCobrar}>{props.procesando ? 'Cobrando…' : 'Cobrar'}</button></footer></div>
+  return <div className="fl-quick-cart"><div className="fl-quick-cart-items">{props.carrito.length ? props.carrito.map((item) => { const id=claveLinea(item),nombre=obtenerNombreLinea(item),precio=obtenerPrecioLinea(item),stock=esLineaInventario(item)?item.producto.stock:undefined; return <article key={id}><div><strong>{nombre}</strong><small>${precio.toFixed(2)}{stock===undefined?' · Personalizado':` · Máx. ${stock}`}</small></div><div className="fl-quick-quantity"><button type="button" disabled={props.procesando} onClick={() => props.onDisminuir(id)}><Minus /></button><input type="number" min="1" max={stock} inputMode="numeric" disabled={props.procesando} value={item.cantidad} aria-label={`Cantidad de ${nombre}`} onChange={(e) => props.onCantidad(id, Number(e.target.value))} /><button type="button" disabled={props.procesando || (stock!==undefined&&item.cantidad>=Number(stock))} onClick={() => props.onAumentar(id)}><Plus /></button></div><strong>${(precio*item.cantidad).toFixed(2)}</strong><button type="button" className="is-remove" disabled={props.procesando} onClick={() => props.onEliminar(id)} aria-label={`Eliminar ${nombre}`}><Trash2 /></button></article> }) : <div className="fl-quick-cart-empty">Agrega un producto para comenzar.</div>}</div><footer><span><small>{props.resumen.unidades} unidades</small><strong>${props.resumen.total.toFixed(2)}</strong></span><button type="button" disabled={props.procesando || !props.carrito.length} onClick={props.onCobrar}>{props.procesando ? 'Cobrando…' : 'Cobrar'}</button></footer></div>
 }

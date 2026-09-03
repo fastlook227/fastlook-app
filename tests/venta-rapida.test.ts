@@ -65,7 +65,7 @@ test('bloqueo síncrono impide un segundo cobro hasta liberar', () => {
 })
 
 test('intento de cobro conserva método y líneas exactas', () => {
-  const intento = crearIntentoCobro([{ id: '1', cantidad: 3 }], 'Transferencia', 'clave-1')
+  const intento = crearIntentoCobro([{ tipoLinea: 'inventario', producto: producto('1'), cantidad: 3 }], 'Transferencia', 'clave-1')
   assert.deepEqual(intento, { idempotencyKey: 'clave-1', metodoPago: 'Transferencia', lineas: [{ producto_id: '1', cantidad: 3 }] })
 })
 

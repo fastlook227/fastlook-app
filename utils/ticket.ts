@@ -1,7 +1,8 @@
-import type { CarritoItem } from '@/types'
+import type { CarritoLinea } from '@/types'
+import { obtenerNombreLinea, obtenerPrecioLinea } from '@/utils/carritoMixto'
 
 export const generarTextoTicket = (
-  carrito: CarritoItem[],
+  carrito: CarritoLinea[],
   metodoPago: string,
   totalCarrito: number
 ) => {
@@ -9,10 +10,10 @@ export const generarTextoTicket = (
   texto += 'Ticket de venta\n\n'
 
   carrito.forEach((item) => {
-    texto += `${item.nombre}\n`
+    texto += `${obtenerNombreLinea(item)}\n`
     texto += `Cantidad: ${item.cantidad}\n`
-    texto += `Precio: $${item.precio}\n`
-    texto += `Subtotal: $${Number(item.precio) * item.cantidad}\n\n`
+    texto += `Precio: $${obtenerPrecioLinea(item)}\n`
+    texto += `Subtotal: $${obtenerPrecioLinea(item) * item.cantidad}\n\n`
   })
 
   texto += `Método de pago: ${metodoPago}\n`

@@ -3,6 +3,8 @@ import test from 'node:test'
 // @ts-expect-error Node ejecuta TypeScript nativo y requiere extensión explícita.
 import { agregarProductoAVenta, agregarVentaPendiente, cambiarCantidadEnVenta, cerrarVentaPendiente, crearEstadoVentasInicial, eliminarProductoDeVenta, obtenerVentaActiva, reconciliarVentasPendientes, restaurarVentasPendientes } from '../utils/ventasPendientes.ts'
 import type { Producto } from '../types'
+// @ts-expect-error Node ejecuta TypeScript nativo y requiere extensión explícita.
+import { esLineaInventario } from '../utils/carritoMixto.ts'
 
 const producto = (id: string, cambio: Partial<Producto> = {}): Producto => ({ id, codigo: `FL-${id}`, codigo_barras: `750${id}`, nombre: `Producto ${id}`, tipo: 'Tipo', precio: 20, costo: 10, stock: 5, stock_minimo: 1, ubicacion: 'Mostrador', proveedor: 'Proveedor', imagen_url: '', archivado: false, ...cambio })
 const camara = producto('camara')
@@ -30,7 +32,8 @@ test('frecuente, búsqueda, pistola y cámara agregan exclusivamente a la venta 
     let estado = dosVentas()
     estado = agregarProductoAVenta(estado, estado.activaId, producto(origen)).estado
     assert.equal(estado.ventas[0].carrito.length, 0)
-    assert.equal(estado.ventas[1].carrito[0].id, origen)
+    assert.ok(esLineaInventario(estado.ventas[1].carrito[0]))
+    assert.equal(estado.ventas[1].carrito[0].producto.id, origen)
   }
 })
 
@@ -70,7 +73,8 @@ test('cobrar Cliente 1 elimina exactamente su ID aunque cambie la venta activa',
   estado = { ...estado, activaId: 'venta-2' }
   estado = cerrarVentaPendiente(estado, ventaIdProcesada, 'nueva')
   assert.deepEqual(estado.ventas.map((v) => v.id), ['venta-2'])
-  assert.equal(estado.ventas[0].carrito[0].id, 'dos')
+  assert.ok(esLineaInventario(estado.ventas[0].carrito[0]))
+  assert.equal(estado.ventas[0].carrito[0].producto.id, 'dos')
   assert.equal(estado.activaId, 'venta-2')
 })
 
@@ -114,5 +118,6 @@ test('stock compartido nunca supera existencia y recalcula al cerrar otro carrit
   assert.equal(estado.ventas.reduce((total, venta) => total + (venta.carrito[0]?.cantidad ?? 0), 0), 5)
   estado = cerrarVentaPendiente(estado, 'venta-inicial', 'nueva')
   estado = reconciliarVentasPendientes(estado, [camara]).estado
-  assert.equal(estado.ventas[0].carrito[0].stock, 5)
+  assert.ok(esLineaInventario(estado.ventas[0].carrito[0]))
+  assert.equal(estado.ventas[0].carrito[0].producto.stock, 5)
 })

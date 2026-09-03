@@ -48,6 +48,28 @@ export interface CarritoItem extends Producto {
   cantidad: number
 }
 
+export type TipoProductoPersonalizado = 'CADENA' | 'ESTRELLA' | 'PINON' | 'KIT_SPROCKET' | 'SERVICIO_MOTO'
+export type ConfiguracionPersonalizada = Record<string, unknown>
+export interface LineaInventario { tipoLinea: 'inventario'; producto: Producto; cantidad: number }
+export interface LineaPersonalizada { tipoLinea: 'personalizado'; idLocal: string; tipoPersonalizado: TipoProductoPersonalizado; nombre: string; resumen: string; configuracion: ConfiguracionPersonalizada; precioUnitarioMostrado: number; cantidad: number }
+export type CarritoLinea = LineaInventario | LineaPersonalizada
+
+export interface VentaPersonalizada {
+  id: string
+  ticket_id: string
+  folio: string
+  tipo_personalizado: TipoProductoPersonalizado
+  nombre: string
+  resumen: string
+  configuracion: ConfiguracionPersonalizada
+  precio_unitario: number | string
+  cantidad: number | string
+  total: number | string
+  costo_unitario: number | null
+  metodo_pago: string
+  created_at: string
+}
+
 export interface Venta {
   id: string
   created_at: string
