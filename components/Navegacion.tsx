@@ -17,6 +17,7 @@ import {
   UserCog,
   Users,
   WalletCards,
+  Radio,
 } from 'lucide-react'
 import type { RolUsuario, Tab } from '@/types'
 import { puedeAccederCorteCaja } from '@/lib/permisos/corteCaja'
@@ -36,6 +37,7 @@ interface NavegacionProps {
 }
 
 const itemsGenerales: NavigationItem[] = [
+  { tab: 'interphone', label: 'Interphone', icon: Radio },
   { tab: 'precios', label: 'Lista de precios', icon: Tags },
   { tab: 'venta', label: 'Generar venta', icon: ShoppingCart },
   { tab: 'devoluciones', label: 'Devoluciones', icon: Undo2 },
@@ -76,8 +78,8 @@ export default function Navegacion({
     ? [buscar('precios'), buscar('venta'), buscar('inventario')]
     : [buscar('precios'), buscar('venta'), buscar('stock')]
   const quickTabs: Tab[] = usuarioRol === 'Admin'
-    ? ['venta', 'inventario', 'ia', 'clientes', ...(accesoCorte ? ['corte' as Tab] : [])]
-    : ['venta', 'precios', 'ia', 'clientes', ...(accesoCorte ? ['corte' as Tab] : ['stock' as Tab])]
+    ? ['venta', 'inventario', 'interphone', 'ia', 'clientes', ...(accesoCorte ? ['corte' as Tab] : [])]
+    : ['venta', 'precios', 'interphone', 'ia', 'clientes', ...(accesoCorte ? ['corte' as Tab] : ['stock' as Tab])]
   const quickItems = quickTabs.map(buscar)
   const primaryTabs = new Set(primaryItems.map((item) => item.tab))
   const moreItems = items.filter((item) => !primaryTabs.has(item.tab))

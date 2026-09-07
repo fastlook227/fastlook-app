@@ -44,6 +44,7 @@ import ListaCompras, {
 } from '@/components/ListaCompras'
 import Clientes from '@/components/Clientes'
 import GestionUsuarios from '@/components/GestionUsuarios'
+import Interphone from '@/components/Interphone'
 import LoadingOverlay from '@/components/LoadingOverlay'
 import SelectorImagen from '@/components/SelectorImagen'
 import CorteCajaDashboard from '@/components/corte/CorteCajaDashboard'
@@ -2166,6 +2167,7 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
         {tab === 'dashboard' && <Dashboard />}
         {tab === 'usuarios' && <GestionUsuarios />}
         {tab === 'productos-personalizados' && usuarioRol === 'Admin' && <CalculadorasPersonalizadas onAgregar={agregarPersonalizado} />}
+        {tab === 'interphone' && <Interphone usuarioId={perfilUsuario.id} usuarioNombre={perfilUsuario.nombre} usuarioRol={usuarioRol} />}
       </main>
       <ScannerCodigoBarras
         abierto={scannerContexto !== null}

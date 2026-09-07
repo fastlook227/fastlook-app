@@ -971,6 +971,33 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .fl-filter-panel > footer .is-primary { grid-column: 1 / -1; grid-row: 1; }
 }
 
+/* Interphone */
+.fl-interphone { display: grid; gap: 20px; max-width: 1050px; margin: 0 auto; color: #f8fafc; }
+.fl-interphone > header { display: flex; justify-content: space-between; gap: 18px; padding: 22px; border-radius: 20px; background: #101319; border-bottom: 4px solid #c8202f; }
+.fl-interphone > header span { display: flex; align-items: center; gap: 7px; color: #ff5b68; font-size: .78rem; font-weight: 900; letter-spacing: .12em; text-transform: uppercase; }
+.fl-interphone > header h2 { margin: 5px 0; font-size: clamp(2rem, 7vw, 3.2rem); letter-spacing: .08em; }
+.fl-interphone > header p { margin: 0; color: #abb3c0; }
+.fl-interphone > header > strong { align-self: center; padding: 10px 15px; border: 1px solid #3c4350; border-radius: 99px; color: #fff; letter-spacing: .16em; }
+.fl-interphone-grid { display: grid; grid-template-columns: 290px minmax(0, 1fr); gap: 18px; }
+.fl-radio-presence, .fl-radio-console { border: 1px solid #2a303b; border-radius: 20px; background: #151920; box-shadow: 0 14px 40px rgba(15,23,42,.2); }
+.fl-radio-presence { padding: 17px; }
+.fl-radio-status { display: flex; align-items: center; gap: 10px; padding: 13px; border-radius: 12px; background: #222833; color: #8e98a8; }
+.fl-radio-status svg { width: 25px; }.fl-radio-status span { display: grid; font-size: .75rem; }.fl-radio-status strong { color: #fff; font-size: .95rem; }
+.fl-radio-status.is-conectado svg { color: #27d17f; }.fl-radio-status.is-reconectando svg, .fl-radio-status.is-conectando svg { color: #f7bb3f; }
+.fl-radio-users-heading { display: flex; justify-content: space-between; margin: 20px 2px 9px; color: #abb3c0; font-size: .82rem; font-weight: 800; text-transform: uppercase; }
+.fl-radio-users-heading b { min-width: 25px; padding: 2px 7px; border-radius: 99px; background: #c8202f; color: #fff; text-align: center; }
+.fl-radio-presence ul { min-height: 85px; display: grid; align-content: start; gap: 5px; margin: 0; padding: 0; list-style: none; }
+.fl-radio-presence li { display: flex; align-items: center; gap: 9px; padding: 9px; border-radius: 10px; }.fl-radio-presence li.is-speaking { background: #382027; }
+.fl-radio-presence li i { width: 9px; height: 9px; border-radius: 50%; background: #27d17f; box-shadow: 0 0 9px #27d17f; }.fl-radio-presence li span { display: grid; flex: 1; }.fl-radio-presence li small { color: #8e98a8; }.fl-radio-presence li svg { color: #ff5260; }
+.fl-radio-activate, .fl-radio-disconnect, .fl-radio-audio-unlock { width: 100%; min-height: 49px; display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 14px; border: 0; border-radius: 11px; background: #c8202f; color: #fff; font-weight: 900; cursor: pointer; }.fl-radio-disconnect { background: #2b313c; }.fl-radio-error { padding: 10px; border-radius: 9px; background: #451c23; color: #ffb5bc; }
+.fl-radio-console { min-height: 570px; display: grid; align-content: center; justify-items: center; gap: 24px; padding: 24px; background: radial-gradient(circle at 50% 35%, #292f39 0, #151920 52%); }
+.fl-radio-channel { display: grid; justify-items: center; gap: 3px; }.fl-radio-channel span { color: #8e98a8; font-size: .72rem; letter-spacing: .2em; }.fl-radio-channel strong { font-size: 2rem; letter-spacing: .2em; }.fl-radio-channel small { min-height: 18px; color: #ff6b77; font-weight: 900; text-align: center; }
+.fl-ptt { width: clamp(180px, 46vw, 260px); aspect-ratio: 1; display: grid; place-content: center; justify-items: center; gap: 9px; border: 9px solid #343b47; border-radius: 50%; background: linear-gradient(#d62838,#a80f1e); color: #fff; box-shadow: 0 0 0 8px #0c0f14, 0 18px 38px #050608; cursor: pointer; touch-action: none; user-select: none; -webkit-user-select: none; }.fl-ptt svg { width: 40px; height: 40px; }.fl-ptt strong { font-size: 1.25rem; line-height: 1.1; }.fl-ptt span { color: #ffd5d9; font-size: .76rem; }
+.fl-ptt:disabled { opacity: .58; cursor: not-allowed; }.fl-ptt.is-transmitting { background: linear-gradient(#ff4c5b,#d10d20); box-shadow: 0 0 0 8px #25070b, 0 0 42px rgba(255,43,61,.7); transform: scale(.98); }.fl-ptt.is-busy { background: #3d4450; }
+.fl-radio-controls { width: min(520px,100%); display: grid; grid-template-columns: 1fr auto; gap: 13px; align-items: end; }.fl-radio-controls label { display: grid; grid-template-columns: 1fr auto; gap: 7px; color: #cbd1da; }.fl-radio-controls label span { display: flex; gap: 6px; }.fl-radio-controls input { grid-column: 1 / -1; width: 100%; accent-color: #c8202f; }.fl-radio-controls button { min-height: 48px; display: flex; align-items: center; gap: 7px; padding: 9px 13px; border: 1px solid #3d4552; border-radius: 10px; background: #232935; color: #fff; font-weight: 800; cursor: pointer; }
+.fl-radio-audio-unlock { width: auto; margin: 0; padding-inline: 22px; }
+@media (max-width: 760px) { .fl-interphone { margin: -4px -8px 70px; }.fl-interphone > header { align-items: flex-start; flex-direction: column; border-radius: 14px; }.fl-interphone-grid { grid-template-columns: 1fr; }.fl-radio-presence { order: 2; }.fl-radio-console { min-height: 520px; padding: 18px 12px; }.fl-radio-controls { grid-template-columns: 1fr; }.fl-radio-controls button { justify-content: center; }.fl-ptt { min-width: 180px; } }
+
 /* Productos personalizados */
 .fl-calculators { max-width: 920px; margin: 0 auto; padding-bottom: 84px; color: #202735; }
 .fl-calculators > header { margin-bottom: 22px; }

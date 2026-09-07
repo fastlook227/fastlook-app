@@ -24,6 +24,7 @@ export type Tab =
   | 'dashboard'
   | 'usuarios'
   | 'productos-personalizados'
+  | 'interphone'
 
 export interface Producto {
   id: string
