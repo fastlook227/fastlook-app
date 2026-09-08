@@ -35,9 +35,11 @@ class RealtimeSignalingClient(private val scope: CoroutineScope, private val lis
     private var activeJoinRef: String? = null
     private var pendingTrackRef: String? = null
     private var reconnectDelayMs = 1_000L
+    private var selfId: String? = null
 
     fun connect(token: String, self: UserPresence) {
         disconnect()
+        selfId = self.id
         job = scope.launch(Dispatchers.IO) {
             while (isActive) try {
                 val endpoint = BuildConfig.SUPABASE_URL.removePrefix("https://").removePrefix("http://")
@@ -74,7 +76,7 @@ class RealtimeSignalingClient(private val scope: CoroutineScope, private val lis
         }
     }
 
-    fun disconnect() { job?.cancel(); job = null; send = null; sendBinary = null; activeJoinRef = null; pendingTrackRef = null; presence.clear() }
+    fun disconnect() { job?.cancel(); job = null; send = null; sendBinary = null; activeJoinRef = null; pendingTrackRef = null; presence.clear(); selfId = null }
     fun broadcast(event: String, payload: JsonObject) { scope.launch { sendBroadcast(event, payload, refs.getAndIncrement().toString()) } }
 
     private suspend fun sendFrame(event: String, payload: JsonObject, ref: String, destination: String = topic, joinRef: String? = activeJoinRef) {
@@ -137,6 +139,7 @@ class RealtimeSignalingClient(private val scope: CoroutineScope, private val lis
         val event = wrapper["event"]?.jsonPrimitive?.content ?: return
         val payload = wrapper["payload"]?.jsonObject ?: return
         val origin = payload["origen"]?.jsonPrimitive?.contentOrNull ?: payload["usuarioId"]?.jsonPrimitive?.contentOrNull ?: return
+        if (event in setOf("offer", "answer", "ice-candidate") && payload["destino"]?.jsonPrimitive?.contentOrNull != selfId) return
         log("broadcast received event=$event peer=$origin")
         when (event) {
             "ping" -> Unit

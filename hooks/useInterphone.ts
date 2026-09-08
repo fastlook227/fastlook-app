@@ -18,6 +18,11 @@ const diagnosticoSdp = (tipo: 'offer' | 'answer', peerId: string, sdp?: string) 
   const direccion = sdp?.match(/^a=(sendrecv|sendonly|recvonly|inactive)$/m)?.[1] || 'desconocida'
   diagnostico(`${tipo} SDP`, { peerId, audio, direccion })
 }
+const diagnosticoTransceivers = (peerId: string, conexion: RTCPeerConnection) => diagnostico('TRANSCEIVERS', {
+  peerId,
+  total: conexion.getTransceivers().length,
+  transceivers: conexion.getTransceivers().map((transceiver) => ({ mid: transceiver.mid, kind: transceiver.sender.track?.kind || transceiver.receiver.track?.kind, direction: transceiver.direction, currentDirection: transceiver.currentDirection })),
+})
 
 interface UseInterphoneArgs { usuarioId: string; nombre: string; rol: RolUsuario }
 
@@ -43,6 +48,21 @@ export function useInterphone({ usuarioId, nombre, rol }: UseInterphoneArgs) {
   const volumenRef = useRef(100)
   const silenciadoRef = useRef(false)
   const statsTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const colasNegociacionRef = useRef(new Map<string, Promise<void>>())
+  const ofertasSolicitadasRef = useRef(new Set<string>())
+  const makingOfferRef = useRef(new Set<string>())
+  const settingRemoteAnswerRef = useRef(new Set<string>())
+  const ignoreOfferRef = useRef(new Set<string>())
+  const negociadosRef = useRef(new Set<string>())
+  const candidatosPendientesRef = useRef(new Map<string, RTCIceCandidateInit[]>())
+
+  const encolarNegociacion = useCallback((peerId: string, operacion: () => Promise<void>) => {
+    const anterior = colasNegociacionRef.current.get(peerId) || Promise.resolve()
+    const siguiente = anterior.catch(() => undefined).then(operacion)
+    colasNegociacionRef.current.set(peerId, siguiente)
+    siguiente.then(() => { if (colasNegociacionRef.current.get(peerId) === siguiente) colasNegociacionRef.current.delete(peerId) }, () => { if (colasNegociacionRef.current.get(peerId) === siguiente) colasNegociacionRef.current.delete(peerId) })
+    return siguiente
+  }, [])
 
   const apagarMicrofono = useCallback(() => {
     streamLocalRef.current?.getAudioTracks().forEach((track) => { track.enabled = false; diagnostico('LOCAL_AUDIO_TRACK', { enabled: track.enabled, muted: track.muted, readyState: track.readyState }) })
@@ -63,8 +83,10 @@ export function useInterphone({ usuarioId, nombre, rol }: UseInterphoneArgs) {
   }, [apagarMicrofono, emitir, usuarioId])
 
   const cerrarConexion = useCallback((peerId: string) => {
-    conexionesRef.current.get(peerId)?.close()
+    const conexion = conexionesRef.current.get(peerId)
+    if (conexion) { diagnostico('PEER_CLOSED', peerId); conexion.close() }
     conexionesRef.current.delete(peerId)
+    colasNegociacionRef.current.delete(peerId); ofertasSolicitadasRef.current.delete(peerId); makingOfferRef.current.delete(peerId); settingRemoteAnswerRef.current.delete(peerId); ignoreOfferRef.current.delete(peerId); negociadosRef.current.delete(peerId); candidatosPendientesRef.current.delete(peerId)
     const audio = audiosRef.current.get(peerId)
     if (audio) { audio.pause(); audio.srcObject = null; audio.remove() }
     audiosRef.current.delete(peerId)
@@ -80,8 +102,9 @@ export function useInterphone({ usuarioId, nombre, rol }: UseInterphoneArgs) {
     const existente = conexionesRef.current.get(peerId)
     if (existente) return existente
     const conexion = new RTCPeerConnection(configuracionRTC())
+    diagnostico('PEER_CREATED', peerId)
     const streamLocal = streamLocalRef.current
-    if (streamLocal) streamLocal.getAudioTracks().forEach((track) => { conexion.addTrack(track, streamLocal); diagnostico('LOCAL_AUDIO_TRACK added', { peerId, enabled: track.enabled, muted: track.muted, readyState: track.readyState }) })
+    if (streamLocal) streamLocal.getAudioTracks().forEach((track) => { conexion.addTrack(track, streamLocal); diagnostico('LOCAL_AUDIO_ADDED', { peerId, enabled: track.enabled, muted: track.muted, readyState: track.readyState }); diagnosticoTransceivers(peerId, conexion) })
     conexion.onsignalingstatechange = () => diagnostico('signalingState', peerId, conexion.signalingState)
     conexion.onicegatheringstatechange = () => diagnostico('iceGatheringState', peerId, conexion.iceGatheringState)
     conexion.oniceconnectionstatechange = () => diagnostico('iceConnectionState', peerId, conexion.iceConnectionState)
@@ -114,13 +137,26 @@ export function useInterphone({ usuarioId, nombre, rol }: UseInterphoneArgs) {
   }, [cerrarConexion, emitir, reproducirAudio, usuarioId])
 
   const crearOferta = useCallback(async (peerId: string) => {
-    const conexion = obtenerConexion(peerId)
-    if (conexion.signalingState !== 'stable') return
-    const oferta = await conexion.createOffer()
-    await conexion.setLocalDescription(oferta)
-    diagnosticoSdp('offer', peerId, oferta.sdp)
-    await emitir('offer', { origen: usuarioId, destino: peerId, descripcion: oferta } satisfies SenalWebRTC)
-  }, [emitir, obtenerConexion, usuarioId])
+    if (negociadosRef.current.has(peerId) || ofertasSolicitadasRef.current.has(peerId)) return
+    ofertasSolicitadasRef.current.add(peerId)
+    await encolarNegociacion(peerId, async () => {
+      const conexion = obtenerConexion(peerId)
+      if (conexion.signalingState !== 'stable' || negociadosRef.current.has(peerId)) return
+      makingOfferRef.current.add(peerId)
+      try {
+        diagnostico('CREATE_OFFER', peerId); diagnosticoTransceivers(peerId, conexion)
+        const oferta = await conexion.createOffer()
+        await conexion.setLocalDescription(oferta)
+        diagnostico('SET_LOCAL_OFFER', peerId); diagnosticoSdp('offer', peerId, oferta.sdp); diagnosticoTransceivers(peerId, conexion)
+        await emitir('offer', { origen: usuarioId, destino: peerId, descripcion: oferta } satisfies SenalWebRTC)
+      } catch (causa) {
+        diagnostico('NEGOTIATION_FAILED', peerId, causa instanceof Error ? causa.name : 'unknown')
+        cerrarConexion(peerId)
+      } finally {
+        makingOfferRef.current.delete(peerId); ofertasSolicitadasRef.current.delete(peerId)
+      }
+    })
+  }, [cerrarConexion, emitir, encolarNegociacion, obtenerConexion, usuarioId])
 
   const desconectar = useCallback(async () => {
     activoRef.current = false
@@ -149,16 +185,42 @@ export function useInterphone({ usuarioId, nombre, rol }: UseInterphoneArgs) {
       canalRef.current = canal
       const procesarSenal = async (evento: string, senal: SenalWebRTC) => {
         if (senal.destino !== usuarioId || !activoRef.current) return
-        const conexion = obtenerConexion(senal.origen)
-        if (evento === 'offer' && senal.descripcion) {
-          diagnosticoSdp('offer', senal.origen, senal.descripcion.sdp)
-          await conexion.setRemoteDescription(senal.descripcion)
-          const respuesta = await conexion.createAnswer()
-          await conexion.setLocalDescription(respuesta)
-          diagnosticoSdp('answer', senal.origen, respuesta.sdp)
-          await emitir('answer', { origen: usuarioId, destino: senal.origen, descripcion: respuesta } satisfies SenalWebRTC)
-        } else if (evento === 'answer' && senal.descripcion) { diagnosticoSdp('answer', senal.origen, senal.descripcion.sdp); await conexion.setRemoteDescription(senal.descripcion) }
-        else if (evento === 'ice-candidate' && senal.candidato) await conexion.addIceCandidate(senal.candidato)
+        await encolarNegociacion(senal.origen, async () => {
+          const conexion = obtenerConexion(senal.origen)
+          try {
+            if (evento === 'offer' && senal.descripcion) {
+              const listo = !makingOfferRef.current.has(senal.origen) && (conexion.signalingState === 'stable' || settingRemoteAnswerRef.current.has(senal.origen))
+              const colision = !listo
+              const polite = usuarioId > senal.origen
+              if (colision) diagnostico('NEGOTIATION_COLLISION', { peerId: senal.origen, polite, signalingState: conexion.signalingState })
+              if (colision && !polite) { ignoreOfferRef.current.add(senal.origen); return }
+              ignoreOfferRef.current.delete(senal.origen)
+              if (colision) await conexion.setLocalDescription({ type: 'rollback' })
+              diagnostico('REMOTE_OFFER', senal.origen); diagnosticoSdp('offer', senal.origen, senal.descripcion.sdp)
+              await conexion.setRemoteDescription(senal.descripcion)
+              for (const candidato of candidatosPendientesRef.current.get(senal.origen) || []) await conexion.addIceCandidate(candidato)
+              candidatosPendientesRef.current.delete(senal.origen)
+              diagnostico('CREATE_ANSWER', senal.origen)
+              const respuesta = await conexion.createAnswer()
+              await conexion.setLocalDescription(respuesta)
+              negociadosRef.current.add(senal.origen)
+              diagnostico('SET_LOCAL_ANSWER', senal.origen); diagnosticoSdp('answer', senal.origen, respuesta.sdp); diagnosticoTransceivers(senal.origen, conexion)
+              await emitir('answer', { origen: usuarioId, destino: senal.origen, descripcion: respuesta } satisfies SenalWebRTC)
+            } else if (evento === 'answer' && senal.descripcion) {
+              settingRemoteAnswerRef.current.add(senal.origen)
+              try { diagnostico('REMOTE_ANSWER', senal.origen); diagnosticoSdp('answer', senal.origen, senal.descripcion.sdp); await conexion.setRemoteDescription(senal.descripcion); negociadosRef.current.add(senal.origen); diagnosticoTransceivers(senal.origen, conexion) }
+              finally { settingRemoteAnswerRef.current.delete(senal.origen) }
+              for (const candidato of candidatosPendientesRef.current.get(senal.origen) || []) await conexion.addIceCandidate(candidato)
+              candidatosPendientesRef.current.delete(senal.origen)
+            } else if (evento === 'ice-candidate' && senal.candidato && !ignoreOfferRef.current.has(senal.origen)) {
+              if (conexion.remoteDescription) await conexion.addIceCandidate(senal.candidato)
+              else candidatosPendientesRef.current.set(senal.origen, [...(candidatosPendientesRef.current.get(senal.origen) || []), senal.candidato])
+            }
+          } catch (causa) {
+            diagnostico('NEGOTIATION_FAILED', senal.origen, causa instanceof Error ? causa.name : 'unknown')
+            cerrarConexion(senal.origen)
+          }
+        })
       }
       canal
         .on('presence', { event: 'sync' }, () => {
@@ -166,7 +228,7 @@ export function useInterphone({ usuarioId, nombre, rol }: UseInterphoneArgs) {
             .filter((dato): dato is Record<string, unknown> => typeof dato === 'object' && dato !== null && 'id' in dato)
           diagnostico('presence sync', presentes.map((dato) => String(dato.id)))
           setUsuarios(presentes.map((dato) => ({ id: String(dato.id), nombre: String(dato.nombre), rol: dato.rol === 'Admin' ? 'Admin' : 'Vendedor', hablando: Boolean(dato.hablando), onlineAt: String(dato.onlineAt) })))
-          presentes.forEach((peer) => { const peerId = String(peer.id); if (peerId !== usuarioId && usuarioId < peerId) void crearOferta(peerId) })
+          presentes.forEach((peer) => { const peerId = String(peer.id); if (peerId !== usuarioId && usuarioId < peerId && !negociadosRef.current.has(peerId)) void crearOferta(peerId) })
         })
         .on('presence', { event: 'join' }, ({ newPresences }) => diagnostico('presence join', newPresences.map((dato) => String((dato as { id?: string }).id || ''))))
         .on('presence', { event: 'leave' }, ({ leftPresences }) => {
@@ -215,7 +277,7 @@ export function useInterphone({ usuarioId, nombre, rol }: UseInterphoneArgs) {
       setEstado(denegado ? 'sin-microfono' : 'error')
       setError(denegado ? 'Permite el micrófono en el navegador para usar Interphone.' : 'No fue posible activar Interphone. Revisa la conexión e inténtalo de nuevo.')
     }
-  }, [apagarMicrofono, cerrarConexion, crearOferta, emitir, nombre, obtenerConexion, rol, usuarioId])
+  }, [apagarMicrofono, cerrarConexion, crearOferta, emitir, encolarNegociacion, nombre, obtenerConexion, rol, usuarioId])
 
   const iniciarTransmision = useCallback(() => {
     if (estado !== 'conectado' || hablandoId || transmitiendoRef.current) return
