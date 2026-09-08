@@ -1,0 +1,4 @@
+sdk.dir=C\:\\Users\\TU_USUARIO\\AppData\\Local\\Android\\Sdk
+SUPABASE_URL=https://tu-proyecto.supabase.co
+SUPABASE_PUBLISHABLE_KEY=sb_publishable_xxx
+INTERPHONE_STUN_URL=stun:stun.l.google.com:19302

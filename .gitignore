@@ -43,3 +43,10 @@ next-env.d.ts
 app/page.backup.tsx
 .vercel
 .env*
+# Herramientas locales de validación Android
+/.android-sdk/
+/.gradle-user/
+/.tmp-gradle/
+/.android-commandline.zip
+/.tmp-gradle-8.13-bin.zip
+/.android-user/
