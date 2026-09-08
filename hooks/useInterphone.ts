@@ -9,6 +9,9 @@ import { normalizarVolumen } from '@/utils/interphone'
 
 const CANAL = 'interphone:bodega'
 const STUN_FALLBACK = 'stun:stun.l.google.com:19302'
+const diagnostico = (...datos: unknown[]) => {
+  if (process.env.NODE_ENV !== 'production') console.debug('[Interphone]', ...datos)
+}
 
 interface UseInterphoneArgs { usuarioId: string; nombre: string; rol: RolUsuario }
 
@@ -142,24 +145,38 @@ export function useInterphone({ usuarioId, nombre, rol }: UseInterphoneArgs) {
         .on('presence', { event: 'sync' }, () => {
           const presentes = (Object.values(canal.presenceState()).flat() as unknown[])
             .filter((dato): dato is Record<string, unknown> => typeof dato === 'object' && dato !== null && 'id' in dato)
+          diagnostico('presence sync', presentes.map((dato) => String(dato.id)))
           setUsuarios(presentes.map((dato) => ({ id: String(dato.id), nombre: String(dato.nombre), rol: dato.rol === 'Admin' ? 'Admin' : 'Vendedor', hablando: Boolean(dato.hablando), onlineAt: String(dato.onlineAt) })))
           presentes.forEach((peer) => { const peerId = String(peer.id); if (peerId !== usuarioId && usuarioId < peerId) void crearOferta(peerId) })
         })
-        .on('presence', { event: 'leave' }, ({ leftPresences }) => leftPresences.forEach((dato) => { const id = String((dato as { id?: string }).id || ''); if (id) { cerrarConexion(id); setHablandoId((actual) => actual === id ? null : actual) } }))
-        .on('broadcast', { event: 'offer' }, ({ payload }) => { void procesarSenal('offer', payload as SenalWebRTC) })
-        .on('broadcast', { event: 'answer' }, ({ payload }) => { void procesarSenal('answer', payload as SenalWebRTC) })
-        .on('broadcast', { event: 'ice-candidate' }, ({ payload }) => { void procesarSenal('ice-candidate', payload as SenalWebRTC) })
+        .on('presence', { event: 'join' }, ({ newPresences }) => diagnostico('presence join', newPresences.map((dato) => String((dato as { id?: string }).id || ''))))
+        .on('presence', { event: 'leave' }, ({ leftPresences }) => {
+          diagnostico('presence leave', leftPresences.map((dato) => String((dato as { id?: string }).id || '')))
+          leftPresences.forEach((dato) => { const id = String((dato as { id?: string }).id || ''); if (id) { cerrarConexion(id); setHablandoId((actual) => actual === id ? null : actual) } })
+        })
+        .on('broadcast', { event: 'ping' }, ({ payload }) => diagnostico('broadcast ping received', String((payload as { origen?: string }).origen || 'desconocido')))
+        .on('broadcast', { event: 'offer' }, ({ payload }) => { diagnostico('broadcast offer received', String((payload as SenalWebRTC).origen)); void procesarSenal('offer', payload as SenalWebRTC) })
+        .on('broadcast', { event: 'answer' }, ({ payload }) => { diagnostico('broadcast answer received', String((payload as SenalWebRTC).origen)); void procesarSenal('answer', payload as SenalWebRTC) })
+        .on('broadcast', { event: 'ice-candidate' }, ({ payload }) => { diagnostico('broadcast ice-candidate received', String((payload as SenalWebRTC).origen)); void procesarSenal('ice-candidate', payload as SenalWebRTC) })
         .on('broadcast', { event: 'ptt-start' }, ({ payload }) => {
           const id = String((payload as { usuarioId?: string }).usuarioId || '')
+          diagnostico('broadcast ptt-start received', id)
           if (!id || id === usuarioId) return
           if (transmitiendoRef.current && usuarioId < id) { void emitir('ptt-start', { usuarioId }); return }
           apagarMicrofono(); setHablandoId(id)
         })
-        .on('broadcast', { event: 'ptt-stop' }, ({ payload }) => { const id = String((payload as { usuarioId?: string }).usuarioId || ''); setHablandoId((actual) => actual === id ? null : actual) })
+        .on('broadcast', { event: 'ptt-stop' }, ({ payload }) => { const id = String((payload as { usuarioId?: string }).usuarioId || ''); diagnostico('broadcast ptt-stop received', id); setHablandoId((actual) => actual === id ? null : actual) })
         .subscribe(async (status) => {
+          diagnostico('channel status', status, { topic: `realtime:${CANAL}`, peerId: usuarioId })
           if (status === 'SUBSCRIBED') {
-            setEstado('conectado')
-            await canal.track({ id: usuarioId, nombre, rol, hablando: false, onlineAt: new Date().toISOString() } satisfies UsuarioInterphone)
+            const resultado = await canal.track({ id: usuarioId, nombre, rol, hablando: false, onlineAt: new Date().toISOString() } satisfies UsuarioInterphone)
+            diagnostico('presence track', resultado, usuarioId)
+            if (resultado === 'ok') {
+              setEstado('conectado')
+              if (process.env.NODE_ENV !== 'production') await canal.send({ type: 'broadcast', event: 'ping', payload: { origen: usuarioId } })
+            } else {
+              apagarMicrofono(); setEstado('reconectando')
+            }
           } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
             apagarMicrofono(); setEstado('reconectando')
           } else if (status === 'CLOSED' && activoRef.current) { apagarMicrofono(); setEstado('reconectando') }
