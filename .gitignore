@@ -50,3 +50,4 @@ app/page.backup.tsx
 /.android-commandline.zip
 /.tmp-gradle-8.13-bin.zip
 /.android-user/
+fastlook-interphone-android/gradle/errors/*.log
