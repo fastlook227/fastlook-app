@@ -1,13 +1,16 @@
 package mx.fastlook.interphone.service
 
+import android.Manifest
 import android.app.*
 import android.content.*
+import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.media.*
 import android.net.*
 import android.os.*
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
+import androidx.core.content.ContextCompat
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -59,6 +62,7 @@ class InterphoneService : Service(), SignalingListener, WebRtcEvents {
         if (user != null) return
         token = intent.getStringExtra(EXTRA_TOKEN)
         val id = intent.getStringExtra(EXTRA_ID); val name = intent.getStringExtra(EXTRA_NAME); val role = intent.getStringExtra(EXTRA_ROLE)
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) { mutableState.value = InterphoneState(error = "Permiso de micrófono no concedido."); stopSelf(); return }
         if (token.isNullOrBlank() || id.isNullOrBlank() || name.isNullOrBlank() || role !in setOf("Admin", "Vendedor")) { mutableState.value = InterphoneState(error = "Sesión inválida."); stopSelf(); return }
         user = UserPresence(id, name, role!!, false, java.time.Instant.now().toString())
         mutableState.value = mutableState.value.copy(connectionState = ConnectionState.CONNECTING)

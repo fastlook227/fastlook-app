@@ -12,6 +12,12 @@ const STUN_FALLBACK = 'stun:stun.l.google.com:19302'
 const diagnostico = (...datos: unknown[]) => {
   if (process.env.NODE_ENV !== 'production') console.debug('[Interphone]', ...datos)
 }
+const diagnosticoSdp = (tipo: 'offer' | 'answer', peerId: string, sdp?: string) => {
+  if (process.env.NODE_ENV === 'production') return
+  const audio = sdp?.split(/\r?\n/).some((linea) => linea.startsWith('m=audio')) ?? false
+  const direccion = sdp?.match(/^a=(sendrecv|sendonly|recvonly|inactive)$/m)?.[1] || 'desconocida'
+  diagnostico(`${tipo} SDP`, { peerId, audio, direccion })
+}
 
 interface UseInterphoneArgs { usuarioId: string; nombre: string; rol: RolUsuario }
 
@@ -36,9 +42,10 @@ export function useInterphone({ usuarioId, nombre, rol }: UseInterphoneArgs) {
   const transmitiendoRef = useRef(false)
   const volumenRef = useRef(100)
   const silenciadoRef = useRef(false)
+  const statsTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const apagarMicrofono = useCallback(() => {
-    streamLocalRef.current?.getAudioTracks().forEach((track) => { track.enabled = false })
+    streamLocalRef.current?.getAudioTracks().forEach((track) => { track.enabled = false; diagnostico('LOCAL_AUDIO_TRACK', { enabled: track.enabled, muted: track.muted, readyState: track.readyState }) })
     transmitiendoRef.current = false
     setTransmitiendo(false)
   }, [])
@@ -66,7 +73,7 @@ export function useInterphone({ usuarioId, nombre, rol }: UseInterphoneArgs) {
   const reproducirAudio = useCallback(async (audio: HTMLAudioElement) => {
     audio.volume = normalizarVolumen(volumenRef.current)
     audio.muted = silenciadoRef.current
-    try { await audio.play(); setAudioBloqueado(false) } catch { setAudioBloqueado(true) }
+    try { await audio.play(); diagnostico('AUTOPLAY_ALLOWED'); setAudioBloqueado(false) } catch { diagnostico('AUTOPLAY_BLOCKED'); setAudioBloqueado(true) }
   }, [])
 
   const obtenerConexion = useCallback((peerId: string) => {
@@ -74,12 +81,17 @@ export function useInterphone({ usuarioId, nombre, rol }: UseInterphoneArgs) {
     if (existente) return existente
     const conexion = new RTCPeerConnection(configuracionRTC())
     const streamLocal = streamLocalRef.current
-    if (streamLocal) streamLocal.getTracks().forEach((track) => conexion.addTrack(track, streamLocal))
+    if (streamLocal) streamLocal.getAudioTracks().forEach((track) => { conexion.addTrack(track, streamLocal); diagnostico('LOCAL_AUDIO_TRACK added', { peerId, enabled: track.enabled, muted: track.muted, readyState: track.readyState }) })
+    conexion.onsignalingstatechange = () => diagnostico('signalingState', peerId, conexion.signalingState)
+    conexion.onicegatheringstatechange = () => diagnostico('iceGatheringState', peerId, conexion.iceGatheringState)
+    conexion.oniceconnectionstatechange = () => diagnostico('iceConnectionState', peerId, conexion.iceConnectionState)
     conexion.onicecandidate = ({ candidate }) => {
       if (candidate) void emitir('ice-candidate', { origen: usuarioId, destino: peerId, candidato: candidate.toJSON() } satisfies SenalWebRTC)
     }
-    conexion.ontrack = ({ streams }) => {
-      const stream = streams[0]
+    conexion.ontrack = ({ streams, track }) => {
+      const eventoTrack = track || conexion.getReceivers().map((receiver) => receiver.track).find((remote) => remote?.kind === 'audio')
+      diagnostico('REMOTE_TRACK_RECEIVED', { peerId, kind: eventoTrack?.kind, enabled: eventoTrack?.enabled, muted: eventoTrack?.muted, readyState: eventoTrack?.readyState })
+      const stream = streams[0] || (eventoTrack ? new MediaStream([eventoTrack]) : undefined)
       if (!stream) return
       let audio = audiosRef.current.get(peerId)
       if (!audio) {
@@ -94,6 +106,7 @@ export function useInterphone({ usuarioId, nombre, rol }: UseInterphoneArgs) {
       void reproducirAudio(audio)
     }
     conexion.onconnectionstatechange = () => {
+      diagnostico('connectionState', peerId, conexion.connectionState)
       if (['failed', 'closed'].includes(conexion.connectionState)) cerrarConexion(peerId)
     }
     conexionesRef.current.set(peerId, conexion)
@@ -105,6 +118,7 @@ export function useInterphone({ usuarioId, nombre, rol }: UseInterphoneArgs) {
     if (conexion.signalingState !== 'stable') return
     const oferta = await conexion.createOffer()
     await conexion.setLocalDescription(oferta)
+    diagnosticoSdp('offer', peerId, oferta.sdp)
     await emitir('offer', { origen: usuarioId, destino: peerId, descripcion: oferta } satisfies SenalWebRTC)
   }, [emitir, obtenerConexion, usuarioId])
 
@@ -117,6 +131,8 @@ export function useInterphone({ usuarioId, nombre, rol }: UseInterphoneArgs) {
     const canal = canalRef.current
     canalRef.current = null
     if (canal) await supabase.removeChannel(canal)
+    if (statsTimerRef.current) clearInterval(statsTimerRef.current)
+    statsTimerRef.current = null
     setUsuarios([]); setHablandoId(null); setEstado('desconectado'); setAudioBloqueado(false)
   }, [cerrarConexion, detenerTransmision])
 
@@ -126,6 +142,7 @@ export function useInterphone({ usuarioId, nombre, rol }: UseInterphoneArgs) {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false })
       stream.getAudioTracks().forEach((track) => { track.enabled = false })
+      diagnostico('getUserMedia ok', stream.getAudioTracks().map((track) => ({ enabled: track.enabled, muted: track.muted, readyState: track.readyState })))
       streamLocalRef.current = stream
       activoRef.current = true
       const canal = supabase.channel(CANAL, { config: { presence: { key: usuarioId }, broadcast: { self: false } } })
@@ -134,11 +151,13 @@ export function useInterphone({ usuarioId, nombre, rol }: UseInterphoneArgs) {
         if (senal.destino !== usuarioId || !activoRef.current) return
         const conexion = obtenerConexion(senal.origen)
         if (evento === 'offer' && senal.descripcion) {
+          diagnosticoSdp('offer', senal.origen, senal.descripcion.sdp)
           await conexion.setRemoteDescription(senal.descripcion)
           const respuesta = await conexion.createAnswer()
           await conexion.setLocalDescription(respuesta)
+          diagnosticoSdp('answer', senal.origen, respuesta.sdp)
           await emitir('answer', { origen: usuarioId, destino: senal.origen, descripcion: respuesta } satisfies SenalWebRTC)
-        } else if (evento === 'answer' && senal.descripcion) await conexion.setRemoteDescription(senal.descripcion)
+        } else if (evento === 'answer' && senal.descripcion) { diagnosticoSdp('answer', senal.origen, senal.descripcion.sdp); await conexion.setRemoteDescription(senal.descripcion) }
         else if (evento === 'ice-candidate' && senal.candidato) await conexion.addIceCandidate(senal.candidato)
       }
       canal
@@ -181,6 +200,15 @@ export function useInterphone({ usuarioId, nombre, rol }: UseInterphoneArgs) {
             apagarMicrofono(); setEstado('reconectando')
           } else if (status === 'CLOSED' && activoRef.current) { apagarMicrofono(); setEstado('reconectando') }
         })
+      if (process.env.NODE_ENV !== 'production') statsTimerRef.current = setInterval(() => conexionesRef.current.forEach((conexion, peerId) => {
+        void conexion.getStats().then((reporte) => reporte.forEach((stat) => {
+          const dato = stat as unknown as Record<string, unknown>
+          const tipo = String(dato.type || '')
+          const medio = String(dato.kind || dato.mediaType || '')
+          if (medio !== 'audio' || !['inbound-rtp', 'outbound-rtp'].includes(tipo)) return
+          diagnostico('AUDIO_STATS', { peerId, direccion: tipo, bytesSent: dato.bytesSent, packetsSent: dato.packetsSent, bytesReceived: dato.bytesReceived, packetsReceived: dato.packetsReceived, audioLevel: dato.audioLevel })
+        })).catch(() => diagnostico('AUDIO_STATS unavailable', peerId))
+      }), 2_000)
     } catch (causa) {
       activoRef.current = false; apagarMicrofono()
       const denegado = causa instanceof DOMException && ['NotAllowedError', 'NotFoundError'].includes(causa.name)
@@ -194,6 +222,7 @@ export function useInterphone({ usuarioId, nombre, rol }: UseInterphoneArgs) {
     const track = streamLocalRef.current?.getAudioTracks()[0]
     if (!track) return
     track.enabled = true; transmitiendoRef.current = true; setTransmitiendo(true); setHablandoId(usuarioId)
+    diagnostico('LOCAL_AUDIO_TRACK', { enabled: track.enabled, muted: track.muted, readyState: track.readyState })
     void emitir('ptt-start', { usuarioId })
   }, [emitir, estado, hablandoId, usuarioId])
 
