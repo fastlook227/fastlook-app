@@ -3,11 +3,12 @@
 import { ShoppingCart } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { CarritoLinea } from '@/types'
-import { ajustarAlBorde, CLAVE_POSICION_CARRITO, limitarPosicionCarrito, posicionInicialCarrito, restaurarPosicionCarrito, serializarPosicionCarrito, superoUmbralArrastre, resumirCarritoFlotante, type EntornoCarrito, type PosicionCarrito } from '@/utils/carritoFlotante'
+import { ajustarAlBorde, limitarPosicionCarrito, obtenerClavePosicionCarrito, obtenerModoViewportCarrito, posicionInicialCarrito, restaurarPosicionCarrito, serializarPosicionCarrito, superoUmbralArrastre, resumirCarritoFlotante, type EntornoCarrito, type ModoViewportCarrito, type PosicionCarrito } from '@/utils/carritoFlotante'
 
 const BURBUJA = 60
 const MARGEN = 12
 const RESERVA_NAV = 78
+const ANCHO_SIDEBAR = 264
 
 function leerSafeAreas() {
   const medidor = document.createElement('div')
@@ -21,7 +22,9 @@ function leerSafeAreas() {
 
 function obtenerEntorno(): EntornoCarrito {
   const viewport = window.visualViewport
-  return { anchoViewport: viewport?.width || window.innerWidth, altoViewport: viewport?.height || window.innerHeight, anchoBurbuja: BURBUJA, altoBurbuja: BURBUJA, margen: MARGEN, reservaInferior: RESERVA_NAV, ...leerSafeAreas() }
+  const anchoViewport = viewport?.width || window.innerWidth
+  const desktop = obtenerModoViewportCarrito(anchoViewport) === 'desktop'
+  return { anchoViewport, altoViewport: viewport?.height || window.innerHeight, anchoBurbuja: BURBUJA, altoBurbuja: BURBUJA, margen: MARGEN, reservaIzquierda: desktop ? ANCHO_SIDEBAR : 0, reservaInferior: desktop ? 0 : RESERVA_NAV, ...leerSafeAreas() }
 }
 
 export default function CarritoFlotanteGlobal({ carrito, onAbrirVenta, disabled = false }: { carrito: readonly CarritoLinea[]; onAbrirVenta: () => void; disabled?: boolean }) {
@@ -30,11 +33,22 @@ export default function CarritoFlotanteGlobal({ carrito, onAbrirVenta, disabled 
   const [arrastrando, setArrastrando] = useState(false)
   const gesto = useRef<{ pointerId: number; inicioPuntero: PosicionCarrito; inicioBurbuja: PosicionCarrito; arrastro: boolean } | null>(null)
   const ignorarClick = useRef(false)
+  const modoViewport = useRef<ModoViewportCarrito | null>(null)
 
   useEffect(() => {
     const entorno = obtenerEntorno()
-    setPosicion(restaurarPosicionCarrito(window.localStorage.getItem(CLAVE_POSICION_CARRITO), entorno))
-    const reajustar = () => setPosicion((actual) => actual ? limitarPosicionCarrito(actual, obtenerEntorno()) : posicionInicialCarrito(obtenerEntorno()))
+    modoViewport.current = obtenerModoViewportCarrito(entorno.anchoViewport)
+    setPosicion(restaurarPosicionCarrito(window.localStorage.getItem(obtenerClavePosicionCarrito(modoViewport.current)), entorno))
+    const reajustar = () => {
+      const siguienteEntorno = obtenerEntorno()
+      const siguienteModo = obtenerModoViewportCarrito(siguienteEntorno.anchoViewport)
+      if (siguienteModo !== modoViewport.current) {
+        modoViewport.current = siguienteModo
+        setPosicion(restaurarPosicionCarrito(window.localStorage.getItem(obtenerClavePosicionCarrito(siguienteModo)), siguienteEntorno))
+        return
+      }
+      setPosicion((actual) => actual ? limitarPosicionCarrito(actual, siguienteEntorno) : posicionInicialCarrito(siguienteEntorno))
+    }
     window.addEventListener('resize', reajustar)
     window.visualViewport?.addEventListener('resize', reajustar)
     return () => { window.removeEventListener('resize', reajustar); window.visualViewport?.removeEventListener('resize', reajustar) }
@@ -48,8 +62,11 @@ export default function CarritoFlotanteGlobal({ carrito, onAbrirVenta, disabled 
     if (fueArrastre) {
       ignorarClick.current = true
       setPosicion((actual) => {
-        const final = ajustarAlBorde(actual || posicionInicialCarrito(obtenerEntorno()), obtenerEntorno())
-        window.localStorage.setItem(CLAVE_POSICION_CARRITO, serializarPosicionCarrito(final))
+        const entorno = obtenerEntorno()
+        const final = ajustarAlBorde(actual || posicionInicialCarrito(entorno), entorno)
+        const modo = obtenerModoViewportCarrito(entorno.anchoViewport)
+        modoViewport.current = modo
+        window.localStorage.setItem(obtenerClavePosicionCarrito(modo), serializarPosicionCarrito(final))
         return final
       })
     }
