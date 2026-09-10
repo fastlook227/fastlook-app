@@ -58,6 +58,7 @@ import FiltrosProductos from '@/components/FiltrosProductos'
 import VentaRapida from '@/components/VentaRapida'
 import VentasPendientesTabs from '@/components/VentasPendientesTabs'
 import CalculadorasPersonalizadas from '@/components/CalculadorasPersonalizadas'
+import CheckIn from '@/components/checkin/CheckIn'
 import ScannerCodigoBarras, { type FeedbackScanner } from '@/components/codigos-barras/ScannerCodigoBarras'
 import { crearMapaCodigosBarras, normalizarCodigoBarras } from '@/utils/codigoBarras'
 import {
@@ -472,7 +473,7 @@ const fetchMovimientosClientes = async () => {
   }, [perfilUsuario, fechaOperativa])
 
   useEffect(() => {
-    const tabsAdmin = ['inventario', 'corte', 'proveedores', 'compras', 'movimientos', 'dashboard', 'usuarios', 'productos-personalizados']
+    const tabsAdmin = ['inventario', 'corte', 'proveedores', 'compras', 'movimientos', 'dashboard', 'usuarios', 'productos-personalizados', 'check-in']
 
     if (tab === 'corte' && !puedeAccederCorteCaja(perfilUsuario?.correo)) {
       setAvisoCorte('No tienes permiso para acceder a Corte de caja.')
@@ -2165,6 +2166,7 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
         )}
 
         {tab === 'dashboard' && <Dashboard />}
+        {tab === 'check-in' && usuarioRol === 'Admin' && <CheckIn />}
         {tab === 'usuarios' && <GestionUsuarios />}
         {tab === 'productos-personalizados' && usuarioRol === 'Admin' && <CalculadorasPersonalizadas onAgregar={agregarPersonalizado} />}
         {tab === 'interphone' && <Interphone usuarioId={perfilUsuario.id} usuarioNombre={perfilUsuario.nombre} usuarioRol={usuarioRol} />}

@@ -17,7 +17,7 @@ type ConstructorDetector = {
   getSupportedFormats: () => Promise<string[]>
 }
 
-const FORMATOS = ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128']
+const FORMATOS = ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'qr_code']
 const AUSENCIA_PARA_REPETIR_MS = 900
 
 const mensajeCamara = (error: unknown) => {

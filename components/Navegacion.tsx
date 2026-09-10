@@ -18,6 +18,7 @@ import {
   Users,
   WalletCards,
   Radio,
+  ScanFace,
 } from 'lucide-react'
 import type { RolUsuario, Tab } from '@/types'
 import { puedeAccederCorteCaja } from '@/lib/permisos/corteCaja'
@@ -48,6 +49,7 @@ const itemsGenerales: NavigationItem[] = [
 ]
 
 const itemsAdmin: NavigationItem[] = [
+  { tab: 'check-in', label: 'Check In', icon: ScanFace },
   { tab: 'inventario', label: 'Inventario', icon: Package },
   { tab: 'corte', label: 'Corte de caja', icon: WalletCards },
   { tab: 'proveedores', label: 'Proveedores', icon: Truck },
