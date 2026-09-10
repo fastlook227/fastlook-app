@@ -35,6 +35,7 @@ interface NavegacionProps {
   onCambiarTab: (tab: Tab) => void
   onCerrarSistema: () => void
   children: ReactNode
+  floatingCart?: ReactNode
 }
 
 const itemsGenerales: NavigationItem[] = [
@@ -68,6 +69,7 @@ export default function Navegacion({
   onCambiarTab,
   onCerrarSistema,
   children,
+  floatingCart,
 }: NavegacionProps) {
   const accesoCorte = puedeAccederCorteCaja(usuarioCorreo)
   const itemsAdminPermitidos = itemsAdmin.filter((item) => item.tab !== 'corte' || accesoCorte)
@@ -110,6 +112,7 @@ export default function Navegacion({
           onCerrarSistema={onCerrarSistema}
         />
       }
+      floatingCart={floatingCart}
     >
       {children}
     </AppShell>

@@ -30,7 +30,7 @@ interface Props {
   onEscanear: (elemento: HTMLElement) => void
   onScannerContinuo: (activo: boolean) => void
   onEnter: () => void
-  onCobrar: (metodo: string) => Promise<boolean>
+  onCobrar: (metodo: string) => Promise<boolean | 'pendiente'>
 }
 
 export default function VentaRapida(props: Props) {
@@ -49,8 +49,9 @@ export default function VentaRapida(props: Props) {
 
   const agregar = (producto: Producto) => { props.onAgregar(producto); enfocarBuscador() }
   const cobrar = async (metodo: string) => {
-    const ok = await props.onCobrar(metodo)
-    if (ok) { setCobroAbierto(false); setCarritoAbierto(false); enfocarBuscador() }
+    const resultado = await props.onCobrar(metodo)
+    if (resultado === 'pendiente') setCobroAbierto(false)
+    if (resultado === true) { setCobroAbierto(false); setCarritoAbierto(false); enfocarBuscador() }
   }
 
   return <div className="fl-quick-sale">

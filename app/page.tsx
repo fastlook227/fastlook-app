@@ -58,6 +58,10 @@ import FiltrosProductos from '@/components/FiltrosProductos'
 import VentaRapida from '@/components/VentaRapida'
 import VentasPendientesTabs from '@/components/VentasPendientesTabs'
 import CalculadorasPersonalizadas from '@/components/CalculadorasPersonalizadas'
+import CarritoFlotanteGlobal from '@/components/CarritoFlotanteGlobal'
+import usePOSDesktop from '@/hooks/usePOSDesktop'
+import { CobroEfectivoDesktop, ConfirmarImpresionDesktop } from '@/components/pos/POSDesktop'
+import { crearTicketPOS, requiereCapturaEfectivo, rpcPOS, type TicketPOS } from '@/utils/pos'
 import CheckIn from '@/components/checkin/CheckIn'
 import ScannerCodigoBarras, { type FeedbackScanner } from '@/components/codigos-barras/ScannerCodigoBarras'
 import { crearMapaCodigosBarras, normalizarCodigoBarras } from '@/utils/codigoBarras'
@@ -93,9 +97,12 @@ export default function Home() {
   const [modoVenta, setModoVenta] = useState<'normal' | 'rapida'>('normal')
   const [procesandoVenta, setProcesandoVenta] = useState(false)
   const procesandoVentaRef = useRef(false)
-  const intentosVentaRef = useRef(new Map<string, { idempotencyKey: string; metodoPago: string; rpc: 'procesar_venta' | 'procesar_venta_mixta'; lineasNormales: Array<{ producto_id: string; cantidad: number }>; lineasPersonalizadas: Array<{ tipo_personalizado: string; cantidad: number; configuracion: Record<string, unknown> }> }>())
+  const intentosVentaRef = useRef(new Map<string, { idempotencyKey: string; metodoPago: string; efectivoRecibido: number | null; rpc: 'procesar_venta' | 'procesar_venta_mixta' | 'procesar_venta_pos' | 'procesar_venta_mixta_pos'; lineasNormales: Array<{ producto_id: string; cantidad: number }>; lineasPersonalizadas: Array<{ tipo_personalizado: string; cantidad: number; configuracion: Record<string, unknown> }> }>())
   const ventaProcesandoIdRef = useRef<string | null>(null)
   const [resultadoVenta, setResultadoVenta] = useState<{ ticketId: string; folio: string; total: number } | null>(null)
+  const [cobroEfectivoPOS, setCobroEfectivoPOS] = useState<{ ventaId: string; total: number } | null>(null)
+  const [ticketPOS, setTicketPOS] = useState<TicketPOS | null>(null)
+  const esDesktopPOS = usePOSDesktop()
   const [guardandoProducto, setGuardandoProducto] = useState(false)
   const guardandoProductoRef = useRef(false)
   const [notificacionOperacion, setNotificacionOperacion] = useState<{ tipo: 'ok' | 'error'; mensaje: string } | null>(null)
@@ -389,7 +396,13 @@ export default function Home() {
       return
     }
 
-    setMovimientos(data || [])
+    const movimientosCargados = (data || []) as MovimientoInventario[]
+    const ticketsIds = [...new Set(movimientosCargados.map((movimiento) => movimiento.ticket_id).filter((id): id is string => Boolean(id)))]
+    if (!ticketsIds.length) { setMovimientos(movimientosCargados); return }
+    const cabeceras = await supabase.from('ventas_tickets').select('ticket_id,total,metodo_pago,efectivo_recibido,cambio').in('ticket_id', ticketsIds)
+    if (cabeceras.error) { setMovimientos(movimientosCargados); return }
+    const porId = new Map((cabeceras.data || []).map((ticket) => [ticket.ticket_id, ticket]))
+    setMovimientos(movimientosCargados.map((movimiento) => ({ ...movimiento, ...(movimiento.ticket_id ? porId.get(movimiento.ticket_id) : {}) })))
   }
 
 
@@ -804,10 +817,10 @@ const fetchMovimientosClientes = async () => {
   )
 
   const mensajesVenta: Record<string, string> = {
-    SIN_SESION: 'Tu sesión terminó. Inicia sesión nuevamente.', ROL_NO_PERMITIDO: 'Tu usuario no puede registrar ventas.', USUARIO_INACTIVO: 'Tu usuario está inactivo.', PERFIL_INVALIDO: 'Tu perfil no está completo.', IDEMPOTENCIA_INVALIDA: 'No fue posible identificar la operación.', METODO_INVALIDO: 'Selecciona un método de pago válido.', CARRITO_VACIO: 'Agrega al menos un producto.', LINEAS_INVALIDAS: 'Revisa los productos y cantidades.', PRODUCTO_INEXISTENTE: 'Uno de los productos ya no existe.', PRODUCTO_ARCHIVADO: 'Uno de los productos está archivado.', PRECIO_INVALIDO: 'Uno de los productos no tiene un precio válido.', STOCK_INVALIDO: 'Uno de los productos no tiene un stock válido.', STOCK_INSUFICIENTE: 'No hay stock suficiente. El inventario fue actualizado.',
+    SIN_SESION: 'Tu sesión terminó. Inicia sesión nuevamente.', ROL_NO_PERMITIDO: 'Tu usuario no puede registrar ventas.', USUARIO_INACTIVO: 'Tu usuario está inactivo.', PERFIL_INVALIDO: 'Tu perfil no está completo.', IDEMPOTENCIA_INVALIDA: 'No fue posible identificar la operación.', METODO_INVALIDO: 'Selecciona un método de pago válido.', CARRITO_VACIO: 'Agrega al menos un producto.', LINEAS_INVALIDAS: 'Revisa los productos y cantidades.', PRODUCTO_INEXISTENTE: 'Uno de los productos ya no existe.', PRODUCTO_ARCHIVADO: 'Uno de los productos está archivado.', PRECIO_INVALIDO: 'Uno de los productos no tiene un precio válido.', STOCK_INVALIDO: 'Uno de los productos no tiene un stock válido.', STOCK_INSUFICIENTE: 'No hay stock suficiente. El inventario fue actualizado.', EFECTIVO_INSUFICIENTE: 'El total del servidor supera el efectivo recibido. Revisa el total e ingresa nuevamente el pago.',
   }
 
-  const finalizarVenta = async (metodoSeleccionado = metodoPago): Promise<boolean> => {
+  const finalizarVenta = async (metodoSeleccionado = metodoPago, efectivoRecibido?: number): Promise<boolean> => {
     const ventaIdProcesada = estadoVentasRef.current.activaId
     const carritoProcesado = obtenerVentaActiva(estadoVentasRef.current).carrito
     if (carritoProcesado.length === 0) { setNotificacionOperacion({ tipo: 'error', mensaje: 'El carrito está vacío.' }); return false }
@@ -816,17 +829,25 @@ const fetchMovimientosClientes = async () => {
     setProcesandoVenta(true); setNotificacionOperacion(null)
     if (!intentosVentaRef.current.has(ventaIdProcesada)) {
       const payload = construirPayloadVenta(carritoProcesado)
-      intentosVentaRef.current.set(ventaIdProcesada, { idempotencyKey: crypto.randomUUID(), metodoPago: metodoSeleccionado, rpc: seleccionarRpcVenta(carritoProcesado), ...payload })
+      const esMixta = seleccionarRpcVenta(carritoProcesado) === 'procesar_venta_mixta'
+      const usarPos = esDesktopPOS && metodoSeleccionado === 'Efectivo'
+      intentosVentaRef.current.set(ventaIdProcesada, { idempotencyKey: crypto.randomUUID(), metodoPago: metodoSeleccionado, efectivoRecibido: usarPos ? (efectivoRecibido ?? null) : null, rpc: usarPos ? rpcPOS(esMixta) : (esMixta ? 'procesar_venta_mixta' : 'procesar_venta'), ...payload })
     }
     const intento = intentosVentaRef.current.get(ventaIdProcesada)!
     try {
-      const { data, error } = intento.rpc === 'procesar_venta_mixta'
-        ? await supabase.rpc('procesar_venta_mixta', { p_idempotency_key: intento.idempotencyKey, p_metodo_pago: intento.metodoPago, p_lineas_normales: intento.lineasNormales, p_lineas_personalizadas: intento.lineasPersonalizadas })
-        : await supabase.rpc('procesar_venta', { p_idempotency_key: intento.idempotencyKey, p_metodo_pago: intento.metodoPago, p_lineas: intento.lineasNormales })
+      const { data, error } = intento.rpc === 'procesar_venta_mixta_pos'
+        ? await supabase.rpc('procesar_venta_mixta_pos', { p_idempotency_key: intento.idempotencyKey, p_metodo_pago: intento.metodoPago, p_lineas_normales: intento.lineasNormales, p_lineas_personalizadas: intento.lineasPersonalizadas, p_efectivo_recibido: intento.efectivoRecibido })
+        : intento.rpc === 'procesar_venta_pos'
+          ? await supabase.rpc('procesar_venta_pos', { p_idempotency_key: intento.idempotencyKey, p_metodo_pago: intento.metodoPago, p_lineas: intento.lineasNormales, p_efectivo_recibido: intento.efectivoRecibido })
+          : intento.rpc === 'procesar_venta_mixta'
+            ? await supabase.rpc('procesar_venta_mixta', { p_idempotency_key: intento.idempotencyKey, p_metodo_pago: intento.metodoPago, p_lineas_normales: intento.lineasNormales, p_lineas_personalizadas: intento.lineasPersonalizadas })
+            : await supabase.rpc('procesar_venta', { p_idempotency_key: intento.idempotencyKey, p_metodo_pago: intento.metodoPago, p_lineas: intento.lineasNormales })
       if (error) throw error
-      const respuesta = data as { ok?: boolean; ticket_id?: string; folio?: string; total?: number | string }
+      const respuesta = data as { ok?: boolean; ticket_id?: string; folio?: string; total?: number | string; metodo_pago?: string; efectivo_recibido?: number | string | null; cambio?: number | string | null }
       if (!respuesta.ok || !respuesta.ticket_id || !respuesta.folio) throw new Error('RESULTADO_INCIERTO: La venta no fue confirmada.')
       setResultadoVenta({ ticketId: respuesta.ticket_id, folio: respuesta.folio, total: Number(respuesta.total || 0) })
+      if (esDesktopPOS) setTicketPOS(crearTicketPOS({ ticketId: respuesta.ticket_id, folio: respuesta.folio, fecha: new Date().toISOString(), cajero: perfilUsuario?.nombre || 'Fast Look', metodoPago: respuesta.metodo_pago || intento.metodoPago, total: Number(respuesta.total || 0), efectivoRecibido: respuesta.efectivo_recibido == null ? null : Number(respuesta.efectivo_recibido), cambio: respuesta.cambio == null ? null : Number(respuesta.cambio) }, carritoProcesado))
+      setCobroEfectivoPOS(null)
       intentosVentaRef.current.delete(ventaIdProcesada)
       establecerEstadoVentas(cerrarVentaPendiente(estadoVentasRef.current, ventaIdProcesada, crypto.randomUUID()))
       setCarritoAbierto(false)
@@ -843,7 +864,8 @@ const fetchMovimientosClientes = async () => {
       const mensajeOriginal = causa && typeof causa === 'object' && 'message' in causa ? String(causa.message) : String(causa)
       const prefijo = Object.keys(mensajesVenta).find((clave) => mensajeOriginal.includes(`${clave}:`))
       setNotificacionOperacion({ tipo: 'error', mensaje: prefijo ? mensajesVenta[prefijo] : 'No se confirmó la venta. Reintenta: se conservará la misma operación.' })
-      if (prefijo === 'STOCK_INSUFICIENTE') await fetchProductos(true)
+      if (prefijo === 'EFECTIVO_INSUFICIENTE') intentosVentaRef.current.delete(ventaIdProcesada)
+      if (prefijo === 'STOCK_INSUFICIENTE' || prefijo === 'EFECTIVO_INSUFICIENTE') await fetchProductos(true)
       return false
     } finally {
       ventaProcesandoIdRef.current = null
@@ -867,10 +889,17 @@ const fetchMovimientosClientes = async () => {
   const cobrarVentaRapida = async (metodo: string) => {
     if (metodo !== metodoPago) abandonarIntentoVenta(estadoVentasRef.current.activaId)
     setMetodoPago(metodo)
+    if (requiereCapturaEfectivo(esDesktopPOS, metodo)) { setCobroEfectivoPOS({ ventaId: estadoVentasRef.current.activaId, total: resumirCarritoMixto(obtenerVentaActiva(estadoVentasRef.current).carrito).total }); return 'pendiente' as const }
     return finalizarVenta(metodo)
   }
 
+  const solicitarFinalizarVenta = async () => {
+    if (requiereCapturaEfectivo(esDesktopPOS, metodoPago)) { setCobroEfectivoPOS({ ventaId: estadoVentasRef.current.activaId, total: totalCarrito }); return }
+    await finalizarVenta()
+  }
+
   const nuevaVentaPendiente = () => {
+    setCobroEfectivoPOS(null)
     const siguiente = agregarVentaPendiente(estadoVentasRef.current, crypto.randomUUID())
     establecerEstadoVentas(siguiente)
     setCarritoAbierto(false)
@@ -879,6 +908,7 @@ const fetchMovimientosClientes = async () => {
   const seleccionarVentaPendiente = (ventaId: string) => {
     if (!estadoVentasRef.current.ventas.some((venta) => venta.id === ventaId)) return
     establecerEstadoVentas({ ...estadoVentasRef.current, activaId: ventaId })
+    setCobroEfectivoPOS(null)
     setCarritoAbierto(false)
   }
 
@@ -915,9 +945,15 @@ const fetchMovimientosClientes = async () => {
 
   const generarTicketPorId = async (ticketId: string) => {
     try {
-      const { data, error } = await supabase.from('ventas').select('*').eq('ticket_id', ticketId).order('created_at', { ascending: true })
-      if (error) throw error
-      await generarPdfTicketHistorico((data || []) as Venta[])
+      const [normales, personalizadas, cabecera] = await Promise.all([
+        supabase.from('ventas').select('*').eq('ticket_id', ticketId).order('created_at', { ascending: true }),
+        supabase.from('ventas_personalizadas').select('*').eq('ticket_id', ticketId).order('created_at', { ascending: true }),
+        supabase.from('ventas_tickets').select('ticket_id,efectivo_recibido,cambio').eq('ticket_id', ticketId).maybeSingle(),
+      ])
+      if (normales.error || personalizadas.error || cabecera.error) throw normales.error || personalizadas.error || cabecera.error
+      const meta = { efectivo_recibido: cabecera.data?.efectivo_recibido ?? null, cambio: cabecera.data?.cambio ?? null }
+      const lineas = [...(normales.data || []), ...(personalizadas.data || []).map((linea) => ({ ...linea, precio: linea.precio_unitario, nombre: linea.nombre || linea.tipo_personalizado }))].map((linea) => ({ ...linea, ...meta })) as Venta[]
+      await generarPdfTicketHistorico(lineas)
       setNotificacionOperacion({ tipo: 'ok', mensaje: 'Ticket generado.' })
     } catch {
       setNotificacionOperacion({ tipo: 'error', mensaje: 'No se pudo generar el ticket.' })
@@ -1669,6 +1705,7 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
         setTab(nuevaTab)
       }}
       onCerrarSistema={cerrarSistema}
+      floatingCart={<CarritoFlotanteGlobal carrito={carrito} onAbrirVenta={() => { setTab('venta'); if (modoVenta === 'normal') setCarritoAbierto(true) }} />}
     >
       <main style={styles.main}>
         {avisoCorte && <div style={styles.alert} role="alert">{avisoCorte}</div>}
@@ -1788,17 +1825,6 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
       </div>
     ))}
 
-    <button
-      style={styles.botonCarritoFlotante}
-      onClick={(evento) => abrirCarrito(evento.currentTarget)}
-      aria-label="Abrir carrito"
-    >
-      🛒
-      {carrito.length > 0 && (
-        <span style={styles.contadorCarrito}>{carrito.length}</span>
-      )}
-    </button>
-
     {carritoAbierto && (
       <div style={styles.fondoCarrito} onClick={cerrarCarrito} role="presentation">
         <div ref={panelCarritoRef} style={styles.carritoMovil} onClick={(evento) => evento.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="titulo-carrito" tabIndex={-1}>
@@ -1885,7 +1911,7 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
             <p>Método de pago: {metodoPago}</p>
           </div>
 
-          <button style={styles.bigButton} onClick={() => void finalizarVenta()} disabled={procesandoCarritoActivo || carrito.length === 0}>
+          <button style={styles.bigButton} onClick={() => void solicitarFinalizarVenta()} disabled={procesandoCarritoActivo || carrito.length === 0}>
             {procesandoCarritoActivo ? 'Procesando venta…' : 'Finalizar venta'}
           </button>
 
@@ -2182,6 +2208,8 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
         titulo={operacionAbono ? 'Registrando abono…' : guardandoProducto ? (form.id ? 'Actualizando producto…' : 'Guardando producto…') : faseImagen}
         detalle={operacionAbono ? 'Actualizando el cliente y registrando el movimiento en Corte.' : guardandoProducto ? 'Guardando la información del producto.' : 'Estamos optimizando y guardando la fotografía del producto.'}
       />
+      {esDesktopPOS && cobroEfectivoPOS && <CobroEfectivoDesktop total={cobroEfectivoPOS.total} onCancelar={() => setCobroEfectivoPOS(null)} onCobrar={async (recibido) => cobroEfectivoPOS.ventaId === estadoVentasRef.current.activaId && finalizarVenta('Efectivo', recibido)} />}
+      {esDesktopPOS && ticketPOS && <ConfirmarImpresionDesktop ticket={ticketPOS} onCerrar={() => setTicketPOS(null)} />}
       {notificacionOperacion && <div className={`fl-operation-toast is-${notificacionOperacion.tipo}`} role="status"><span>{notificacionOperacion.mensaje}</span><button type="button" aria-label="Cerrar notificación" onClick={() => setNotificacionOperacion(null)}><X size={17} /></button></div>}
     </Navegacion>
   )
@@ -2327,37 +2355,6 @@ listaTicket: {
     gridTemplateColumns: '1fr',
   },
 },
-botonCarritoFlotante: {
-  position: 'fixed',
-  right: 18,
-  bottom: 18,
-  width: 58,
-  height: 58,
-  borderRadius: '50%',
-  border: 'none',
-  backgroundColor: '#111',
-  color: '#fff',
-  fontSize: 26,
-  cursor: 'pointer',
-  boxShadow: '0 8px 20px rgba(0,0,0,0.35)',
-  zIndex: 999,
-},
-
-contadorCarrito: {
-  position: 'absolute',
-  top: -4,
-  right: -4,
-  backgroundColor: '#c40000',
-  color: '#fff',
-  borderRadius: '50%',
-  width: 22,
-  height: 22,
-  fontSize: 13,
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-},
-
 fondoCarrito: {
   position: 'fixed',
   inset: 0,

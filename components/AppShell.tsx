@@ -4,10 +4,11 @@ interface AppShellProps {
   sidebar: ReactNode
   header: ReactNode
   mobileNavigation: ReactNode
+  floatingCart?: ReactNode
   children: ReactNode
 }
 
-export default function AppShell({ sidebar, header, mobileNavigation, children }: AppShellProps) {
+export default function AppShell({ sidebar, header, mobileNavigation, floatingCart, children }: AppShellProps) {
   return (
     <div className="fl-app-shell">
       {sidebar}
@@ -16,6 +17,7 @@ export default function AppShell({ sidebar, header, mobileNavigation, children }
         <div className="fl-app-content">{children}</div>
       </div>
       {mobileNavigation}
+      {floatingCart}
     </div>
   )
 }

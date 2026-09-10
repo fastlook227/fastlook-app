@@ -48,6 +48,9 @@ export default function Movimientos({ movimientos, styles, onGenerarTicket }: {
         </div>
       })}
       <p>Fecha: {formatearFechaHoraFastLook(m.created_at)}</p>
+      {esVenta && m.total != null && <p><b>Total:</b> ${Number(m.total).toFixed(2)}</p>}
+      {esVenta && m.efectivo_recibido != null && <p><b>Recibido:</b> ${Number(m.efectivo_recibido).toFixed(2)}</p>}
+      {esVenta && m.cambio != null && <p><b>Cambio:</b> ${Number(m.cambio).toFixed(2)}</p>}
       {esVenta && m.ticket_id && <button type="button" className="fl-movement-ticket-button" disabled={Boolean(generando)} onClick={() => void generar(m.ticket_id!)}><ReceiptText size={17} />{generando === m.ticket_id ? 'Generando…' : 'Ticket'}</button>}
     </div>
   })}</>

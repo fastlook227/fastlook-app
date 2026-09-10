@@ -54,6 +54,12 @@ export async function generarPdfTicketHistorico(lineas: Venta[]) {
 
   doc.line(5, y, 75, y); y += 6
   doc.setFontSize(12); doc.text('TOTAL:', 5, y); doc.text(`$${total.toFixed(2)}`, 75, y, { align: 'right' }); y += 8
+  if (primera.efectivo_recibido != null) {
+    doc.setFontSize(9); doc.text('RECIBIDO:', 5, y); doc.text(`$${Number(primera.efectivo_recibido).toFixed(2)}`, 75, y, { align: 'right' }); y += 5
+  }
+  if (primera.cambio != null) {
+    doc.setFontSize(9); doc.text('CAMBIO:', 5, y); doc.text(`$${Number(primera.cambio).toFixed(2)}`, 75, y, { align: 'right' }); y += 7
+  }
   doc.setFontSize(8); doc.text('Gracias por tu compra', 40, y, { align: 'center' }); y += 4
   doc.text('FAST LOOK', 40, y, { align: 'center' })
   doc.save(`ticket-fastlook-${primera.folio}.pdf`)
