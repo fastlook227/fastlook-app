@@ -39,6 +39,7 @@ export async function generarPdfTicketHistorico(lineas: Venta[]) {
   doc.setFontSize(8); doc.text('Accesorios para moto', 40, y, { align: 'center' }); y += 7
   doc.text(`Folio: ${primera.folio}`, 5, y); y += 4
   doc.text(`Fecha: ${formatearFechaHoraFastLook(primera.created_at)}`, 5, y); y += 4
+  doc.text(`Cajero: ${String(primera.cajero || primera.usuario_nombre || 'No disponible')}`, 5, y); y += 4
   doc.text(`Método de pago: ${primera.metodo_pago || 'Sin especificar'}`, 5, y); y += 6
   doc.line(5, y, 75, y); y += 5
 

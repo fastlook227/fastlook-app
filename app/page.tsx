@@ -45,6 +45,7 @@ import ListaCompras, {
 import Clientes from '@/components/Clientes'
 import GestionUsuarios from '@/components/GestionUsuarios'
 import Interphone from '@/components/Interphone'
+import Faltantes from '@/components/Faltantes'
 import LoadingOverlay from '@/components/LoadingOverlay'
 import SelectorImagen from '@/components/SelectorImagen'
 import CorteCajaDashboard from '@/components/corte/CorteCajaDashboard'
@@ -61,6 +62,7 @@ import CalculadorasPersonalizadas from '@/components/CalculadorasPersonalizadas'
 import CarritoFlotanteGlobal from '@/components/CarritoFlotanteGlobal'
 import usePOSDesktop from '@/hooks/usePOSDesktop'
 import { CobroEfectivoDesktop, ConfirmarImpresionDesktop } from '@/components/pos/POSDesktop'
+import ConfiguracionPOS from '@/components/pos/ConfiguracionPOS'
 import { crearTicketPOS, requiereCapturaEfectivo, rpcPOS, type TicketPOS } from '@/utils/pos'
 import CheckIn from '@/components/checkin/CheckIn'
 import ScannerCodigoBarras, { type FeedbackScanner } from '@/components/codigos-barras/ScannerCodigoBarras'
@@ -79,7 +81,7 @@ import {
 import { obtenerProductosActivos } from '@/utils/productos'
 
 export default function Home() {
-  const [tab, setTab] = useState<Tab>('precios')
+  const [tab, setTab] = useState<Tab>('venta')
   const [productos, setProductos] = useState<Producto[]>([])
   const [errorProductos, setErrorProductos] = useState('')
   const [ventas, setVentas] = useState<Venta[]>([])
@@ -126,6 +128,7 @@ export default function Home() {
   const [feedbackEscaneo, setFeedbackEscaneo] = useState<{ tipo: 'ok' | 'error'; nombre?: string; codigo?: string; cantidad?: number; mensaje: string } | null>(null)
   const feedbackEscaneoTimerRef = useRef<number | null>(null)
   const buscadorVentaRef = useRef<HTMLInputElement>(null)
+  const [solicitudFocoVenta, setSolicitudFocoVenta] = useState(0)
   const [scannerContexto, setScannerContexto] = useState<'venta' | 'inventario' | 'precios' | null>(null)
   const [productoEscaneadoInventarioId, setProductoEscaneadoInventarioId] = useState<string | null>(null)
   const [scannerContinuo, setScannerContinuo] = useState(false)
@@ -177,6 +180,10 @@ export default function Home() {
   useEffect(() => () => {
     if (feedbackEscaneoTimerRef.current !== null) window.clearTimeout(feedbackEscaneoTimerRef.current)
   }, [])
+
+  useEffect(() => {
+    if (tab === 'venta' && modoVenta === 'normal' && solicitudFocoVenta > 0) buscadorVentaRef.current?.focus()
+  }, [tab, modoVenta, solicitudFocoVenta])
 
   const abrirCarrito = (disparador: HTMLElement) => {
     disparadorCarritoRef.current = disparador
@@ -943,20 +950,51 @@ const fetchMovimientosClientes = async () => {
     return () => document.removeEventListener('keydown', atajoNuevaVenta)
   }, [])
 
+  const cargarTicketHistorico = async (ticketId: string) => {
+    const [normales, personalizadas, cabecera] = await Promise.all([
+      supabase.from('ventas').select('*').eq('ticket_id', ticketId).order('created_at', { ascending: true }),
+      supabase.from('ventas_personalizadas').select('*').eq('ticket_id', ticketId).order('created_at', { ascending: true }),
+      supabase.from('ventas_tickets').select('*').eq('ticket_id', ticketId).maybeSingle(),
+    ])
+    if (normales.error || personalizadas.error || cabecera.error) throw normales.error || personalizadas.error || cabecera.error
+    const encabezado = (cabecera.data || {}) as Record<string, unknown>
+    const meta = { efectivo_recibido: encabezado.efectivo_recibido ?? null, cambio: encabezado.cambio ?? null }
+    const lineas = [...(normales.data || []), ...(personalizadas.data || []).map((linea) => ({ ...linea, precio: linea.precio_unitario, nombre: linea.nombre || linea.tipo_personalizado }))].map((linea) => ({ ...linea, ...meta })) as Venta[]
+    if (!lineas.length) throw new Error('TICKET_SIN_LINEAS')
+    const primera = lineas[0]
+    const totalLineas = lineas.reduce((suma, linea) => suma + Number(linea.total ?? Number(linea.precio || 0) * Number(linea.cantidad || 0)), 0)
+    const ticket: TicketPOS = {
+      ticketId,
+      folio: String(encabezado.folio || primera.folio || ticketId),
+      fecha: String(encabezado.created_at || primera.created_at),
+      cajero: String(encabezado.cajero || encabezado.usuario_nombre || primera.cajero || 'No disponible'),
+      metodoPago: String(encabezado.metodo_pago || primera.metodo_pago || 'No disponible'),
+      total: Number(encabezado.total ?? totalLineas),
+      efectivoRecibido: encabezado.efectivo_recibido == null ? null : Number(encabezado.efectivo_recibido),
+      cambio: encabezado.cambio == null ? null : Number(encabezado.cambio),
+      lineas: lineas.map((linea) => { const precio = Number(linea.precio || 0); const cantidad = Number(linea.cantidad || 0); return { nombre: String(linea.nombre || 'Producto'), cantidad, precio, subtotal: Number(linea.total ?? precio * cantidad), personalizada: !linea.producto_id } }),
+    }
+    return { lineas, ticket }
+  }
+
   const generarTicketPorId = async (ticketId: string) => {
     try {
-      const [normales, personalizadas, cabecera] = await Promise.all([
-        supabase.from('ventas').select('*').eq('ticket_id', ticketId).order('created_at', { ascending: true }),
-        supabase.from('ventas_personalizadas').select('*').eq('ticket_id', ticketId).order('created_at', { ascending: true }),
-        supabase.from('ventas_tickets').select('ticket_id,efectivo_recibido,cambio').eq('ticket_id', ticketId).maybeSingle(),
-      ])
-      if (normales.error || personalizadas.error || cabecera.error) throw normales.error || personalizadas.error || cabecera.error
-      const meta = { efectivo_recibido: cabecera.data?.efectivo_recibido ?? null, cambio: cabecera.data?.cambio ?? null }
-      const lineas = [...(normales.data || []), ...(personalizadas.data || []).map((linea) => ({ ...linea, precio: linea.precio_unitario, nombre: linea.nombre || linea.tipo_personalizado }))].map((linea) => ({ ...linea, ...meta })) as Venta[]
+      const { lineas } = await cargarTicketHistorico(ticketId)
       await generarPdfTicketHistorico(lineas)
       setNotificacionOperacion({ tipo: 'ok', mensaje: 'Ticket generado.' })
     } catch {
       setNotificacionOperacion({ tipo: 'error', mensaje: 'No se pudo generar el ticket.' })
+    }
+  }
+
+  const reimprimirTicketPorId = async (ticketId: string) => {
+    try {
+      const { ticket } = await cargarTicketHistorico(ticketId)
+      const { servicioPOSLocal } = await import('@/lib/pos/servicioPOS')
+      await servicioPOSLocal.imprimirTicket(ticket)
+      setNotificacionOperacion({ tipo: 'ok', mensaje: 'Ticket reimpreso. El cajón no fue abierto.' })
+    } catch {
+      setNotificacionOperacion({ tipo: 'error', mensaje: 'No se pudo reimprimir. Verifica Fast Look POS Bridge.' })
     }
   }
 
@@ -1667,7 +1705,7 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
     setCortes([])
     setAvisoCorte('')
     setPasswordAcceso('')
-    setTab('precios')
+    setTab('venta')
     setCargandoAcceso(false)
   }
   if (!appLista || verificandoSesion) {
@@ -1698,13 +1736,14 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
       onCambiarTab={(nuevaTab) => {
         if (nuevaTab === 'corte' && !puedeAccederCorteCaja(perfilUsuario.correo)) {
           setAvisoCorte('No tienes permiso para acceder a Corte de caja.')
-          setTab('precios')
+          setTab('venta')
           return
         }
         setAvisoCorte('')
         setTab(nuevaTab)
       }}
       onCerrarSistema={cerrarSistema}
+      onBuscarProductos={() => { setModoVenta('normal'); setTab('venta'); setSolicitudFocoVenta((actual) => actual + 1) }}
       floatingCart={<CarritoFlotanteGlobal carrito={carrito} onAbrirVenta={() => { setTab('venta'); if (modoVenta === 'normal') setCarritoAbierto(true) }} />}
     >
       <main style={styles.main}>
@@ -2187,6 +2226,8 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
           <Movimientos
             movimientos={movimientos}
             onGenerarTicket={generarTicketPorId}
+            onReimprimirTicket={reimprimirTicketPorId}
+            permitirReimpresion={esDesktopPOS}
             styles={styles}
           />
         )}
@@ -2196,6 +2237,8 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
         {tab === 'usuarios' && <GestionUsuarios />}
         {tab === 'productos-personalizados' && usuarioRol === 'Admin' && <CalculadorasPersonalizadas onAgregar={agregarPersonalizado} />}
         {tab === 'interphone' && <Interphone usuarioId={perfilUsuario.id} usuarioNombre={perfilUsuario.nombre} usuarioRol={usuarioRol} />}
+        {tab === 'faltantes' && <Faltantes />}
+        {tab === 'pos-config' && usuarioRol === 'Admin' && esDesktopPOS && <ConfiguracionPOS />}
       </main>
       <ScannerCodigoBarras
         abierto={scannerContexto !== null}

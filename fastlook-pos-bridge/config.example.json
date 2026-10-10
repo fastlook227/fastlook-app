@@ -1,0 +1,21 @@
+{
+  "port": 17891,
+  "token": "CAMBIA-ESTE-TOKEN-POR-UNO-LARGO-Y-ALEATORIO",
+  "allowedOrigins": [
+    "https://TU-DOMINIO-FASTLOOK.vercel.app",
+    "http://localhost:3000"
+  ],
+  "printer": {
+    "name": "NOMBRE EXACTO EN IMPRESORAS DE WINDOWS",
+    "widthMm": 58,
+    "charactersPerLine": 32,
+    "encoding": "windows-1252",
+    "profile": "escpos-generic"
+  },
+  "drawer": {
+    "enabled": false,
+    "pin": 0,
+    "pulseOnMs": 100,
+    "pulseOffMs": 200
+  }
+}

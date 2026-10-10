@@ -26,6 +26,8 @@ export type Tab =
   | 'productos-personalizados'
   | 'check-in'
   | 'interphone'
+  | 'faltantes'
+  | 'pos-config'
 
 export interface Producto {
   id: string

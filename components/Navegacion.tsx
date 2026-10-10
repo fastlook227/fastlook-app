@@ -1,27 +1,10 @@
 'use client'
 
 import type { ReactNode } from 'react'
-import {
-  AlertTriangle,
-  Bot,
-  ClipboardList,
-  Gauge,
-  History,
-  Package,
-  SlidersHorizontal,
-  ShoppingCart,
-  Undo2,
-  Shield,
-  Tags,
-  Truck,
-  UserCog,
-  Users,
-  WalletCards,
-  Radio,
-  ScanFace,
-} from 'lucide-react'
 import type { RolUsuario, Tab } from '@/types'
 import { puedeAccederCorteCaja } from '@/lib/permisos/corteCaja'
+import { obtenerNavegacionVisible } from '@/lib/navegacion/configuracion'
+import usePOSDesktop from '@/hooks/usePOSDesktop'
 import AppShell from '@/components/AppShell'
 import MobileBottomNav from '@/components/MobileBottomNav'
 import Sidebar, { type NavigationItem } from '@/components/Sidebar'
@@ -34,32 +17,10 @@ interface NavegacionProps {
   usuarioCorreo: string
   onCambiarTab: (tab: Tab) => void
   onCerrarSistema: () => void
+  onBuscarProductos: () => void
   children: ReactNode
   floatingCart?: ReactNode
 }
-
-const itemsGenerales: NavigationItem[] = [
-  { tab: 'interphone', label: 'Interphone', icon: Radio },
-  { tab: 'precios', label: 'Lista de precios', icon: Tags },
-  { tab: 'venta', label: 'Generar venta', icon: ShoppingCart },
-  { tab: 'devoluciones', label: 'Devoluciones', icon: Undo2 },
-  { tab: 'stock', label: 'Stock bajo', icon: AlertTriangle },
-  { tab: 'cascos', label: 'Cascos', icon: Shield },
-  { tab: 'ia', label: 'Asistente', icon: Bot },
-  { tab: 'clientes', label: 'Clientes', icon: Users },
-]
-
-const itemsAdmin: NavigationItem[] = [
-  { tab: 'check-in', label: 'Check In', icon: ScanFace },
-  { tab: 'inventario', label: 'Inventario', icon: Package },
-  { tab: 'corte', label: 'Corte de caja', icon: WalletCards },
-  { tab: 'proveedores', label: 'Proveedores', icon: Truck },
-  { tab: 'compras', label: 'Lista de compras', icon: ClipboardList },
-  { tab: 'movimientos', label: 'Movimientos', icon: History },
-  { tab: 'dashboard', label: 'Dashboard', icon: Gauge },
-  { tab: 'usuarios', label: 'Usuarios', icon: UserCog },
-  { tab: 'productos-personalizados', label: 'Productos personalizados', icon: SlidersHorizontal },
-]
 
 export default function Navegacion({
   tab,
@@ -68,25 +29,16 @@ export default function Navegacion({
   usuarioCorreo,
   onCambiarTab,
   onCerrarSistema,
+  onBuscarProductos,
   children,
   floatingCart,
 }: NavegacionProps) {
   const accesoCorte = puedeAccederCorteCaja(usuarioCorreo)
-  const itemsAdminPermitidos = itemsAdmin.filter((item) => item.tab !== 'corte' || accesoCorte)
-  const itemCorte = itemsAdmin.find((item) => item.tab === 'corte') as NavigationItem
-  const items = usuarioRol === 'Admin'
-    ? [...itemsGenerales, ...itemsAdminPermitidos]
-    : [...itemsGenerales, ...(accesoCorte ? [itemCorte] : [])]
-  const buscar = (destino: Tab) => items.find((item) => item.tab === destino) as NavigationItem
-  const primaryItems = usuarioRol === 'Admin'
-    ? [buscar('precios'), buscar('venta'), buscar('inventario')]
-    : [buscar('precios'), buscar('venta'), buscar('stock')]
-  const quickTabs: Tab[] = usuarioRol === 'Admin'
-    ? ['venta', 'inventario', 'interphone', 'ia', 'clientes', ...(accesoCorte ? ['corte' as Tab] : [])]
-    : ['venta', 'precios', 'interphone', 'ia', 'clientes', ...(accesoCorte ? ['corte' as Tab] : ['stock' as Tab])]
-  const quickItems = quickTabs.map(buscar)
-  const primaryTabs = new Set(primaryItems.map((item) => item.tab))
-  const moreItems = items.filter((item) => !primaryTabs.has(item.tab))
+  const esDesktopPOS = usePOSDesktop()
+  const items = obtenerNavegacionVisible(usuarioRol, accesoCorte, esDesktopPOS)
+  const primaryItems = items.slice(0, 3)
+  const quickItems = items
+  const moreItems = items.slice(3)
 
   return (
     <AppShell
@@ -101,7 +53,7 @@ export default function Navegacion({
           onCerrarSistema={onCerrarSistema}
         />
       }
-      header={<TopHeader usuarioNombre={usuarioNombre} usuarioRol={usuarioRol} onBuscar={() => onCambiarTab('precios')} />}
+      header={<TopHeader usuarioNombre={usuarioNombre} usuarioRol={usuarioRol} onBuscar={onBuscarProductos} />}
       mobileNavigation={
         <MobileBottomNav
           primaryItems={primaryItems}

@@ -1,6 +1,6 @@
 'use client'
 
-import { Home, Menu, Plus, X } from 'lucide-react'
+import { Menu, Plus, X } from 'lucide-react'
 import { useState } from 'react'
 import type { Tab } from '@/types'
 import type { NavigationItem } from '@/components/Sidebar'
@@ -51,9 +51,9 @@ export default function MobileBottomNav({
       )}
 
       <nav className="fl-mobile-nav" aria-label="Navegación móvil">
-        {primaryItems.slice(0, 2).map(({ tab: itemTab, label, icon: Icon }, index) => (
+        {primaryItems.slice(0, 2).map(({ tab: itemTab, label, icon: Icon }) => (
           <button key={itemTab} type="button" className={`fl-mobile-nav-item${tab === itemTab ? ' is-active' : ''}`} onClick={() => irA(itemTab)} aria-current={tab === itemTab ? 'page' : undefined}>
-            {index === 0 ? <Home size={22} aria-hidden="true" /> : <Icon size={22} aria-hidden="true" />}<span>{index === 0 ? 'Inicio' : label}</span>
+            <Icon size={22} aria-hidden="true" /><span>{label}</span>
           </button>
         ))}
         <button type="button" className="fl-mobile-quick" onClick={() => setPanel(panel === 'quick' ? null : 'quick')} aria-label="Abrir acciones rápidas" aria-expanded={panel === 'quick'}>

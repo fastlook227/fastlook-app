@@ -23,7 +23,10 @@ export function CobroEfectivoDesktop({ total, onCancelar, onCobrar }: { total: n
 
 export function ConfirmarImpresionDesktop({ ticket, onCerrar }: { ticket: TicketPOS; onCerrar: () => void }) {
   const [estado, setEstado] = useState<'pregunta' | 'imprimiendo' | 'error' | 'impreso' | 'cajon-error'>('pregunta')
+  const imprimiendoRef = useRef(false)
   const imprimir = async () => {
+    if (imprimiendoRef.current) return
+    imprimiendoRef.current = true
     setEstado('imprimiendo')
     try {
       const { servicioPOSLocal } = await import('@/lib/pos/servicioPOS')
@@ -33,6 +36,7 @@ export function ConfirmarImpresionDesktop({ ticket, onCerrar }: { ticket: Ticket
       }
       setEstado('impreso')
     } catch { setEstado('error') }
+    finally { imprimiendoRef.current = false }
   }
-  return <div className="fl-pos-backdrop"><section className="fl-pos-dialog" role="dialog" aria-modal="true"><header><span>VENTA REGISTRADA</span><h2>{ticket.folio}</h2></header><div className="fl-pos-result"><p>Total <b>{moneda(aCentavos(ticket.total))}</b></p>{ticket.efectivoRecibido != null && <p>Recibido <b>{moneda(aCentavos(ticket.efectivoRecibido))}</b></p>}{ticket.cambio != null && <p>Cambio <b>{moneda(aCentavos(ticket.cambio))}</b></p>}</div>{estado === 'pregunta' && <p>¿Quieres imprimir el ticket?</p>}{estado === 'imprimiendo' && <p role="status">Enviando a la impresora USB…</p>}{estado === 'error' && <p className="fl-pos-error">No se pudo imprimir el ticket. La venta ya quedó registrada.</p>}{estado === 'impreso' && <p className="fl-pos-ok">Ticket impreso correctamente.</p>}{estado === 'cajon-error' && <p className="fl-pos-error">Ticket impreso. No se pudo abrir el cajón.</p>}<footer>{estado === 'pregunta' && <><button type="button" onClick={onCerrar}>No</button><button type="button" className="is-primary" onClick={() => void imprimir()}>Imprimir</button></>}{estado === 'error' && <><button type="button" onClick={onCerrar}>Cerrar</button><button type="button" className="is-primary" onClick={() => void imprimir()}>Reintentar</button></>}{(estado === 'impreso' || estado === 'cajon-error') && <button type="button" className="is-primary" onClick={onCerrar}>Cerrar</button>}</footer></section></div>
+  return <div className="fl-pos-backdrop"><section className="fl-pos-dialog" role="dialog" aria-modal="true"><header><span>VENTA REGISTRADA</span><h2>{ticket.folio}</h2></header><div className="fl-pos-result"><p>Total <b>{moneda(aCentavos(ticket.total))}</b></p>{ticket.efectivoRecibido != null && <p>Recibido <b>{moneda(aCentavos(ticket.efectivoRecibido))}</b></p>}{ticket.cambio != null && <p>Cambio <b>{moneda(aCentavos(ticket.cambio))}</b></p>}</div>{estado === 'pregunta' && <p>¿Quieres imprimir el ticket?</p>}{estado === 'imprimiendo' && <p role="status">Enviando a la impresora USB…</p>}{estado === 'error' && <p className="fl-pos-error">Venta registrada. Impresora POS no disponible. No se pudo imprimir el ticket.</p>}{estado === 'impreso' && <p className="fl-pos-ok">Ticket impreso correctamente.</p>}{estado === 'cajon-error' && <p className="fl-pos-error">Ticket impreso correctamente.<br />No se pudo abrir el cajón.</p>}<footer>{estado === 'pregunta' && <><button type="button" onClick={onCerrar}>No</button><button type="button" className="is-primary" onClick={() => void imprimir()}>Sí, imprimir</button></>}{estado === 'error' && <><button type="button" onClick={onCerrar}>Cerrar</button><button type="button" className="is-primary" onClick={() => void imprimir()}>Reintentar</button></>}{(estado === 'impreso' || estado === 'cajon-error') && <button type="button" className="is-primary" onClick={onCerrar}>Cerrar</button>}</footer></section></div>
 }

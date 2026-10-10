@@ -4,10 +4,12 @@ import type { CSSProperties } from 'react'
 import type { MovimientoInventario } from '@/types'
 import { formatearFechaHoraFastLook } from '@/utils/fechas'
 
-export default function Movimientos({ movimientos, styles, onGenerarTicket }: {
+export default function Movimientos({ movimientos, styles, onGenerarTicket, onReimprimirTicket, permitirReimpresion }: {
   movimientos: MovimientoInventario[]
   styles: { ticketItem: CSSProperties }
   onGenerarTicket: (ticketId: string) => Promise<void>
+  onReimprimirTicket: (ticketId: string) => Promise<void>
+  permitirReimpresion: boolean
 }) {
   const [generando, setGenerando] = useState<string | null>(null)
   const generandoRef = useRef<string | null>(null)
@@ -51,7 +53,7 @@ export default function Movimientos({ movimientos, styles, onGenerarTicket }: {
       {esVenta && m.total != null && <p><b>Total:</b> ${Number(m.total).toFixed(2)}</p>}
       {esVenta && m.efectivo_recibido != null && <p><b>Recibido:</b> ${Number(m.efectivo_recibido).toFixed(2)}</p>}
       {esVenta && m.cambio != null && <p><b>Cambio:</b> ${Number(m.cambio).toFixed(2)}</p>}
-      {esVenta && m.ticket_id && <button type="button" className="fl-movement-ticket-button" disabled={Boolean(generando)} onClick={() => void generar(m.ticket_id!)}><ReceiptText size={17} />{generando === m.ticket_id ? 'Generando…' : 'Ticket'}</button>}
+      {esVenta && m.ticket_id && <div className="fl-movement-ticket-actions"><button type="button" className="fl-movement-ticket-button" disabled={Boolean(generando)} onClick={() => void generar(m.ticket_id!)}><ReceiptText size={17} />{generando === m.ticket_id ? 'Generando…' : 'Ticket PDF'}</button>{permitirReimpresion && <button type="button" className="fl-movement-ticket-button" disabled={Boolean(generando)} onClick={() => void (async () => { if (generandoRef.current) return; generandoRef.current = m.ticket_id!; setGenerando(m.ticket_id!); try { await onReimprimirTicket(m.ticket_id!) } finally { generandoRef.current = null; setGenerando(null) } })()}><ReceiptText size={17} />Reimprimir ticket</button>}</div>}
     </div>
   })}</>
 }
