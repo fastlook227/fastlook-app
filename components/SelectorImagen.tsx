@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Camera, Eye, Images, Pencil, Trash2, X } from 'lucide-react'
 
 interface SelectorImagenProps {
+  ariaLabel?: string
   imagenUrl?: string
   archivo?: File | null
   deshabilitado?: boolean
@@ -11,7 +12,7 @@ interface SelectorImagenProps {
   onEliminar: () => void
 }
 
-export default function SelectorImagen({ imagenUrl = '', archivo = null, deshabilitado = false, onSeleccionar, onEliminar }: SelectorImagenProps) {
+export default function SelectorImagen({ ariaLabel = 'Imagen del producto', imagenUrl = '', archivo = null, deshabilitado = false, onSeleccionar, onEliminar }: SelectorImagenProps) {
   const camaraRef = useRef<HTMLInputElement>(null)
   const galeriaRef = useRef<HTMLInputElement>(null)
   const [mostrarOpciones, setMostrarOpciones] = useState(!imagenUrl && !archivo)
@@ -36,7 +37,7 @@ export default function SelectorImagen({ imagenUrl = '', archivo = null, deshabi
   }
   const limpiarInput = (input: HTMLInputElement | null) => { if (input) input.value = '' }
 
-  return <section className="fl-image-picker" aria-label="Imagen del producto">
+  return <section className="fl-image-picker" aria-label={ariaLabel}>
     {vistaPrevia && <div className="fl-image-preview"><img src={vistaPrevia} alt="Vista previa de la imagen" /><div className="fl-image-preview-actions"><button type="button" onClick={() => setMostrarOpciones(true)} disabled={deshabilitado}><Pencil size={17} />Cambiar imagen</button><button type="button" onClick={() => { onEliminar(); setMostrarOpciones(true) }} disabled={deshabilitado}><Trash2 size={17} />Eliminar imagen</button><button type="button" onClick={() => setVerGrande(true)}><Eye size={17} />Ver grande</button></div></div>}
     {mostrarOpciones && <div className="fl-image-source-actions"><button type="button" aria-label="Tomar fotografía" onClick={() => { limpiarInput(camaraRef.current); camaraRef.current?.click() }} disabled={deshabilitado}><Camera size={22} /><span><strong>Tomar foto</strong><small>Usar cámara trasera</small></span></button><button type="button" aria-label="Elegir imagen de galería" onClick={() => { limpiarInput(galeriaRef.current); galeriaRef.current?.click() }} disabled={deshabilitado}><Images size={22} /><span><strong>Elegir de galería</strong><small>Buscar en el dispositivo</small></span></button></div>}
     <input ref={camaraRef} className="fl-visually-hidden" type="file" accept="image/*" capture="environment" onChange={(e) => seleccionar(e.target.files?.[0])} disabled={deshabilitado} />

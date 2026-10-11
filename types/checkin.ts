@@ -35,11 +35,14 @@ export interface TrabajoMecanico {
   id: string
   empleado_id: string
   empleado_nombre: string
-  descripcion: string
+  descripcion: string | null
   fecha: string
   importe_mano_obra: number
   porcentaje_aplicado: number
   comision: number
   estado: EstadoTrabajoMecanico
   created_at: string
+  foto_ruta: string | null
+  foto_expira_at: string | null
+  foto_eliminada_at: string | null
 }

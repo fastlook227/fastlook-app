@@ -1,0 +1,9 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "crons": [
+    {
+      "path": "/api/cron/limpiar-fotos-trabajos",
+      "schedule": "5 6 * * *"
+    }
+  ]
+}
