@@ -42,6 +42,7 @@ export interface Producto {
   ubicacion: string
   proveedor: string
   imagen_url: string
+  imagen_thumbnail_url?: string | null
   talla?: string | null
   certificacion?: string | null
   archivado?: boolean | null
@@ -178,6 +179,7 @@ export interface FormProducto {
   ubicacion: string
   proveedor: string
   imagen_url: string
+  imagen_thumbnail_url?: string
 }
 
 export interface FormProveedor {

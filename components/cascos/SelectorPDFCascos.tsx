@@ -3,6 +3,7 @@
 import { CheckSquare, FileDown, ImageOff, Square, X } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import type { CascoCatalogo, OpcionesPDFCascos } from '@/types/cascos'
+import ImagenProducto from '@/components/ImagenProducto'
 
 interface SelectorPDFCascosProps {
   cascos: CascoCatalogo[]
@@ -122,7 +123,7 @@ export default function SelectorPDFCascos({ cascos, onCancelar, onGenerar }: Sel
             return (
               <div key={casco.id} className={`fl-helmet-pdf-item${cantidad > 0 ? ' is-selected' : ''}${deshabilitado ? ' is-disabled' : ''}`}>
                 <input type="checkbox" aria-label={`Seleccionar ${casco.nombre}`} checked={cantidad > 0} disabled={deshabilitado} onChange={() => alternarCasco(casco)} />
-                <div className="fl-helmet-pdf-thumb">{casco.imagen_url ? <img src={casco.imagen_url} alt="" /> : <ImageOff size={23} aria-label="Sin imagen" />}</div>
+                <div className="fl-helmet-pdf-thumb">{casco.imagen_url ? <ImagenProducto src={casco.imagen_url} miniatura={casco.imagen_thumbnail_url} alt="" /> : <ImageOff size={23} aria-label="Sin imagen" />}</div>
                 <div className="fl-helmet-pdf-data"><strong>{casco.nombre}</strong><span>{casco.codigo}</span><small>Talla: {casco.talla || '—'} · Certificación: {casco.certificacion || '—'}</small><small>${Number(casco.precio || 0).toLocaleString('es-MX')} · Stock disponible: {Number(casco.stock || 0)}</small></div>
                 <span className={agotado ? 'is-out' : 'is-in'}>{agotado ? 'Agotado' : 'Disponible'}</span>
                 <div className="fl-helmet-pdf-quantity">

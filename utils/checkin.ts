@@ -4,6 +4,17 @@ export const TARIFA_NORMAL_CENTAVOS = 3500
 export const TARIFA_EXTRA_CENTAVOS = 4500
 export const LIMITE_NORMAL_MINUTOS = 8 * 60
 export const PREFIJO_QR_CHECKIN = 'FASTLOOK-CHECKIN:'
+export const PORCENTAJE_COMISION_INICIAL = 60
+
+export function calcularComisionManoObra(importe: number, porcentaje = PORCENTAJE_COMISION_INICIAL) {
+  if (!Number.isFinite(importe) || importe < 0) throw new Error('El importe de mano de obra no puede ser negativo.')
+  if (!Number.isFinite(porcentaje) || porcentaje < 0 || porcentaje > 100) throw new Error('El porcentaje debe estar entre 0 y 100.')
+  return Math.round(importe * porcentaje) / 100
+}
+
+export function totalPagoEstimado(salarioHoras: number, comisionesPendientes: number) {
+  return Math.round((salarioHoras + comisionesPendientes) * 100) / 100
+}
 
 export function calcularJornada(
   entrada: string | Date,
@@ -45,6 +56,7 @@ export function resumirPanelCheckIn(empleados: EmpleadoCheckIn[], ahora = new Da
   let cerradas = 0
   for (const empleado of empleados) {
     if (!empleado.jornada) continue
+    if (empleado.jornada.es_anterior && !empleado.jornada.salida) continue
     if (empleado.jornada.salida) cerradas += 1
     else trabajando += 1
     const fin = empleado.jornada.salida || ahora

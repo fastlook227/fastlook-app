@@ -29,7 +29,7 @@ import { claveLinea, construirPayloadVenta, esLineaInventario, obtenerNombreLine
 import { puedeAccederCorteCaja } from '@/lib/permisos/corteCaja'
 import { generarTextoTicket } from '@/utils/ticket'
 import { generarPdfTicketHistorico } from '@/utils/pdfTicket'
-import { comprimirImagenProducto } from '@/utils/imagenes'
+import { crearVariantesImagenProducto } from '@/utils/imagenes'
 import PantallaCarga from '@/components/PantallaCarga'
 import PantallaAcceso from '@/components/PantallaAcceso'
 import Navegacion from '@/components/Navegacion'
@@ -79,6 +79,9 @@ import {
   obtenerTiposProducto,
 } from '@/utils/tiposProducto'
 import { obtenerProductosActivos } from '@/utils/productos'
+import ImagenProducto from '@/components/ImagenProducto'
+import CargarMasProductos from '@/components/CargarMasProductos'
+import useListaProgresiva from '@/hooks/useListaProgresiva'
 
 export default function Home() {
   const [tab, setTab] = useState<Tab>('venta')
@@ -236,6 +239,7 @@ export default function Home() {
     ubicacion: '',
     proveedor: '',
     imagen_url: '',
+    imagen_thumbnail_url: '',
   })
   const formRef = useRef<HTMLDivElement>(null)
   const primerCampoInventarioRef = useRef<HTMLInputElement>(null)
@@ -251,6 +255,7 @@ export default function Home() {
     ubicacion: '',
     proveedor: '',
     imagen_url: '',
+    imagen_thumbnail_url: '',
   })
   const [formularioInventarioAbierto, setFormularioInventarioAbierto] = useState(Boolean(form.id))
   const [detallesProductoAbiertos, setDetallesProductoAbiertos] = useState(false)
@@ -528,9 +533,12 @@ const fetchMovimientosClientes = async () => {
     try {
 
     let archivoComprimido: File
+    let miniatura: File
 
     try {
-      archivoComprimido = await comprimirImagenProducto(file)
+      const variantes = await crearVariantesImagenProducto(file)
+      archivoComprimido = variantes.principal
+      miniatura = variantes.miniatura
     } catch (error) {
       const mensaje =
         error instanceof Error ? error.message : 'Error desconocido'
@@ -548,15 +556,16 @@ const fetchMovimientosClientes = async () => {
     console.log('Porcentaje de reducción:', `${reduccion.toFixed(2)}%`)
 
     const nombreLimpio = form.codigo || 'producto'
-    const nombreArchivo = `${nombreLimpio}-${Date.now()}.webp`
+    const sello = Date.now()
+    const nombreArchivo = `${nombreLimpio}-${sello}.${archivoComprimido.type === 'image/webp' ? 'webp' : 'jpg'}`
+    const nombreMiniatura = `thumbnails/${nombreLimpio}-${sello}.${miniatura.type === 'image/webp' ? 'webp' : 'jpg'}`
 
     setFaseImagen('Subiendo imagen…')
-    const { error } = await supabase.storage
-      .from('productos')
-      .upload(nombreArchivo, archivoComprimido, {
-        contentType: 'image/webp',
-        cacheControl: '31536000',
-      })
+    const [subidaPrincipal, subidaMiniatura] = await Promise.all([
+      supabase.storage.from('productos').upload(nombreArchivo, archivoComprimido, { contentType: archivoComprimido.type, cacheControl: '31536000' }),
+      supabase.storage.from('productos').upload(nombreMiniatura, miniatura, { contentType: miniatura.type, cacheControl: '31536000' }),
+    ])
+    const error = subidaPrincipal.error || subidaMiniatura.error
 
     if (error) {
       setNotificacionImagen({ tipo: 'error', mensaje: 'Error al subir imagen: ' + error.message })
@@ -570,6 +579,7 @@ const fetchMovimientosClientes = async () => {
     setForm((prev) => ({
       ...prev,
       imagen_url: data.publicUrl,
+      imagen_thumbnail_url: supabase.storage.from('productos').getPublicUrl(nombreMiniatura).data.publicUrl,
     }))
 
     setNotificacionImagen({ tipo: 'ok', mensaje: 'Imagen subida correctamente.' })
@@ -609,6 +619,8 @@ const fetchMovimientosClientes = async () => {
       permitirCosto: usuarioRol === 'Admin',
     })
   }, [productosActivos, busquedaInventario, filtrosInventario, usuarioRol, productoEscaneadoInventarioId])
+  const listaVenta = useListaProgresiva(productosVentaFiltrados)
+  const listaInventario = useListaProgresiva(productosInventarioFiltrados)
 
   const clientesFiltrados = clientes.filter((c) => {
   const texto = busquedaClientes.toLowerCase()
@@ -1100,6 +1112,7 @@ const fetchMovimientosClientes = async () => {
       ubicacion: form.ubicacion,
       proveedor: form.proveedor,
       imagen_url: form.imagen_url,
+      imagen_thumbnail_url: form.imagen_thumbnail_url || null,
     })
 
     if (form.id) {
@@ -1199,6 +1212,7 @@ const fetchMovimientosClientes = async () => {
       ubicacion: '',
       proveedor: '',
       imagen_url: '',
+      imagen_thumbnail_url: '',
     }
     setForm(formularioVacio)
     formularioInventarioBaseRef.current = formularioVacio
@@ -1258,6 +1272,7 @@ const fetchMovimientosClientes = async () => {
       ubicacion: p.ubicacion || '',
       proveedor: p.proveedor || '',
       imagen_url: p.imagen_url || '',
+      imagen_thumbnail_url: p.imagen_thumbnail_url || '',
     }
     formularioInventarioBaseRef.current = productoParaEditar
     tipoOriginalEdicionRef.current = p.tipo || ''
@@ -1841,10 +1856,10 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
 
     <h3>Productos</h3>
 
-    {productosVentaFiltrados.map((p) => (
+    {listaVenta.visibles.map((p) => (
       <div key={p.id} style={styles.card}>
         {p.imagen_url && (
-          <img src={p.imagen_url} alt={p.nombre} style={styles.image} />
+          <ImagenProducto src={p.imagen_url} miniatura={p.imagen_thumbnail_url} alt={p.nombre} style={styles.image} />
         )}
 
         <h3>{p.nombre}</h3>
@@ -1863,6 +1878,7 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
         </button>
       </div>
     ))}
+    <CargarMasProductos visibles={listaVenta.visibles.length} total={listaVenta.total} onCargarMas={listaVenta.cargarMas} />
 
     {carritoAbierto && (
       <div style={styles.fondoCarrito} onClick={cerrarCarrito} role="presentation">
@@ -2010,7 +2026,7 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
               <label><span>Tipo de producto</span><select style={styles.input} value={form.tipo} onChange={(e) => { setForm({ ...form, tipo: e.target.value }); setTipoModificadoManualmente(true); if (e.target.value !== 'OTROS') setTipoPersonalizado('') }}><option value="">Selecciona un tipo</option>{tiposProducto.map((tipo) => <option key={tipo} value={tipo}>{tipo}</option>)}</select></label>
               <label><span>Precio de venta</span><input style={styles.input} placeholder="Precio de venta" value={form.precio} onChange={(e) => setForm({ ...form, precio: e.target.value })} /></label>
               <label><span>Stock</span><input style={styles.input} placeholder="Stock" value={form.stock} onChange={(e) => setForm({ ...form, stock: e.target.value })} /></label>
-              <div className="fl-product-photo-field"><span>Foto</span><SelectorImagen imagenUrl={form.imagen_url} deshabilitado={subiendoImagen} onSeleccionar={subirImagenProducto} onEliminar={() => setForm((actual) => ({ ...actual, imagen_url: '' }))} />{notificacionImagen && <div className={`fl-image-notice is-${notificacionImagen.tipo}`} role="status">{notificacionImagen.mensaje}</div>}</div>
+              <div className="fl-product-photo-field"><span>Foto</span><SelectorImagen imagenUrl={form.imagen_url} deshabilitado={subiendoImagen} onSeleccionar={subirImagenProducto} onEliminar={() => setForm((actual) => ({ ...actual, imagen_url: '', imagen_thumbnail_url: '' }))} />{notificacionImagen && <div className={`fl-image-notice is-${notificacionImagen.tipo}`} role="status">{notificacionImagen.mensaje}</div>}</div>
             </div>
 
             <section className={`fl-product-details ${detallesProductoAbiertos ? 'is-open' : ''}`}>
@@ -2029,7 +2045,7 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
                 <label><span>Stock mínimo</span><input style={styles.input} placeholder="Stock mínimo" value={form.stock_minimo} onChange={(e) => setForm({ ...form, stock_minimo: e.target.value })} /></label>
                 <label><span>Ubicación</span><input style={styles.input} placeholder="Ubicación" value={form.ubicacion} onChange={(e) => setForm({ ...form, ubicacion: e.target.value })} /></label>
                 <label><span>Proveedor</span><input style={styles.input} placeholder="Proveedor" value={form.proveedor} onChange={(e) => setForm({ ...form, proveedor: e.target.value })} /></label>
-                <label className="is-wide"><span>URL de imagen</span><input style={styles.input} placeholder="URL de imagen" value={form.imagen_url} onChange={(e) => setForm({ ...form, imagen_url: e.target.value })} /></label>
+                  <label className="is-wide"><span>URL de imagen</span><input style={styles.input} placeholder="URL de imagen" value={form.imagen_url} onChange={(e) => setForm({ ...form, imagen_url: e.target.value, imagen_thumbnail_url: '' })} /></label>
               </div>}
             </section>
 
@@ -2078,9 +2094,9 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
               onEnter={() => manejarCodigoDetectado(busquedaInventario, 'inventario')}
             />
 
-            {productosInventarioFiltrados.map((p) => (
+            {listaInventario.visibles.map((p) => (
             <div key={p.id} style={styles.card}>
-                {p.imagen_url && <img src={p.imagen_url} alt={p.nombre} style={styles.image} />}
+                {p.imagen_url && <ImagenProducto src={p.imagen_url} miniatura={p.imagen_thumbnail_url} alt={p.nombre} style={styles.image} />}
                 <h3>{p.nombre}</h3>
                 <p><b>Código:</b> {p.codigo}</p>
                 <p><b>Precio:</b> ${p.precio}</p>
@@ -2106,6 +2122,7 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
                 </details>}
             </div>
             ))}
+            <CargarMasProductos visibles={listaInventario.visibles.length} total={listaInventario.total} onCargarMas={listaInventario.cargarMas} />
 
             {usuarioRol === 'Admin' && productoCambioStock && <CambiarStockDialog
               producto={productoCambioStock}

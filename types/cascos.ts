@@ -21,6 +21,7 @@ export interface DatosFormularioCasco {
   ubicacion: string
   proveedor: string
   imagen_url: string
+  imagen_thumbnail_url?: string
 }
 
 export interface GrupoPrecioCascos {

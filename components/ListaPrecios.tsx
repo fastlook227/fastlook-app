@@ -3,6 +3,9 @@
 import type { CSSProperties } from 'react'
 import { ScanLine } from 'lucide-react'
 import type { Producto } from '@/types'
+import ImagenProducto from '@/components/ImagenProducto'
+import CargarMasProductos from '@/components/CargarMasProductos'
+import useListaProgresiva from '@/hooks/useListaProgresiva'
 
 interface ListaPreciosProps {
   busqueda: string
@@ -25,6 +28,7 @@ export default function ListaPrecios({
   onEscanear,
   styles,
 }: ListaPreciosProps) {
+  const lista = useListaProgresiva(productosFiltrados)
   return (
     <>
       <h2>Lista de precios completa</h2>
@@ -37,10 +41,10 @@ export default function ListaPrecios({
         onKeyDown={(e) => { if (e.key === 'Enter') onConfirmarBusqueda(busqueda) }}
       />
 
-      {productosFiltrados.map((p) => (
+      {lista.visibles.map((p) => (
         <div key={p.id} style={styles.card}>
           {p.imagen_url && (
-            <img src={p.imagen_url} alt={p.nombre} style={styles.image} />
+            <ImagenProducto src={p.imagen_url} miniatura={p.imagen_thumbnail_url} alt={p.nombre} style={styles.image} />
           )}
           <h3>{p.nombre}</h3>
           <p><b>Código:</b> {p.codigo}</p>
@@ -51,6 +55,7 @@ export default function ListaPrecios({
           <p><b>Proveedor:</b> {p.proveedor}</p>
         </div>
       ))}
+      <CargarMasProductos visibles={lista.visibles.length} total={lista.total} onCargarMas={lista.cargarMas} />
     </>
   )
 }

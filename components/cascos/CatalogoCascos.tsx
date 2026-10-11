@@ -7,7 +7,7 @@ import type { CascoCatalogo, OpcionesPDFCascos } from '@/types/cascos'
 import { agruparCascosPorPrecio, esProductoCasco, normalizarTextoCasco, obtenerCascosDisponibles } from '@/utils/cascos'
 import { generarPDFCascos } from '@/utils/pdfCascos'
 import { generarCodigoProductoDisponible } from '@/utils/codigosProducto'
-import { comprimirImagenProducto } from '@/utils/imagenes'
+import { crearVariantesImagenProducto } from '@/utils/imagenes'
 import { supabase } from '@/lib/supabase'
 import LoadingOverlay from '@/components/LoadingOverlay'
 import CascosAgotados from '@/components/cascos/CascosAgotados'
@@ -18,6 +18,8 @@ import ReponerStockCascoDialog from '@/components/cascos/ReponerStockCascoDialog
 import SelectorPDFCascos from '@/components/cascos/SelectorPDFCascos'
 import TarjetaCasco from '@/components/cascos/TarjetaCasco'
 import VisorCasco from '@/components/cascos/VisorCasco'
+import CargarMasProductos from '@/components/CargarMasProductos'
+import useListaProgresiva from '@/hooks/useListaProgresiva'
 
 interface CatalogoCascosProps {
   productos: Producto[]
@@ -67,7 +69,8 @@ export default function CatalogoCascos({ productos, rol, error, onReintentar, on
       return coincideTexto && coincideTalla && coincideCertificacion
     })
   }, [disponibles, busqueda, talla, certificacion])
-  const grupos = useMemo(() => agruparCascosPorPrecio(filtrados), [filtrados])
+  const listaCascos = useListaProgresiva(filtrados)
+  const grupos = useMemo(() => agruparCascosPorPrecio(listaCascos.visibles), [listaCascos.visibles])
   const piezas = disponibles.reduce((total, casco) => total + Number(casco.stock || 0), 0)
   const precios = disponibles.map((casco) => Number(casco.precio || 0))
   const limpiar = () => { setBusqueda(''); setTalla(''); setCertificacion('') }
@@ -114,20 +117,25 @@ export default function CatalogoCascos({ productos, rol, error, onReintentar, on
     if (!['image/jpeg', 'image/png', 'image/webp'].includes(archivo.type)) throw new Error('Selecciona una imagen JPEG, PNG o WebP válida.')
     if (archivo.size > 15 * 1024 * 1024) throw new Error('La imagen supera el máximo permitido de 15 MB.')
     setOperacion('Procesando imagen…')
-    const comprimida = await comprimirImagenProducto(archivo)
+    const { principal, miniatura } = await crearVariantesImagenProducto(archivo)
     setOperacion('Subiendo imagen…')
-    const nombre = `${codigo || 'casco'}-${Date.now()}.webp`
-    const { error: errorSubida } = await supabase.storage.from('productos').upload(nombre, comprimida, { contentType: 'image/webp', cacheControl: '31536000' })
-    if (errorSubida) throw new Error(errorSubida.message)
-    return supabase.storage.from('productos').getPublicUrl(nombre).data.publicUrl
+    const sello = Date.now()
+    const nombre = `${codigo || 'casco'}-${sello}.${principal.type === 'image/webp' ? 'webp' : 'jpg'}`
+    const nombreMiniatura = `thumbnails/${codigo || 'casco'}-${sello}.${miniatura.type === 'image/webp' ? 'webp' : 'jpg'}`
+    const [subida, subidaMiniatura] = await Promise.all([
+      supabase.storage.from('productos').upload(nombre, principal, { contentType: principal.type, cacheControl: '31536000' }),
+      supabase.storage.from('productos').upload(nombreMiniatura, miniatura, { contentType: miniatura.type, cacheControl: '31536000' }),
+    ])
+    if (subida.error || subidaMiniatura.error) throw new Error(subida.error?.message || subidaMiniatura.error?.message)
+    return { imagen_url: supabase.storage.from('productos').getPublicUrl(nombre).data.publicUrl, imagen_thumbnail_url: supabase.storage.from('productos').getPublicUrl(nombreMiniatura).data.publicUrl }
   }
   const guardarCasco = async (datos: import('@/types/cascos').DatosFormularioCasco, imagen: File | null) => {
     if (rol !== 'Admin') return
     const editando = formularioCasco !== 'nuevo' && formularioCasco !== null
     setOperacion(editando ? 'Actualizando casco…' : 'Guardando casco…')
     try {
-      const imagen_url = imagen ? await subirImagen(imagen, datos.codigo) : datos.imagen_url
-      const body = editando ? { operacion: 'EDITAR', productoId: formularioCasco.id, casco: { ...datos, imagen_url } } : { operacion: 'CREAR', casco: { ...datos, imagen_url } }
+      const urls = imagen ? await subirImagen(imagen, datos.codigo) : { imagen_url: datos.imagen_url, imagen_thumbnail_url: datos.imagen_thumbnail_url || '' }
+      const body = editando ? { operacion: 'EDITAR', productoId: formularioCasco.id, casco: { ...datos, ...urls } } : { operacion: 'CREAR', casco: { ...datos, ...urls } }
       const resultado = await llamarAPI(body)
       if (resultado.producto) onProductoActualizado(resultado.producto)
       setFormularioCasco(null)
@@ -181,6 +189,7 @@ export default function CatalogoCascos({ productos, rol, error, onReintentar, on
       ) : (
         <div className="fl-helmet-groups">
           {grupos.map((grupo) => <section key={grupo.id}><header><h2>{grupo.titulo}</h2><span>{grupo.cascos.length} {grupo.cascos.length === 1 ? 'modelo' : 'modelos'}</span></header><div className="fl-helmet-grid">{grupo.cascos.map((casco) => <TarjetaCasco key={casco.id} casco={casco} rol={rol} onVer={setCascoActivo} {...accionesTarjeta} />)}</div></section>)}
+          <CargarMasProductos visibles={listaCascos.visibles.length} total={listaCascos.total} onCargarMas={listaCascos.cargarMas} />
         </div>
       )}
 

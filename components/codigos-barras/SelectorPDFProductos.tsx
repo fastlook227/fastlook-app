@@ -3,6 +3,7 @@
 import { CheckSquare, FileDown, ImageOff, Search, Square, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Producto } from '@/types'
+import ImagenProducto from '@/components/ImagenProducto'
 import { filtrarProductosPorBusqueda } from '@/utils/busqueda'
 import { generarPdfCodigosBarrasProductos } from '@/utils/pdfCodigosBarrasProductos'
 import {
@@ -68,7 +69,7 @@ export default function SelectorPDFProductos({ productos, onCerrar, onAsignarFal
       <div className="fl-product-barcode-pdf-list">
         {visibles.map((producto) => <label key={producto.id} className={seleccionados.has(producto.id) ? 'is-selected' : ''}>
           <input type="checkbox" checked={seleccionados.has(producto.id)} onChange={() => setSeleccionados((actuales) => alternarIdSeleccionado(actuales, producto.id))} />
-          <span className="fl-product-barcode-pdf-thumb">{producto.imagen_url ? <img src={producto.imagen_url} alt="" /> : <ImageOff size={22} aria-label="Sin imagen" />}</span>
+          <span className="fl-product-barcode-pdf-thumb">{producto.imagen_url ? <ImagenProducto src={producto.imagen_url} miniatura={producto.imagen_thumbnail_url} alt="" /> : <ImageOff size={22} aria-label="Sin imagen" />}</span>
           <span className="fl-product-barcode-pdf-data"><strong>{producto.nombre}</strong><small>Código Fast Look: {producto.codigo}</small><small>Código de barras: {producto.codigo_barras ?? 'Sin código'}</small></span>
           <span className={!producto.codigo_barras ? 'is-missing' : 'is-ready'}>{!producto.codigo_barras ? 'Pendiente' : 'Listo'}</span>
         </label>)}
