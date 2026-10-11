@@ -26,8 +26,12 @@ const clienteAutenticado = (request: Request) => createClient(supabaseUrl, supab
 })
 const mensajeError = (error: { code?: string; message?: string }) => error.code === '42501' || /row-level security|permission denied/i.test(error.message || '')
   ? 'Supabase rechazó la operación por sus políticas RLS.' : error.message || 'No fue posible completar la operación.'
+class ErrorOperacionSupabase extends Error {
+  constructor(public etapa: string, public codigo: string | undefined, mensaje: string, public status = 500) { super(mensaje) }
+}
 const responderError = (error: unknown) => {
   if (error instanceof ErrorAutenticacion) return Response.json({ ok: false, mensaje: error.message }, { status: error.status })
+  if (error instanceof ErrorOperacionSupabase) return Response.json({ ok: false, etapa: error.etapa, codigo: error.codigo, mensaje: error.message }, { status: error.status })
   return Response.json({ ok: false, mensaje: error instanceof Error ? error.message : 'No fue posible completar la operación.' }, { status: 500 })
 }
 const obtenerCasco = async (cliente: SupabaseClient, id: string, permitirArchivado = false) => {
@@ -77,8 +81,18 @@ export async function POST(request: Request) {
       await obtenerCasco(cliente, entrada.data.productoId)
       const codigo = normalizarCodigoProducto(entrada.data.casco.codigo)
       if (await comprobarCodigoProducto(cliente, codigo, entrada.data.productoId)) return Response.json({ ok: false, mensaje: 'El código ya existe.' }, { status: 409 })
-      const { data, error } = await cliente.from('productos').update(datosCasco({ ...entrada.data.casco, codigoAutomatico: false })).eq('id', entrada.data.productoId).or('archivado.is.null,archivado.eq.false').select('*').maybeSingle()
-      if (error) throw new Error(mensajeError(error))
+      const datos = datosCasco({ ...entrada.data.casco, codigoAutomatico: false })
+      const { data, error } = await cliente.rpc('actualizar_casco_admin', {
+        p_producto_id: entrada.data.productoId, p_codigo: datos.codigo, p_nombre: datos.nombre,
+        p_precio: datos.precio, p_costo: datos.costo, p_stock: datos.stock,
+        p_stock_minimo: datos.stock_minimo, p_talla: datos.talla, p_certificacion: datos.certificacion,
+        p_ubicacion: datos.ubicacion, p_proveedor: datos.proveedor, p_imagen_url: datos.imagen_url,
+        p_imagen_thumbnail_url: datos.imagen_thumbnail_url,
+      })
+      if (error) {
+        const permisos = error.code === '42501' || /row-level security|permission denied|ROL_NO_PERMITIDO|SIN_SESION/i.test(error.message)
+        throw new ErrorOperacionSupabase('actualizar_producto', error.code, mensajeError(error), permisos ? 403 : error.code === '23505' ? 409 : 500)
+      }
       if (!data) throw new Error('El casco cambió mientras se editaba. Intenta nuevamente.')
       return Response.json({ ok: true, mensaje: 'Casco actualizado correctamente.', producto: data })
     }

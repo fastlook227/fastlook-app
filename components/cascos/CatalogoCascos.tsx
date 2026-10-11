@@ -32,6 +32,10 @@ interface CatalogoCascosProps {
   onIrAVenta: () => void
 }
 
+class ErrorRespuestaCascos extends Error {
+  constructor(mensaje: string, public respuestaRecibida: boolean) { super(mensaje) }
+}
+
 export default function CatalogoCascos({ productos, rol, error, onReintentar, onProductoActualizado, onProductoEliminado, onVender, onIrAVenta }: CatalogoCascosProps) {
   const [busqueda, setBusqueda] = useState('')
   const [talla, setTalla] = useState('')
@@ -101,10 +105,15 @@ export default function CatalogoCascos({ productos, rol, error, onReintentar, on
   const avisar = (tipo: 'ok' | 'error' | 'aviso', mensaje: string) => setNotificacion({ tipo, mensaje })
   const llamarAPI = async (body: unknown) => {
     const { data } = await supabase.auth.getSession()
-    if (!data.session?.access_token) throw new Error('La sesión expiró. Inicia sesión nuevamente.')
-    const respuesta = await fetch('/api/cascos', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${data.session.access_token}` }, body: JSON.stringify(body) })
-    const resultado = await respuesta.json() as { ok: boolean; mensaje: string; producto?: Producto; productoId?: string; eliminado?: boolean }
-    if (!respuesta.ok || !resultado.ok) throw new Error(resultado.mensaje || 'No fue posible completar la operación.')
+    if (!data.session?.access_token) throw new ErrorRespuestaCascos('La sesión expiró. Inicia sesión nuevamente.', true)
+    let respuesta: Response
+    try { respuesta = await fetch('/api/cascos', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${data.session.access_token}` }, body: JSON.stringify(body) }) }
+    catch { throw new ErrorRespuestaCascos('No fue posible contactar al servidor. La fotografía anterior se conserva.', false) }
+    const resultado = await respuesta.json() as { ok: boolean; mensaje: string; etapa?: string; codigo?: string; producto?: Producto; productoId?: string; eliminado?: boolean }
+    if (!respuesta.ok || !resultado.ok) {
+      const detalle = resultado.etapa === 'actualizar_producto' ? 'La fotografía se subió, pero Supabase rechazó la actualización del producto.' : resultado.mensaje
+      throw new ErrorRespuestaCascos(`${detalle}${resultado.codigo ? ` (${resultado.codigo})` : ''}`, true)
+    }
     return resultado
   }
   const generarCodigo = async () => generarCodigoProductoDisponible(supabase)
@@ -126,21 +135,37 @@ export default function CatalogoCascos({ productos, rol, error, onReintentar, on
       supabase.storage.from('productos').upload(nombre, principal, { contentType: principal.type, cacheControl: '31536000' }),
       supabase.storage.from('productos').upload(nombreMiniatura, miniatura, { contentType: miniatura.type, cacheControl: '31536000' }),
     ])
-    if (subida.error || subidaMiniatura.error) throw new Error(subida.error?.message || subidaMiniatura.error?.message)
-    return { imagen_url: supabase.storage.from('productos').getPublicUrl(nombre).data.publicUrl, imagen_thumbnail_url: supabase.storage.from('productos').getPublicUrl(nombreMiniatura).data.publicUrl }
+    if (subida.error || subidaMiniatura.error) {
+      const subidos = [!subida.error ? nombre : '', !subidaMiniatura.error ? nombreMiniatura : ''].filter(Boolean)
+      if (subidos.length) await supabase.storage.from('productos').remove(subidos)
+      throw new Error(`Falló la subida de la fotografía: ${subida.error?.message || subidaMiniatura.error?.message}`)
+    }
+    return { imagen_url: supabase.storage.from('productos').getPublicUrl(nombre).data.publicUrl, imagen_thumbnail_url: supabase.storage.from('productos').getPublicUrl(nombreMiniatura).data.publicUrl, rutas: [nombre, nombreMiniatura] }
   }
   const guardarCasco = async (datos: import('@/types/cascos').DatosFormularioCasco, imagen: File | null) => {
     if (rol !== 'Admin') return
     const editando = formularioCasco !== 'nuevo' && formularioCasco !== null
     setOperacion(editando ? 'Actualizando casco…' : 'Guardando casco…')
+    let rutasNuevas: string[] = []
     try {
-      const urls = imagen ? await subirImagen(imagen, datos.codigo) : { imagen_url: datos.imagen_url, imagen_thumbnail_url: datos.imagen_thumbnail_url || '' }
+      const subida = imagen ? await subirImagen(imagen, datos.codigo) : null
+      if (subida) rutasNuevas = subida.rutas
+      const urls = subida ? { imagen_url: subida.imagen_url, imagen_thumbnail_url: subida.imagen_thumbnail_url } : { imagen_url: datos.imagen_url, imagen_thumbnail_url: datos.imagen_thumbnail_url || '' }
       const body = editando ? { operacion: 'EDITAR', productoId: formularioCasco.id, casco: { ...datos, ...urls } } : { operacion: 'CREAR', casco: { ...datos, ...urls } }
       const resultado = await llamarAPI(body)
       if (resultado.producto) onProductoActualizado(resultado.producto)
       setFormularioCasco(null)
       avisar('ok', resultado.mensaje)
-    } catch (e) { avisar('error', e instanceof Error ? e.message : 'No fue posible guardar el casco.') } finally { setOperacion('') }
+    } catch (e) {
+      let texto = e instanceof Error ? e.message : 'No fue posible guardar el casco.'
+      if (rutasNuevas.length && e instanceof ErrorRespuestaCascos && e.respuestaRecibida) {
+        const limpieza = await supabase.storage.from('productos').remove(rutasNuevas)
+        texto += limpieza.error ? ' No se pudieron retirar los archivos nuevos; revísalos como posibles huérfanos.' : ' Los archivos nuevos se retiraron y la fotografía anterior permanece sin cambios.'
+      } else if (rutasNuevas.length) {
+        texto += ' La fotografía anterior permanece; no se eliminaron archivos nuevos porque el estado del servidor no pudo confirmarse.'
+      }
+      avisar('error', texto)
+    } finally { setOperacion('') }
   }
   const vender = (casco: CascoCatalogo) => {
     setOperacion('Añadiendo al carrito…')
