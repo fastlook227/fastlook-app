@@ -1,9 +1,9 @@
 'use client'
 
 import { AlertCircle, FileDown, PackageX, Plus, RotateCw, Shield, Sparkles, X } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import type { Producto, RolUsuario } from '@/types'
-import type { CascoCatalogo, OpcionesPDFCascos } from '@/types/cascos'
+import type { CascoCatalogo, DatosFormularioCasco, OpcionesPDFCascos } from '@/types/cascos'
 import { agruparCascosPorPrecio, esProductoCasco, normalizarTextoCasco, obtenerCascosDisponibles } from '@/utils/cascos'
 import { generarPDFCascos } from '@/utils/pdfCascos'
 import { generarCodigoProductoDisponible } from '@/utils/codigosProducto'
@@ -36,6 +36,11 @@ class ErrorRespuestaCascos extends Error {
   constructor(mensaje: string, public respuestaRecibida: boolean) { super(mensaje) }
 }
 
+interface CreacionPendiente {
+  body: { operacion: 'CREAR'; solicitudId: string; casco: DatosFormularioCasco }
+  rutasNuevas: string[]
+}
+
 export default function CatalogoCascos({ productos, rol, error, onReintentar, onProductoActualizado, onProductoEliminado, onVender, onIrAVenta }: CatalogoCascosProps) {
   const [busqueda, setBusqueda] = useState('')
   const [talla, setTalla] = useState('')
@@ -53,6 +58,8 @@ export default function CatalogoCascos({ productos, rol, error, onReintentar, on
   const [cascoEliminar, setCascoEliminar] = useState<CascoCatalogo | null>(null)
   const [operacion, setOperacion] = useState('')
   const [notificacion, setNotificacion] = useState<{ tipo: 'ok' | 'error' | 'aviso'; mensaje: string } | null>(null)
+  const guardandoRef = useRef(false)
+  const creacionPendienteRef = useRef<CreacionPendiente | null>(null)
 
   const disponibles = useMemo(() => obtenerCascosDisponibles(productos), [productos])
   const cascosParaPDF = useMemo(
@@ -111,7 +118,11 @@ export default function CatalogoCascos({ productos, rol, error, onReintentar, on
     catch { throw new ErrorRespuestaCascos('No fue posible contactar al servidor. La fotografía anterior se conserva.', false) }
     const resultado = await respuesta.json() as { ok: boolean; mensaje: string; etapa?: string; codigo?: string; producto?: Producto; productoId?: string; eliminado?: boolean }
     if (!respuesta.ok || !resultado.ok) {
-      const detalle = resultado.etapa === 'actualizar_producto' ? 'La fotografía se subió, pero Supabase rechazó la actualización del producto.' : resultado.mensaje
+      const detalle = resultado.etapa === 'actualizar_producto'
+        ? 'La fotografía se subió, pero Supabase rechazó la actualización del producto.'
+        : resultado.etapa === 'crear_producto'
+          ? resultado.codigo === '23505' ? 'El código ya pertenece a otro producto.' : resultado.mensaje
+          : resultado.mensaje
       throw new ErrorRespuestaCascos(`${detalle}${resultado.codigo ? ` (${resultado.codigo})` : ''}`, true)
     }
     return resultado
@@ -121,6 +132,13 @@ export default function CatalogoCascos({ productos, rol, error, onReintentar, on
     if (rol !== 'Admin') return
     setOperacion('Generando código…')
     try { setCodigoInicial(await generarCodigo()); setFormularioCasco('nuevo') } catch (e) { avisar('error', e instanceof Error ? e.message : 'No fue posible generar el código.') } finally { setOperacion('') }
+  }
+  const cancelarFormulario = () => {
+    if (creacionPendienteRef.current) {
+      avisar('aviso', 'Primero reintenta el guardado para comprobar si el casco quedó creado. Así evitamos duplicados y fotografías huérfanas.')
+      return
+    }
+    setFormularioCasco(null)
   }
   const subirImagen = async (archivo: File, codigo: string) => {
     if (!['image/jpeg', 'image/png', 'image/webp'].includes(archivo.type)) throw new Error('Selecciona una imagen JPEG, PNG o WebP válida.')
@@ -142,30 +160,45 @@ export default function CatalogoCascos({ productos, rol, error, onReintentar, on
     }
     return { imagen_url: supabase.storage.from('productos').getPublicUrl(nombre).data.publicUrl, imagen_thumbnail_url: supabase.storage.from('productos').getPublicUrl(nombreMiniatura).data.publicUrl, rutas: [nombre, nombreMiniatura] }
   }
-  const guardarCasco = async (datos: import('@/types/cascos').DatosFormularioCasco, imagen: File | null) => {
-    if (rol !== 'Admin') return
+  const guardarCasco = async (datos: DatosFormularioCasco, imagen: File | null) => {
+    if (rol !== 'Admin' || guardandoRef.current) return
+    guardandoRef.current = true
     const editando = formularioCasco !== 'nuevo' && formularioCasco !== null
     setOperacion(editando ? 'Actualizando casco…' : 'Guardando casco…')
     let rutasNuevas: string[] = []
     try {
-      const subida = imagen ? await subirImagen(imagen, datos.codigo) : null
-      if (subida) rutasNuevas = subida.rutas
-      const urls = subida ? { imagen_url: subida.imagen_url, imagen_thumbnail_url: subida.imagen_thumbnail_url } : { imagen_url: datos.imagen_url, imagen_thumbnail_url: datos.imagen_thumbnail_url || '' }
-      const body = editando ? { operacion: 'EDITAR', productoId: formularioCasco.id, casco: { ...datos, ...urls } } : { operacion: 'CREAR', casco: { ...datos, ...urls } }
+      let body: unknown
+      if (!editando && creacionPendienteRef.current) {
+        body = creacionPendienteRef.current.body
+        rutasNuevas = creacionPendienteRef.current.rutasNuevas
+      } else {
+        const subida = imagen ? await subirImagen(imagen, datos.codigo) : null
+        if (subida) rutasNuevas = subida.rutas
+        const urls = subida ? { imagen_url: subida.imagen_url, imagen_thumbnail_url: subida.imagen_thumbnail_url } : { imagen_url: datos.imagen_url, imagen_thumbnail_url: datos.imagen_thumbnail_url || '' }
+        body = editando
+          ? { operacion: 'EDITAR', productoId: formularioCasco.id, casco: { ...datos, ...urls } }
+          : { operacion: 'CREAR', solicitudId: crypto.randomUUID(), casco: { ...datos, ...urls } }
+        if (!editando) creacionPendienteRef.current = { body: body as CreacionPendiente['body'], rutasNuevas }
+      }
       const resultado = await llamarAPI(body)
       if (resultado.producto) onProductoActualizado(resultado.producto)
+      if (!editando) creacionPendienteRef.current = null
       setFormularioCasco(null)
       avisar('ok', resultado.mensaje)
     } catch (e) {
       let texto = e instanceof Error ? e.message : 'No fue posible guardar el casco.'
       if (rutasNuevas.length && e instanceof ErrorRespuestaCascos && e.respuestaRecibida) {
         const limpieza = await supabase.storage.from('productos').remove(rutasNuevas)
-        texto += limpieza.error ? ' No se pudieron retirar los archivos nuevos; revísalos como posibles huérfanos.' : ' Los archivos nuevos se retiraron y la fotografía anterior permanece sin cambios.'
+        if (!editando) creacionPendienteRef.current = null
+        texto += limpieza.error ? ' No se pudieron retirar los archivos nuevos; revísalos como posibles huérfanos.' : editando ? ' Los archivos nuevos se retiraron y la fotografía anterior permanece sin cambios.' : ' Los archivos nuevos se retiraron y no se creó el casco.'
       } else if (rutasNuevas.length) {
-        texto += ' La fotografía anterior permanece; no se eliminaron archivos nuevos porque el estado del servidor no pudo confirmarse.'
+        texto += ' No se eliminaron los archivos nuevos porque el estado del servidor es incierto. Reintenta para comprobar la misma operación sin duplicar el casco ni volver a subir la foto.'
+      } else if (!editando && creacionPendienteRef.current) {
+        if (e instanceof ErrorRespuestaCascos && e.respuestaRecibida) creacionPendienteRef.current = null
+        else texto += ' El estado del servidor es incierto. Reintenta para comprobar la misma operación sin crear un duplicado.'
       }
       avisar('error', texto)
-    } finally { setOperacion('') }
+    } finally { guardandoRef.current = false; setOperacion('') }
   }
   const vender = (casco: CascoCatalogo) => {
     setOperacion('Añadiendo al carrito…')
@@ -220,7 +253,7 @@ export default function CatalogoCascos({ productos, rol, error, onReintentar, on
 
       {cascoActivo && <VisorCasco casco={cascoActivo} onCerrar={() => setCascoActivo(null)} />}
       {rol === 'Admin' && mostrarAgotados && <CascosAgotados cascos={agotados} rol={rol} onVer={setCascoActivo} onEditar={accionesTarjeta.onEditar} onReponer={setCascoReponer} onArchivar={setCascoArchivar} onEliminar={setCascoEliminar} />}
-      {rol === 'Admin' && formularioCasco && <FormularioCasco casco={formularioCasco === 'nuevo' ? null : formularioCasco} codigoInicial={codigoInicial} ocupado={Boolean(operacion)} onGenerarCodigo={generarCodigo} onGuardar={guardarCasco} onCancelar={() => setFormularioCasco(null)} />}
+      {rol === 'Admin' && formularioCasco && <FormularioCasco casco={formularioCasco === 'nuevo' ? null : formularioCasco} codigoInicial={codigoInicial} ocupado={Boolean(operacion)} onGenerarCodigo={generarCodigo} onGuardar={guardarCasco} onCancelar={cancelarFormulario} />}
       {rol === 'Admin' && cascoReponer && <ReponerStockCascoDialog casco={cascoReponer} ocupado={Boolean(operacion)} onConfirmar={reponer} onCancelar={() => setCascoReponer(null)} />}
       {rol === 'Admin' && cascoEliminar && <EliminarCascoDialog casco={cascoEliminar} ocupado={Boolean(operacion)} onConfirmar={eliminar} onCancelar={() => setCascoEliminar(null)} />}
       {rol === 'Admin' && cascoArchivar && <div className="fl-casco-dialog-backdrop"><section className="fl-casco-small-dialog" role="dialog" aria-modal="true"><header><Shield /><h2>Archivar casco</h2><button type="button" aria-label="Cerrar" onClick={() => setCascoArchivar(null)}><X /></button></header><p>Este casco dejará de aparecer en el catálogo y en búsquedas activas. Su historial se conservará.</p><footer><button onClick={() => setCascoArchivar(null)}>Cancelar</button><button className="is-primary" onClick={() => void archivar()}>Archivar</button></footer></section></div>}

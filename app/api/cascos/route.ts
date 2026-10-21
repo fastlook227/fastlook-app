@@ -2,7 +2,7 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { z } from 'zod'
 import { ErrorAutenticacion, exigirAdministrador } from '@/lib/auth/servidor'
 import { supabaseAnonKey, supabaseUrl } from '@/lib/supabase'
-import { comprobarCodigoProducto, esErrorCodigoDuplicado, generarCodigoProductoDisponible, normalizarCodigoProducto } from '@/utils/codigosProducto'
+import { comprobarCodigoProducto, normalizarCodigoProducto } from '@/utils/codigosProducto'
 import { esProductoCasco } from '@/utils/cascos'
 
 const CamposCasco = z.object({
@@ -13,7 +13,7 @@ const CamposCasco = z.object({
   proveedor: z.string().trim().max(200), imagen_url: z.string().trim().max(2000), imagen_thumbnail_url: z.string().trim().max(2000).optional().default(''), codigoAutomatico: z.boolean(),
 })
 const Solicitud = z.discriminatedUnion('operacion', [
-  z.object({ operacion: z.literal('CREAR'), casco: CamposCasco }),
+  z.object({ operacion: z.literal('CREAR'), solicitudId: z.string().uuid(), casco: CamposCasco }),
   z.object({ operacion: z.literal('EDITAR'), productoId: z.string().uuid(), casco: CamposCasco.omit({ codigoAutomatico: true }) }),
   z.object({ operacion: z.literal('REPONER'), productoId: z.string().uuid(), cantidad: z.number().int().min(1).max(10000) }),
   z.object({ operacion: z.literal('ARCHIVAR'), productoId: z.string().uuid() }),
@@ -64,17 +64,22 @@ export async function POST(request: Request) {
     const cliente = clienteAutenticado(request)
 
     if (entrada.data.operacion === 'CREAR') {
-      let codigo = normalizarCodigoProducto(entrada.data.casco.codigo)
-      if (!entrada.data.casco.codigoAutomatico && await comprobarCodigoProducto(cliente, codigo)) {
-        return Response.json({ ok: false, mensaje: 'El código ya existe.' }, { status: 409 })
+      const codigo = normalizarCodigoProducto(entrada.data.casco.codigo)
+      const datos = datosCasco({ ...entrada.data.casco, codigo })
+      const { data, error } = await cliente.rpc('crear_casco_admin', {
+        p_solicitud_id: entrada.data.solicitudId, p_codigo: datos.codigo, p_nombre: datos.nombre,
+        p_precio: datos.precio, p_costo: datos.costo, p_stock: datos.stock,
+        p_stock_minimo: datos.stock_minimo, p_talla: datos.talla, p_certificacion: datos.certificacion,
+        p_ubicacion: datos.ubicacion, p_proveedor: datos.proveedor, p_imagen_url: datos.imagen_url,
+        p_imagen_thumbnail_url: datos.imagen_thumbnail_url,
+      })
+      if (error) {
+        const permisos = error.code === '42501' || /row-level security|permission denied|ROL_NO_PERMITIDO|SIN_SESION/i.test(error.message)
+        const status = permisos ? 403 : error.code === '23505' ? 409 : error.code === '22023' ? 400 : 500
+        throw new ErrorOperacionSupabase('crear_producto', error.code, mensajeError(error), status)
       }
-      for (let intento = 0; intento < 5; intento += 1) {
-        if (entrada.data.casco.codigoAutomatico) codigo = await generarCodigoProductoDisponible(cliente)
-        const { data, error } = await cliente.from('productos').insert({ ...datosCasco(entrada.data.casco), codigo, archivado: false }).select('*').single()
-        if (!error) return Response.json({ ok: true, mensaje: 'Casco guardado correctamente.', producto: data })
-        if (!entrada.data.casco.codigoAutomatico || !esErrorCodigoDuplicado(error)) throw new Error(mensajeError(error))
-      }
-      return Response.json({ ok: false, mensaje: 'No fue posible asignar un código disponible.' }, { status: 409 })
+      if (!data) throw new Error('Supabase no devolvió el casco creado.')
+      return Response.json({ ok: true, mensaje: 'Casco guardado correctamente.', producto: data })
     }
 
     if (entrada.data.operacion === 'EDITAR') {
