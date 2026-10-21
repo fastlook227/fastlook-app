@@ -30,7 +30,7 @@ export default function Sidebar({
   return (
     <aside className="fl-sidebar" aria-label="Navegación principal">
       <div className="fl-sidebar-brand">
-        <span className="fl-brand-mark" aria-hidden="true">FL</span>
+        <img className="fl-brand-logo" src="/fast-look-logo.png" alt="" aria-hidden="true" />
         <div><strong>FAST LOOK</strong><small>Sistema de gestión</small></div>
       </div>
 

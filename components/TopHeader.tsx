@@ -11,6 +11,7 @@ interface TopHeaderProps {
 export default function TopHeader({ usuarioNombre, usuarioRol, notificaciones = 0, onBuscar }: TopHeaderProps) {
   return (
     <header className="fl-top-header">
+      <img className="fl-mobile-brand-logo" src="/fast-look-logo.png" alt="" aria-hidden="true" />
       <div className="fl-top-title">
         <span>Hola,</span>
         <h1>{usuarioNombre}</h1>
