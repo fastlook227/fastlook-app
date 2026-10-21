@@ -17,7 +17,7 @@ export const NAVEGACION_FAST_LOOK: EntradaNavegacion[] = [
   { tab: 'inventario', label: 'Inventario', icon: Package, roles: ['Admin'] },
   { tab: 'corte', label: 'Corte de caja', icon: WalletCards, roles: ['Admin', 'Vendedor'], requiereCorte: true },
   { tab: 'movimientos', label: 'Movimientos', icon: History, roles: ['Admin'] },
-  { tab: 'check-in', label: 'Check In', icon: ScanFace, roles: ['Admin'] },
+  { tab: 'check-in', label: 'Check In', icon: ScanFace, roles: ['Admin', 'Vendedor'] },
   { tab: 'usuarios', label: 'Usuarios', icon: UserCog, roles: ['Admin'] },
   { tab: 'pos-config', label: 'Configuración POS', icon: Settings, roles: ['Admin'], soloDesktopPOS: true },
 ]

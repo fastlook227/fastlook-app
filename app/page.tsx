@@ -64,7 +64,7 @@ import usePOSDesktop from '@/hooks/usePOSDesktop'
 import { CobroEfectivoDesktop, ConfirmarImpresionDesktop } from '@/components/pos/POSDesktop'
 import ConfiguracionPOS from '@/components/pos/ConfiguracionPOS'
 import { crearTicketPOS, requiereCapturaEfectivo, rpcPOS, type TicketPOS } from '@/utils/pos'
-import CheckIn from '@/components/checkin/CheckIn'
+import CheckIn from '@/components/checkin/CheckInNomina'
 import ScannerCodigoBarras, { type FeedbackScanner } from '@/components/codigos-barras/ScannerCodigoBarras'
 import { crearMapaCodigosBarras, normalizarCodigoBarras } from '@/utils/codigoBarras'
 import {
@@ -498,7 +498,7 @@ const fetchMovimientosClientes = async () => {
   }, [perfilUsuario, fechaOperativa])
 
   useEffect(() => {
-    const tabsAdmin = ['inventario', 'corte', 'proveedores', 'compras', 'movimientos', 'dashboard', 'usuarios', 'productos-personalizados', 'check-in']
+    const tabsAdmin = ['inventario', 'corte', 'proveedores', 'compras', 'movimientos', 'dashboard', 'usuarios', 'productos-personalizados']
 
     if (tab === 'corte' && !puedeAccederCorteCaja(perfilUsuario?.correo)) {
       setAvisoCorte('No tienes permiso para acceder a Corte de caja.')
@@ -2250,7 +2250,7 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
         )}
 
         {tab === 'dashboard' && <Dashboard />}
-        {tab === 'check-in' && usuarioRol === 'Admin' && <CheckIn />}
+        {tab === 'check-in' && <CheckIn />}
         {tab === 'usuarios' && <GestionUsuarios />}
         {tab === 'productos-personalizados' && usuarioRol === 'Admin' && <CalculadorasPersonalizadas onAgregar={agregarPersonalizado} />}
         {tab === 'interphone' && <Interphone usuarioId={perfilUsuario.id} usuarioNombre={perfilUsuario.nombre} usuarioRol={usuarioRol} />}

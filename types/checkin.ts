@@ -17,6 +17,16 @@ export interface EmpleadoCheckIn {
   rol: RolUsuario
   activo: boolean
   jornada: JornadaCheckIn | null
+  jornadas?: JornadaCheckIn[]
+  trabajos?: TrabajoMecanico[]
+}
+
+export interface PanelNominaCheckIn {
+  modo: 'administrador' | 'empleado'
+  desde: string
+  hasta: string
+  porcentaje_actual: number
+  empleados: EmpleadoCheckIn[]
 }
 
 export interface CalculoJornada {

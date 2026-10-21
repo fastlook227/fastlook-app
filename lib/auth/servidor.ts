@@ -48,6 +48,15 @@ export async function exigirAdministrador(request: Request): Promise<PerfilUsuar
   return perfil
 }
 
+export async function exigirKikeadminNomina(request: Request): Promise<PerfilUsuario> {
+  const perfil = await exigirAdministrador(request)
+  const kikeadminId = process.env.KIKEADMIN_USER_ID?.trim().toLowerCase()
+  if (!kikeadminId || perfil.id.toLowerCase() !== kikeadminId) {
+    throw new ErrorAutenticacion(403, 'Esta acción es exclusiva de KIKEADMIN.')
+  }
+  return perfil
+}
+
 export async function exigirAccesoCorteCaja(request: Request): Promise<PerfilUsuario> {
   const perfil = await obtenerPerfilAutenticado(request)
   if (!puedeAccederCorteCaja(perfil.correo)) {
