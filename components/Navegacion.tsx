@@ -15,6 +15,7 @@ interface NavegacionProps {
   usuarioRol: RolUsuario
   usuarioNombre: string
   usuarioCorreo: string
+  fechaOperativa: string
   onCambiarTab: (tab: Tab) => void
   onCerrarSistema: () => void
   onBuscarProductos: () => void
@@ -27,6 +28,7 @@ export default function Navegacion({
   usuarioRol,
   usuarioNombre,
   usuarioCorreo,
+  fechaOperativa,
   onCambiarTab,
   onCerrarSistema,
   onBuscarProductos,
@@ -35,7 +37,7 @@ export default function Navegacion({
 }: NavegacionProps) {
   const accesoCorte = puedeAccederCorteCaja(usuarioCorreo)
   const esDesktopPOS = usePOSDesktop()
-  const items = obtenerNavegacionVisible(usuarioRol, accesoCorte, esDesktopPOS)
+  const items = obtenerNavegacionVisible(usuarioRol, accesoCorte, esDesktopPOS, fechaOperativa)
   const primaryItems = items.slice(0, 3)
   const quickItems = items
   const moreItems = items.slice(3)

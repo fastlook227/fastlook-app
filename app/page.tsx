@@ -65,6 +65,7 @@ import { CobroEfectivoDesktop, ConfirmarImpresionDesktop } from '@/components/po
 import ConfiguracionPOS from '@/components/pos/ConfiguracionPOS'
 import { crearTicketPOS, requiereCapturaEfectivo, rpcPOS, type TicketPOS } from '@/utils/pos'
 import CheckIn from '@/components/checkin/CheckInNomina'
+import PreparacionCajasTianguis from '@/components/tianguis/PreparacionCajasTianguis'
 import ScannerCodigoBarras, { type FeedbackScanner } from '@/components/codigos-barras/ScannerCodigoBarras'
 import { crearMapaCodigosBarras, normalizarCodigoBarras } from '@/utils/codigoBarras'
 import {
@@ -1746,6 +1747,7 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
     <Navegacion
       tab={tab}
       usuarioRol={usuarioRol}
+      fechaOperativa={fechaOperativa}
       usuarioNombre={perfilUsuario.nombre}
       usuarioCorreo={perfilUsuario.correo}
       onCambiarTab={(nuevaTab) => {
@@ -2251,6 +2253,7 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
 
         {tab === 'dashboard' && <Dashboard />}
         {tab === 'check-in' && <CheckIn />}
+        {tab === 'cajas-tianguis' && <PreparacionCajasTianguis />}
         {tab === 'usuarios' && <GestionUsuarios />}
         {tab === 'productos-personalizados' && usuarioRol === 'Admin' && <CalculadorasPersonalizadas onAgregar={agregarPersonalizado} />}
         {tab === 'interphone' && <Interphone usuarioId={perfilUsuario.id} usuarioNombre={perfilUsuario.nombre} usuarioRol={usuarioRol} />}

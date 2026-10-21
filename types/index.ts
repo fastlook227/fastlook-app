@@ -27,6 +27,7 @@ export type Tab =
   | 'check-in'
   | 'interphone'
   | 'faltantes'
+  | 'cajas-tianguis'
   | 'pos-config'
 
 export interface Producto {

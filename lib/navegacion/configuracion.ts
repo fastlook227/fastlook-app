@@ -1,4 +1,4 @@
-import { ClipboardList, History, Package, Radio, ScanFace, Settings, Shield, ShoppingCart, SlidersHorizontal, Undo2, UserCog, Users, WalletCards, type LucideIcon } from 'lucide-react'
+import { Boxes, ClipboardList, History, Package, Radio, ScanFace, Settings, Shield, ShoppingCart, SlidersHorizontal, Undo2, UserCog, Users, WalletCards, type LucideIcon } from 'lucide-react'
 import type { RolUsuario, Tab } from '@/types'
 import type { NavigationItem } from '@/components/Sidebar'
 
@@ -22,6 +22,11 @@ export const NAVEGACION_FAST_LOOK: EntradaNavegacion[] = [
   { tab: 'pos-config', label: 'Configuración POS', icon: Settings, roles: ['Admin'], soloDesktopPOS: true },
 ]
 
-export function obtenerNavegacionVisible(rol: RolUsuario, accesoCorte: boolean, esDesktopPOS: boolean): NavigationItem[] {
-  return NAVEGACION_FAST_LOOK.filter((item) => item.roles.includes(rol) && (!item.requiereCorte || accesoCorte) && (!item.soloDesktopPOS || esDesktopPOS)).map(({ tab, label, icon }) => ({ tab, label, icon: icon as LucideIcon }))
+const CAJAS_TIANGUIS: EntradaNavegacion = { tab: 'cajas-tianguis', label: 'Cajas del tianguis', icon: Boxes, roles: ['Admin', 'Vendedor'] }
+
+export function obtenerNavegacionVisible(rol: RolUsuario, accesoCorte: boolean, esDesktopPOS: boolean, fechaLocal?: string): NavigationItem[] {
+  const base = NAVEGACION_FAST_LOOK.filter((item) => item.roles.includes(rol) && (!item.requiereCorte || accesoCorte) && (!item.soloDesktopPOS || esDesktopPOS))
+  const dia = fechaLocal ? new Date(`${fechaLocal}T00:00:00Z`).getUTCDay() : -1
+  const items = [0, 6].includes(dia) ? [CAJAS_TIANGUIS, ...base] : [...base, CAJAS_TIANGUIS]
+  return items.map(({ tab, label, icon }) => ({ tab, label, icon: icon as LucideIcon }))
 }
