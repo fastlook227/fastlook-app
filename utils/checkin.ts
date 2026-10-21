@@ -1,4 +1,4 @@
-import type { CalculoJornada, EmpleadoCheckIn, JornadaCheckIn } from '@/types/checkin'
+import type { CalculoJornada, EmpleadoCheckIn, JornadaCheckIn, TrabajoMecanico } from '@/types/checkin'
 
 export const TARIFA_NORMAL_CENTAVOS = 3500
 export const TARIFA_EXTRA_CENTAVOS = 4500
@@ -14,6 +14,21 @@ export function calcularComisionManoObra(importe: number, porcentaje = PORCENTAJ
 
 export function totalPagoEstimado(salarioHoras: number, comisionesPendientes: number) {
   return Math.round((salarioHoras + comisionesPendientes) * 100) / 100
+}
+
+export function resumirNominaEmpleado(jornadas: JornadaCheckIn[], trabajos: TrabajoMecanico[], ahora = new Date()) {
+  let minutosNormales = 0; let minutosExtra = 0; let pagoNormalCentavos = 0; let pagoExtraCentavos = 0
+  for (const jornada of jornadas) {
+    const fin = jornada.salida || finSeguroJornadaAbierta(jornada.entrada, ahora)
+    const calculo = calcularJornada(jornada.entrada, fin, Number(jornada.tarifa_normal) * 100, Number(jornada.tarifa_extra) * 100, Number(jornada.limite_horas_normales) * 60)
+    minutosNormales += calculo.minutosNormales; minutosExtra += calculo.minutosExtra
+    pagoNormalCentavos += calculo.pagoNormalCentavos; pagoExtraCentavos += calculo.pagoExtraCentavos
+  }
+  const comisionesPendientes = trabajos.filter((t) => t.estado === 'Pendiente').reduce((suma, t) => suma + Number(t.comision), 0)
+  const comisionesPagadas = trabajos.filter((t) => t.estado === 'Pagada').reduce((suma, t) => suma + Number(t.comision), 0)
+  const comisionesCanceladas = trabajos.filter((t) => t.estado === 'Cancelada').reduce((suma, t) => suma + Number(t.comision), 0)
+  const salarioCentavos = pagoNormalCentavos + pagoExtraCentavos
+  return { minutosNormales, minutosExtra, pagoNormalCentavos, pagoExtraCentavos, salarioCentavos, comisionesPendientes, comisionesPagadas, comisionesCanceladas, totalEstimado: salarioCentavos / 100 + comisionesPendientes }
 }
 
 export function calcularJornada(
