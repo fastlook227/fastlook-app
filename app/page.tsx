@@ -66,6 +66,7 @@ import ConfiguracionPOS from '@/components/pos/ConfiguracionPOS'
 import { crearTicketPOS, requiereCapturaEfectivo, rpcPOS, type TicketPOS } from '@/utils/pos'
 import CheckIn from '@/components/checkin/CheckInNomina'
 import PreparacionCajasTianguis from '@/components/tianguis/PreparacionCajasTianguis'
+import EntregasProximas from '@/components/entregas/EntregasProximas'
 import ScannerCodigoBarras, { type FeedbackScanner } from '@/components/codigos-barras/ScannerCodigoBarras'
 import { crearMapaCodigosBarras, normalizarCodigoBarras } from '@/utils/codigoBarras'
 import {
@@ -80,6 +81,8 @@ import {
   obtenerTiposProducto,
 } from '@/utils/tiposProducto'
 import { obtenerProductosActivos } from '@/utils/productos'
+import { requiereConfirmacion } from '@/utils/entregas'
+import type { PanelEntregas } from '@/types/entregas'
 import ImagenProducto from '@/components/ImagenProducto'
 import CargarMasProductos from '@/components/CargarMasProductos'
 import useListaProgresiva from '@/hooks/useListaProgresiva'
@@ -153,11 +156,28 @@ export default function Home() {
   const [operacionAbono, setOperacionAbono] = useState<{ clienteId: string; tipo: 'ABONO' | 'LIQUIDACION' } | null>(null)
   const registrandoAbonoRef = useRef(false)
   const [fechaOperativa, setFechaOperativa] = useState(obtenerFechaActualFastLook)
+  const [avisosEntregas, setAvisosEntregas] = useState(0)
 
   useEffect(() => {
     const temporizador = window.setInterval(() => setFechaOperativa(obtenerFechaActualFastLook()), 30_000)
     return () => window.clearInterval(temporizador)
   }, [])
+
+  useEffect(() => {
+    if (!perfilUsuario) { setAvisosEntregas(0); return }
+    let activo = true
+    const consultar = async () => {
+      const { data } = await supabase.auth.getSession()
+      if (!data.session?.access_token) return
+      const respuesta = await fetch('/api/entregas', { headers: { Authorization: `Bearer ${data.session.access_token}` }, cache: 'no-store' }).catch(() => null)
+      if (!respuesta?.ok) return
+      const body = await respuesta.json() as { panel?: PanelEntregas }
+      if (activo) setAvisosEntregas((body.panel?.entregas || []).filter((entrega) => requiereConfirmacion(entrega)).length)
+    }
+    void consultar()
+    const temporizador = window.setInterval(() => void consultar(), 60_000)
+    return () => { activo = false; window.clearInterval(temporizador) }
+  }, [perfilUsuario])
 
   const ventaActiva = obtenerVentaActiva(estadoVentas)
   const carrito = ventaActiva.carrito
@@ -1748,6 +1768,8 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
       tab={tab}
       usuarioRol={usuarioRol}
       fechaOperativa={fechaOperativa}
+      notificaciones={avisosEntregas}
+      onNotificaciones={() => setTab('entregas-proximas')}
       usuarioNombre={perfilUsuario.nombre}
       usuarioCorreo={perfilUsuario.correo}
       onCambiarTab={(nuevaTab) => {
@@ -2254,6 +2276,7 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
         {tab === 'dashboard' && <Dashboard />}
         {tab === 'check-in' && <CheckIn />}
         {tab === 'cajas-tianguis' && <PreparacionCajasTianguis />}
+        {tab === 'entregas-proximas' && <EntregasProximas />}
         {tab === 'usuarios' && <GestionUsuarios />}
         {tab === 'productos-personalizados' && usuarioRol === 'Admin' && <CalculadorasPersonalizadas onAgregar={agregarPersonalizado} />}
         {tab === 'interphone' && <Interphone usuarioId={perfilUsuario.id} usuarioNombre={perfilUsuario.nombre} usuarioRol={usuarioRol} />}

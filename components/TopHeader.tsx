@@ -5,10 +5,11 @@ interface TopHeaderProps {
   usuarioNombre: string
   usuarioRol: RolUsuario
   notificaciones?: number
+  onNotificaciones?: () => void
   onBuscar: () => void
 }
 
-export default function TopHeader({ usuarioNombre, usuarioRol, notificaciones = 0, onBuscar }: TopHeaderProps) {
+export default function TopHeader({ usuarioNombre, usuarioRol, notificaciones = 0, onBuscar, onNotificaciones }: TopHeaderProps) {
   return (
     <header className="fl-top-header">
       <img className="fl-mobile-brand-logo" src="/fast-look-logo.png" alt="" aria-hidden="true" />
@@ -21,7 +22,7 @@ export default function TopHeader({ usuarioNombre, usuarioRol, notificaciones = 
         <button type="button" className="fl-icon-button" onClick={onBuscar} aria-label="Buscar productos" title="Buscar productos">
           <Search size={21} aria-hidden="true" />
         </button>
-        <button type="button" className="fl-icon-button" aria-label={`${notificaciones} notificaciones`} title="Notificaciones">
+        <button type="button" className="fl-icon-button" onClick={onNotificaciones} aria-label={`${notificaciones} notificaciones`} title="Notificaciones">
           <Bell size={21} aria-hidden="true" />
           {notificaciones > 0 && <span className="fl-notification-badge">{notificaciones > 99 ? '99+' : notificaciones}</span>}
         </button>

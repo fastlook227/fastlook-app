@@ -19,6 +19,8 @@ interface NavegacionProps {
   onCambiarTab: (tab: Tab) => void
   onCerrarSistema: () => void
   onBuscarProductos: () => void
+  notificaciones?: number
+  onNotificaciones?: () => void
   children: ReactNode
   floatingCart?: ReactNode
 }
@@ -32,6 +34,8 @@ export default function Navegacion({
   onCambiarTab,
   onCerrarSistema,
   onBuscarProductos,
+  notificaciones,
+  onNotificaciones,
   children,
   floatingCart,
 }: NavegacionProps) {
@@ -55,7 +59,7 @@ export default function Navegacion({
           onCerrarSistema={onCerrarSistema}
         />
       }
-      header={<TopHeader usuarioNombre={usuarioNombre} usuarioRol={usuarioRol} onBuscar={onBuscarProductos} />}
+      header={<TopHeader usuarioNombre={usuarioNombre} usuarioRol={usuarioRol} onBuscar={onBuscarProductos} notificaciones={notificaciones} onNotificaciones={onNotificaciones} />}
       mobileNavigation={
         <MobileBottomNav
           primaryItems={primaryItems}

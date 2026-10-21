@@ -1,4 +1,4 @@
-import { Boxes, ClipboardList, History, Package, Radio, ScanFace, Settings, Shield, ShoppingCart, SlidersHorizontal, Undo2, UserCog, Users, WalletCards, type LucideIcon } from 'lucide-react'
+import { Boxes, ClipboardList, History, Package, Radio, ScanFace, Settings, Shield, ShoppingCart, SlidersHorizontal, Truck, Undo2, UserCog, Users, WalletCards, type LucideIcon } from 'lucide-react'
 import type { RolUsuario, Tab } from '@/types'
 import type { NavigationItem } from '@/components/Sidebar'
 
@@ -13,6 +13,7 @@ export const NAVEGACION_FAST_LOOK: EntradaNavegacion[] = [
   { tab: 'devoluciones', label: 'Devoluciones', icon: Undo2, roles: ['Admin', 'Vendedor'] },
   { tab: 'interphone', label: 'Interphone', icon: Radio, roles: ['Admin', 'Vendedor'] },
   { tab: 'faltantes', label: 'Faltantes', icon: ClipboardList, roles: ['Admin', 'Vendedor'] },
+  { tab: 'entregas-proximas', label: 'Entregas próximas', icon: Truck, roles: ['Admin', 'Vendedor'] },
   { tab: 'clientes', label: 'Clientes', icon: Users, roles: ['Admin', 'Vendedor'] },
   { tab: 'inventario', label: 'Inventario', icon: Package, roles: ['Admin'] },
   { tab: 'corte', label: 'Corte de caja', icon: WalletCards, roles: ['Admin', 'Vendedor'], requiereCorte: true },
