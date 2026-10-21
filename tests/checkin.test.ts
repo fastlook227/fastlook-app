@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { readFileSync } from 'node:fs'
 // @ts-expect-error Node ejecuta TypeScript nativo y requiere la extensión explícita.
-import { accionDisponible, calcularComisionManoObra, calcularJornada, crearContenidoQrCheckIn, resolverQrCheckIn, resumirPanelCheckIn, totalPagoEstimado } from '../utils/checkin.ts'
+import { accionDisponible, calcularComisionManoObra, calcularJornada, crearContenidoQrCheckIn, finSeguroJornadaAbierta, mensajeErrorCheckIn, operacionConfirmada, resolverQrCheckIn, resumirPanelCheckIn, totalPagoEstimado, validarPanelCheckIn } from '../utils/checkin.ts'
 import type { EmpleadoCheckIn } from '../types/checkin'
 
 const inicio = '2026-09-10T15:00:00.000Z'
@@ -13,10 +13,14 @@ test('10h generan $370', () => assert.equal(calcularHoras(10).pagoTotalCentavos,
 test('8h30 generan $302.50 sin redondear a horas completas', () => { const r = calcularHoras(8.5); assert.equal(r.minutosExtra, 30); assert.equal(r.pagoTotalCentavos, 30250) })
 test('4h generan $140', () => assert.equal(calcularHoras(4).pagoTotalCentavos, 14000))
 test('rechaza salida anterior a entrada', () => assert.throws(() => calcularJornada(new Date(10), new Date(9))))
+test('una entrada recién creada no rompe el render si el reloj del servidor va adelante', () => { const entradaFutura = '2026-09-10T15:00:05.000Z'; const ahoraAnterior = new Date('2026-09-10T15:00:00.000Z'); assert.equal(finSeguroJornadaAbierta(entradaFutura, ahoraAnterior).toISOString(), entradaFutura); assert.doesNotThrow(() => calcularJornada(entradaFutura, finSeguroJornadaAbierta(entradaFutura, ahoraAnterior))) })
 test('QR válido identifica UUID y QR inválido se rechaza', () => { const id = '550e8400-e29b-41d4-a716-446655440000'; assert.equal(resolverQrCheckIn(crearContenidoQrCheckIn(id)), id); assert.equal(resolverQrCheckIn('FASTLOOK-CHECKIN:Kike'), null) })
 test('la acción disponible evita entrada y salida duplicadas en cliente', () => { assert.equal(accionDisponible(null), 'entrada'); assert.equal(accionDisponible({ id: '1', fecha: '2026-09-10', entrada: inicio, salida: null, tarifa_normal: 35, tarifa_extra: 45, limite_horas_normales: 8 }), 'salida'); assert.equal(accionDisponible({ id: '1', fecha: '2026-09-10', entrada: inicio, salida: inicio, tarifa_normal: 35, tarifa_extra: 45, limite_horas_normales: 8 }), null) })
 test('resumen suma jornadas e historial correctamente', () => { const empleados: EmpleadoCheckIn[] = [{ id: '1', nombre: 'A', rol: 'Vendedor', activo: true, jornada: { id: 'j1', fecha: '2026-09-10', entrada: inicio, salida: new Date(new Date(inicio).getTime() + 10 * 3_600_000).toISOString(), tarifa_normal: 35, tarifa_extra: 45, limite_horas_normales: 8 } }]; const r = resumirPanelCheckIn(empleados); assert.deepEqual(r, { registrados: 1, trabajando: 0, cerradas: 1, minutosNormales: 480, minutosExtra: 120, pagoCentavos: 37000 }) })
 test('una jornada anterior abierta no infla el resumen del día', () => { const empleados: EmpleadoCheckIn[] = [{ id: '1', nombre: 'Brandon', rol: 'Vendedor', activo: true, jornada: { id: 'vieja', fecha: '2026-09-09', entrada: inicio, salida: null, tarifa_normal: 35, tarifa_extra: 45, limite_horas_normales: 8, es_anterior: true } }]; assert.deepEqual(resumirPanelCheckIn(empleados), { registrados: 0, trabajando: 0, cerradas: 0, minutosNormales: 0, minutosExtra: 0, pagoCentavos: 0 }) })
+test('valida datos del panel antes de renderizarlos', () => { assert.throws(() => validarPanelCheckIn([{ id: '1', nombre: 'A', rol: 'Vendedor', activo: true, jornada: { entrada: 'inválida' } }])); assert.deepEqual(validarPanelCheckIn([]), []) })
+test('reconciliación distingue una entrada confirmada de una jornada anterior', () => { const base: EmpleadoCheckIn = { id: '1', nombre: 'A', rol: 'Vendedor', activo: true, jornada: { id: 'j', fecha: '2026-09-10', entrada: inicio, salida: null, tarifa_normal: 35, tarifa_extra: 45, limite_horas_normales: 8 } }; assert.equal(operacionConfirmada('entrada', base), true); assert.equal(operacionConfirmada('entrada', { ...base, jornada: { ...base.jornada!, es_anterior: true } }), false); assert.equal(operacionConfirmada('salida', base), false) })
+test('mensajes de RPC no exponen errores crudos comunes', () => { assert.match(mensajeErrorCheckIn({ message: 'Failed to fetch' }), /comprobará/); assert.match(mensajeErrorCheckIn({ message: '42501 JWT' }), /sesión/) })
 test('comisión inicial aplica 60% sólo al importe de mano de obra', () => { assert.equal(calcularComisionManoObra(1000), 600); assert.equal(calcularComisionManoObra(125.50), 75.30) })
 test('cambiar porcentaje sólo cambia cálculos futuros', () => { assert.equal(calcularComisionManoObra(1000, 60), 600); assert.equal(calcularComisionManoObra(1000, 55), 550) })
 test('rechaza importes negativos y porcentajes fuera de rango', () => { assert.throws(() => calcularComisionManoObra(-1)); assert.throws(() => calcularComisionManoObra(10, 101)) })
@@ -39,3 +43,6 @@ test('cierre antiguo exige confirmación y deja auditoría', () => { assert.matc
 test('trabajos guardan snapshot de porcentaje y sólo importe de mano de obra', () => { assert.match(fase2, /porcentaje_aplicado/); assert.match(fase2, /importe_mano_obra/); assert.doesNotMatch(fase2, /refaccion_id|producto_id|accesorio_id/) })
 test('idempotencia evita trabajos duplicados', () => { assert.match(fase2, /idempotency_key uuid not null unique/); assert.match(fase2, /exception when unique_violation/) })
 test('comisión pagada no puede volver a pendiente ni pagarse dos veces', () => { assert.match(fase2, /v_anterior\.estado = 'Pagada' and p_estado = 'Pendiente'/); assert.match(fase2, /coalesce\(pagada_at, clock_timestamp\(\)\)/) })
+
+const correccionProduccion = readFileSync(new URL('../fastlook_fix_checkin_produccion.sql', import.meta.url), 'utf8')
+test('RPC de entrada es idempotente y preserva históricos', () => { assert.match(correccionProduccion, /'idempotente', true/); assert.match(correccionProduccion, /JORNADA_ABIERTA_EXISTENTE/); assert.doesNotMatch(correccionProduccion, /delete\s+from|truncate/i) })

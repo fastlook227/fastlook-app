@@ -43,6 +43,43 @@ export function resolverQrCheckIn(valor: string) {
 }
 
 export type AccionCheckIn = 'entrada' | 'salida'
+
+export function finSeguroJornadaAbierta(entrada: string, ahora: Date) {
+  const inicio = new Date(entrada).getTime()
+  return Number.isFinite(inicio) && ahora.getTime() < inicio ? new Date(inicio) : ahora
+}
+
+export function validarPanelCheckIn(valor: unknown): EmpleadoCheckIn[] {
+  if (!Array.isArray(valor)) throw new Error('El servidor devolvió un panel de asistencia inválido.')
+  return valor.map((item) => {
+    if (!item || typeof item !== 'object') throw new Error('El servidor devolvió un empleado inválido.')
+    const empleado = item as Record<string, unknown>
+    if (typeof empleado.id !== 'string' || typeof empleado.nombre !== 'string' || typeof empleado.rol !== 'string' || typeof empleado.activo !== 'boolean') throw new Error('El servidor devolvió datos incompletos de un empleado.')
+    if (empleado.jornada === null) return empleado as unknown as EmpleadoCheckIn
+    if (!empleado.jornada || typeof empleado.jornada !== 'object') throw new Error('El servidor devolvió una jornada inválida.')
+    const jornada = empleado.jornada as Record<string, unknown>
+    const entrada = typeof jornada.entrada === 'string' ? Date.parse(jornada.entrada) : Number.NaN
+    const salida = jornada.salida === null ? null : typeof jornada.salida === 'string' ? Date.parse(jornada.salida) : Number.NaN
+    const numeros = [jornada.tarifa_normal, jornada.tarifa_extra, jornada.limite_horas_normales].map(Number)
+    if (typeof jornada.id !== 'string' || typeof jornada.fecha !== 'string' || !Number.isFinite(entrada) || (salida !== null && (!Number.isFinite(salida) || salida < entrada)) || numeros.some((numero) => !Number.isFinite(numero)) || numeros[0] < 0 || numeros[1] < 0 || numeros[2] <= 0) throw new Error('El servidor devolvió datos incompletos de una jornada.')
+    return { ...empleado, jornada: { ...jornada, tarifa_normal: numeros[0], tarifa_extra: numeros[1], limite_horas_normales: numeros[2] } } as unknown as EmpleadoCheckIn
+  })
+}
+
+export function operacionConfirmada(accion: AccionCheckIn, empleado: EmpleadoCheckIn | undefined) {
+  if (!empleado?.jornada) return false
+  return accion === 'entrada' ? !empleado.jornada.es_anterior : empleado.jornada.salida !== null
+}
+
+export function mensajeErrorCheckIn(error: unknown) {
+  const detalle = error && typeof error === 'object' && 'message' in error ? String(error.message) : error instanceof Error ? error.message : ''
+  if (/JORNADA_ABIERTA_EXISTENTE|asistencias_una_abierta_por_usuario_uidx/i.test(detalle)) return 'Ya existe una jornada abierta para este empleado. Revísala en el panel antes de continuar.'
+  if (/23505|duplicate key|jornada registrada hoy|salida ya fue registrada/i.test(detalle)) return 'La asistencia ya estaba registrada. Se comprobó el estado actual para evitar duplicarla.'
+  if (/42501|administrador activo|sesi[oó]n autenticada|JWT/i.test(detalle)) return 'Tu sesión no tiene permiso para operar Check In. Vuelve a iniciar sesión con una cuenta administradora activa.'
+  if (/Failed to fetch|NetworkError|fetch/i.test(detalle)) return 'No se pudo confirmar la respuesta del servidor. Se comprobará el estado real antes de permitir otro intento.'
+  return detalle || 'No fue posible completar la operación de asistencia.'
+}
+
 export function accionDisponible(jornada: JornadaCheckIn | null): AccionCheckIn | null {
   if (!jornada) return 'entrada'
   return jornada.salida ? null : 'salida'
@@ -59,7 +96,7 @@ export function resumirPanelCheckIn(empleados: EmpleadoCheckIn[], ahora = new Da
     if (empleado.jornada.es_anterior && !empleado.jornada.salida) continue
     if (empleado.jornada.salida) cerradas += 1
     else trabajando += 1
-    const fin = empleado.jornada.salida || ahora
+    const fin = empleado.jornada.salida || finSeguroJornadaAbierta(empleado.jornada.entrada, ahora)
     const calculo = calcularJornada(empleado.jornada.entrada, fin, empleado.jornada.tarifa_normal * 100, empleado.jornada.tarifa_extra * 100, empleado.jornada.limite_horas_normales * 60)
     normales += calculo.minutosNormales
     extras += calculo.minutosExtra
