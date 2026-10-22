@@ -22,6 +22,7 @@ export interface DatosFormularioCasco {
   proveedor: string
   imagen_url: string
   imagen_thumbnail_url?: string
+  usar_imagen_principal?: boolean
 }
 
 export interface GrupoPrecioCascos {

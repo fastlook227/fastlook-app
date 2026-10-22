@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useRef, useState, type CSSProperties, type SyntheticEvent } from 'react'
+import { useEffect, useState, type CSSProperties } from 'react'
+import { elegirFuentesImagen } from '@/utils/fuenteImagen'
 
 interface Props {
   src: string
@@ -8,36 +9,20 @@ interface Props {
   alt: string
   className?: string
   style?: CSSProperties
-  comprobarMiniaturaAntigua?: boolean
+  usarPrincipal?: boolean | null
 }
 
-export default function ImagenProducto({ src, miniatura, alt, className, style, comprobarMiniaturaAntigua = false }: Props) {
-  const [fuente, setFuente] = useState(miniatura || src)
+// Sólo se descarga la fuente elegida; la alterna se pide únicamente si la primera falla.
+export default function ImagenProducto({ src, miniatura, alt, className, style, usarPrincipal = false }: Props) {
+  const { preferida: fuentePreferida, alterna: fuenteAlterna } = elegirFuentesImagen(src, miniatura, usarPrincipal)
+  const [fuente, setFuente] = useState(fuentePreferida)
   const [fallida, setFallida] = useState(false)
-  const comprobacion = useRef<HTMLImageElement | null>(null)
   useEffect(() => {
-    comprobacion.current = null
-    setFuente(miniatura || src)
+    setFuente(fuentePreferida)
     setFallida(false)
-    return () => { comprobacion.current = null }
-  }, [miniatura, src])
+  }, [fuentePreferida])
 
-  const comprobarEncuadre = (evento: SyntheticEvent<HTMLImageElement>) => {
-    if (!comprobarMiniaturaAntigua || !miniatura || fuente !== miniatura || miniatura === src) return
-    const imagen = evento.currentTarget
-    const proporcionMiniatura = imagen.naturalWidth / imagen.naturalHeight
-    if (Math.abs(proporcionMiniatura - 1) > 0.02) return
-
-    const principal = new Image()
-    comprobacion.current = principal
-    principal.onload = () => {
-      if (comprobacion.current !== principal) return
-      const proporcionPrincipal = principal.naturalWidth / principal.naturalHeight
-      if (Math.abs(proporcionPrincipal - proporcionMiniatura) > 0.12) setFuente(src)
-    }
-    principal.src = src
-  }
-
+  const clases = [className, fuente === src ? 'fl-image-full' : ''].filter(Boolean).join(' ') || undefined
   if (fallida) return <span className={`fl-image-fallback${className ? ` ${className}` : ''}`} style={style} role="img" aria-label={`Imagen no disponible de ${alt}`}>Imagen no disponible</span>
-  return <img src={fuente} alt={alt} className={className} style={style} loading="lazy" decoding="async" fetchPriority="low" onLoad={comprobarEncuadre} onError={() => { if (fuente !== src) setFuente(src); else setFallida(true) }} />
+  return <img src={fuente} alt={alt} className={clases} style={style} data-fuente={fuente === src ? 'principal' : 'miniatura'} loading="lazy" decoding="async" fetchPriority="low" onError={() => { if (fuente === fuentePreferida && fuenteAlterna) setFuente(fuenteAlterna); else setFallida(true) }} />
 }

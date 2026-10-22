@@ -4,6 +4,7 @@ import { AlertTriangle, X } from 'lucide-react'
 import { useState } from 'react'
 import type { CascoCatalogo, DatosFormularioCasco } from '@/types/cascos'
 import SelectorImagen from '@/components/SelectorImagen'
+import ImagenProducto from '@/components/ImagenProducto'
 
 const TALLAS = ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'Unitalla']
 const CERTIFICACIONES = ['DOT', 'ECE', 'DOT + ECE', 'Sin especificar'] as const
@@ -34,6 +35,9 @@ export default function FormularioCasco({ casco, codigoInicial, ocupado, onGener
   const [proveedor, setProveedor] = useState(casco?.proveedor || '')
   const [imagenUrl, setImagenUrl] = useState(casco?.imagen_url || '')
   const [imagenThumbnailUrl, setImagenThumbnailUrl] = useState(casco?.imagen_thumbnail_url || '')
+  const [usarImagenPrincipal, setUsarImagenPrincipal] = useState(Boolean(casco?.usar_imagen_principal))
+  // Sólo se ofrece al editar y cuando la columna ya existe (migración aplicada).
+  const preferenciaDisponible = Boolean(casco && 'usar_imagen_principal' in casco)
   const [imagen, setImagen] = useState<File | null>(null)
   const [error, setError] = useState('')
 
@@ -41,7 +45,7 @@ export default function FormularioCasco({ casco, codigoInicial, ocupado, onGener
     const tallaFinal = talla === 'Otra' ? otraTalla.trim() : talla
     if (!codigo.trim() || !nombre.trim() || !precio || !tallaFinal) { setError('Código, nombre, precio y talla son obligatorios.'); return }
     setError('')
-    await onGuardar({ codigo: codigo.trim().toUpperCase(), codigoAutomatico, nombre: nombre.trim(), precio: Number(precio), costo: Number(costo || 0), stock: Number(stock || 0), stock_minimo: Number(stockMinimo || 0), talla: tallaFinal, certificacion, ubicacion: ubicacion.trim(), proveedor: proveedor.trim(), imagen_url: imagenUrl, imagen_thumbnail_url: imagenThumbnailUrl }, imagen)
+    await onGuardar({ codigo: codigo.trim().toUpperCase(), codigoAutomatico, nombre: nombre.trim(), precio: Number(precio), costo: Number(costo || 0), stock: Number(stock || 0), stock_minimo: Number(stockMinimo || 0), talla: tallaFinal, certificacion, ubicacion: ubicacion.trim(), proveedor: proveedor.trim(), imagen_url: imagenUrl, imagen_thumbnail_url: imagenThumbnailUrl, ...(preferenciaDisponible ? { usar_imagen_principal: usarImagenPrincipal } : {}) }, imagen)
   }
 
   return <div className="fl-casco-dialog-backdrop"><section className="fl-casco-form-dialog" role="dialog" aria-modal="true" aria-labelledby="titulo-formulario-casco"><header><div><span>Tipo fijo: CASCOS</span><h2 id="titulo-formulario-casco">{casco ? 'Editar casco' : 'Añadir casco'}</h2></div><button type="button" aria-label="Cerrar" onClick={onCancelar} disabled={ocupado}><X /></button></header><div className="fl-casco-form-grid">
@@ -49,6 +53,6 @@ export default function FormularioCasco({ casco, codigoInicial, ocupado, onGener
     <label className="is-wide"><span>Nombre</span><input value={nombre} onChange={(e) => setNombre(e.target.value)} /></label>
     <label><span>Tipo</span><input value="CASCOS" disabled /></label><label><span>Precio</span><input type="number" min="0" value={precio} onChange={(e) => setPrecio(e.target.value)} /></label><label><span>Costo</span><input type="number" min="0" value={costo} onChange={(e) => setCosto(e.target.value)} /></label><label><span>Existencia</span><input type="number" min="0" step="1" value={stock} onChange={(e) => setStock(e.target.value)} /></label><label><span>Stock mínimo</span><input type="number" min="0" step="1" value={stockMinimo} onChange={(e) => setStockMinimo(e.target.value)} /></label>
     <label><span>Talla</span><select value={talla} onChange={(e) => setTalla(e.target.value)}><option value="">Selecciona</option>{TALLAS.map((valor) => <option key={valor}>{valor}</option>)}<option>Otra</option></select></label>{talla === 'Otra' && <label><span>Otra talla</span><input value={otraTalla} onChange={(e) => setOtraTalla(e.target.value)} /></label>}<label><span>Certificación</span><select value={certificacion} onChange={(e) => setCertificacion(e.target.value as DatosFormularioCasco['certificacion'])}>{CERTIFICACIONES.map((valor) => <option key={valor}>{valor}</option>)}</select></label><label><span>Ubicación</span><input value={ubicacion} onChange={(e) => setUbicacion(e.target.value)} /></label><label><span>Proveedor</span><input value={proveedor} onChange={(e) => setProveedor(e.target.value)} /></label>
-    <label className="is-wide"><span>URL de imagen</span><input value={imagenUrl} onChange={(e) => { setImagenUrl(e.target.value); setImagenThumbnailUrl(''); setImagen(null) }} /></label><div className="is-wide"><SelectorImagen imagenUrl={imagenUrl} archivo={imagen} deshabilitado={ocupado} onSeleccionar={setImagen} onEliminar={() => { setImagen(null); setImagenUrl(''); setImagenThumbnailUrl('') }} /></div>
+    <label className="is-wide"><span>URL de imagen</span><input value={imagenUrl} onChange={(e) => { setImagenUrl(e.target.value); setImagenThumbnailUrl(''); setUsarImagenPrincipal(false); setImagen(null) }} /></label><div className="is-wide"><SelectorImagen imagenUrl={imagenUrl} archivo={imagen} deshabilitado={ocupado} onSeleccionar={setImagen} onEliminar={() => { setImagen(null); setImagenUrl(''); setImagenThumbnailUrl(''); setUsarImagenPrincipal(false) }} /></div>{preferenciaDisponible && !imagen && imagenUrl && imagenThumbnailUrl && <fieldset className="fl-image-source-picker is-wide"><legend>Imagen para tarjetas</legend><div><label><input type="radio" name="fuente-casco" checked={!usarImagenPrincipal} onChange={() => setUsarImagenPrincipal(false)} /><span>Miniatura</span><span className="fl-image-source-preview"><ImagenProducto src={imagenThumbnailUrl} alt="Vista previa de la miniatura" /></span></label><label><input type="radio" name="fuente-casco" checked={usarImagenPrincipal} onChange={() => setUsarImagenPrincipal(true)} /><span>Imagen principal</span><span className="fl-image-source-preview"><ImagenProducto src={imagenUrl} alt="Vista previa de la imagen principal" /></span></label></div><small>Elige la principal si la miniatura existente ya está recortada.</small></fieldset>}
   </div>{error && <p className="fl-casco-form-error" role="alert">{error}</p>}<footer><button type="button" onClick={onCancelar} disabled={ocupado}>Cancelar</button><button type="button" className="is-primary" onClick={() => void enviar()} disabled={ocupado}>{casco ? 'Actualizar casco' : 'Guardar casco'}</button></footer></section></div>
 }

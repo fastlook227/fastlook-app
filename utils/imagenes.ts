@@ -1,4 +1,4 @@
-interface OpcionesImagen { ladoMaximo?: number; calidad?: number; sufijo?: string }
+interface OpcionesImagen { ladoMaximo?: number; calidad?: number; sufijo?: string; lienzoCuadradoBlanco?: boolean }
 
 const convertirImagen = (file: File, opciones: OpcionesImagen = {}): Promise<File> => {
   return new Promise((resolve, reject) => {
@@ -35,8 +35,9 @@ const convertirImagen = (file: File, opciones: OpcionesImagen = {}): Promise<Fil
         const altoFinal = Math.max(1, Math.round(altoOriginal * escala))
 
         const canvas = document.createElement('canvas')
-        canvas.width = anchoFinal
-        canvas.height = altoFinal
+        const ladoLienzo = opciones.lienzoCuadradoBlanco ? ladoMaximo : null
+        canvas.width = ladoLienzo || anchoFinal
+        canvas.height = ladoLienzo || altoFinal
 
         const contexto = canvas.getContext('2d')
 
@@ -46,7 +47,9 @@ const convertirImagen = (file: File, opciones: OpcionesImagen = {}): Promise<Fil
           return
         }
 
-        contexto.drawImage(imagen, 0, 0, anchoFinal, altoFinal)
+        contexto.fillStyle = '#ffffff'
+        contexto.fillRect(0, 0, canvas.width, canvas.height)
+        contexto.drawImage(imagen, (canvas.width - anchoFinal) / 2, (canvas.height - altoFinal) / 2, anchoFinal, altoFinal)
 
         const finalizar = (blob: Blob | null, extension: 'webp' | 'jpg') => {
             liberarRecursos()
@@ -92,7 +95,7 @@ export const comprimirImagenProducto = (file: File) => convertirImagen(file)
 export const crearVariantesImagenProducto = async (file: File) => {
   const [principal, miniatura] = await Promise.all([
     convertirImagen(file, { ladoMaximo: 900, calidad: 0.75 }),
-    convertirImagen(file, { ladoMaximo: 320, calidad: 0.68, sufijo: '-thumb' }),
+    convertirImagen(file, { ladoMaximo: 320, calidad: 0.68, sufijo: '-thumb', lienzoCuadradoBlanco: true }),
   ])
   return { principal, miniatura }
 }

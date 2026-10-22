@@ -10,7 +10,7 @@ const CamposCasco = z.object({
   precio: z.number().nonnegative(), costo: z.number().nonnegative(), stock: z.number().int().nonnegative(),
   stock_minimo: z.number().int().nonnegative(), talla: z.string().trim().min(1).max(40),
   certificacion: z.enum(['DOT', 'ECE', 'DOT + ECE', 'Sin especificar']), ubicacion: z.string().trim().max(100),
-  proveedor: z.string().trim().max(200), imagen_url: z.string().trim().max(2000), imagen_thumbnail_url: z.string().trim().max(2000).optional().default(''), codigoAutomatico: z.boolean(),
+  proveedor: z.string().trim().max(200), imagen_url: z.string().trim().max(2000), imagen_thumbnail_url: z.string().trim().max(2000).optional().default(''), usar_imagen_principal: z.boolean().optional(), codigoAutomatico: z.boolean(),
 })
 const Solicitud = z.discriminatedUnion('operacion', [
   z.object({ operacion: z.literal('CREAR'), solicitudId: z.string().uuid(), casco: CamposCasco }),
@@ -45,7 +45,7 @@ const obtenerCasco = async (cliente: SupabaseClient, id: string, permitirArchiva
 const datosCasco = (casco: z.infer<typeof CamposCasco> | z.infer<ReturnType<typeof CamposCasco.omit>>) => ({
   codigo: normalizarCodigoProducto(casco.codigo), nombre: casco.nombre.trim(), tipo: 'CASCOS', precio: casco.precio,
   costo: casco.costo, stock: casco.stock, stock_minimo: casco.stock_minimo, talla: casco.talla.trim(),
-  certificacion: casco.certificacion, ubicacion: casco.ubicacion.trim(), proveedor: casco.proveedor.trim(), imagen_url: casco.imagen_url.trim(), imagen_thumbnail_url: casco.imagen_thumbnail_url?.trim() || null,
+  certificacion: casco.certificacion, ubicacion: casco.ubicacion.trim(), proveedor: casco.proveedor.trim(), imagen_url: casco.imagen_url.trim(), imagen_thumbnail_url: casco.imagen_thumbnail_url?.trim() || null, usar_imagen_principal: casco.usar_imagen_principal,
 })
 const registrarMovimiento = async (cliente: SupabaseClient, producto: Record<string, unknown>, tipo: string, cantidad: number, anterior: number, nuevo: number, nota: string) => {
   const { error } = await cliente.from('movimientos_inventario').insert({
@@ -72,6 +72,8 @@ export async function POST(request: Request) {
         p_stock_minimo: datos.stock_minimo, p_talla: datos.talla, p_certificacion: datos.certificacion,
         p_ubicacion: datos.ubicacion, p_proveedor: datos.proveedor, p_imagen_url: datos.imagen_url,
         p_imagen_thumbnail_url: datos.imagen_thumbnail_url,
+        // Sin la preferencia se usa la firma previa de 13 parámetros, válida antes y después de la migración.
+        ...(datos.usar_imagen_principal === undefined ? {} : { p_usar_imagen_principal: datos.usar_imagen_principal }),
       })
       if (error) {
         const permisos = error.code === '42501' || /row-level security|permission denied|ROL_NO_PERMITIDO|SIN_SESION/i.test(error.message)
@@ -93,6 +95,8 @@ export async function POST(request: Request) {
         p_stock_minimo: datos.stock_minimo, p_talla: datos.talla, p_certificacion: datos.certificacion,
         p_ubicacion: datos.ubicacion, p_proveedor: datos.proveedor, p_imagen_url: datos.imagen_url,
         p_imagen_thumbnail_url: datos.imagen_thumbnail_url,
+        // Sin la preferencia se usa la firma previa de 13 parámetros, válida antes y después de la migración.
+        ...(datos.usar_imagen_principal === undefined ? {} : { p_usar_imagen_principal: datos.usar_imagen_principal }),
       })
       if (error) {
         const permisos = error.code === '42501' || /row-level security|permission denied|ROL_NO_PERMITIDO|SIN_SESION/i.test(error.message)

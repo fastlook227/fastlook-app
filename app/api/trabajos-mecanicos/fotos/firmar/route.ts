@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { ErrorAutenticacion, exigirAdministrador } from '@/lib/auth/servidor'
+import { ErrorAutenticacion, exigirKikeadminNomina } from '@/lib/auth/servidor'
 import { obtenerSupabaseAdmin } from '@/lib/supabaseAdmin'
 import { BUCKET_FOTOS_TRABAJOS, fotoTrabajoVigente, rutaFotoTrabajoValida } from '@/utils/fotosTrabajosMecanicos'
 
@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic'
 
 export async function POST(request: Request) {
   try {
-    await exigirAdministrador(request)
+    await exigirKikeadminNomina(request)
     const entrada = z.object({ trabajoId: z.string().uuid() }).safeParse(await request.json())
     if (!entrada.success) return Response.json({ ok: false, mensaje: 'El trabajo no es válido.' }, { status: 400 })
     const admin = obtenerSupabaseAdmin()

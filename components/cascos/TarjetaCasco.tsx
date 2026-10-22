@@ -24,7 +24,7 @@ export default function TarjetaCasco({ casco, rol, onVer, agotado = false, onVen
   return (
     <article className={`fl-helmet-card${agotado ? ' is-sold-out' : ''}`}>
       <button type="button" className="fl-helmet-image-button" onClick={() => onVer(casco)} aria-label={`Ampliar imagen de ${casco.nombre}`}>
-        {casco.imagen_url ? <ImagenProducto src={casco.imagen_url} miniatura={casco.imagen_thumbnail_url} alt={casco.nombre} /> : <span><ImageOff size={35} aria-hidden="true" />Imagen no disponible</span>}
+        {casco.imagen_url ? <ImagenProducto src={casco.imagen_url} miniatura={casco.imagen_thumbnail_url} usarPrincipal={casco.usar_imagen_principal} alt={casco.nombre} /> : <span><ImageOff size={35} aria-hidden="true" />Imagen no disponible</span>}
       </button>
       <div className="fl-helmet-card-body">
         <div className="fl-helmet-badges"><span className={agotado ? 'is-out' : stock === 1 ? 'is-last' : 'is-available'}>{agotado ? 'Agotado' : stock === 1 ? 'Última pieza' : 'Disponible'}</span>{rol === 'Admin' && <span className="is-admin">Vista Admin</span>}</div>

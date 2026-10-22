@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { ErrorAutenticacion, exigirAdministrador } from '@/lib/auth/servidor'
+import { ErrorAutenticacion, exigirKikeadminNomina } from '@/lib/auth/servidor'
 import { obtenerSupabaseAdmin } from '@/lib/supabaseAdmin'
 import { BUCKET_FOTOS_TRABAJOS, extensionParaMime, fechaEnMexico, MAX_BYTES_FOTO_TRABAJO, MIME_FOTOS_TRABAJO, rutaFotoTrabajoValida } from '@/utils/fotosTrabajosMecanicos'
 
@@ -12,7 +12,7 @@ const responderError = (error: unknown) => {
 
 export async function POST(request: Request) {
   try {
-    const perfil = await exigirAdministrador(request)
+    const perfil = await exigirKikeadminNomina(request)
     const formulario = await request.formData()
     const archivo = formulario.get('foto')
     const fecha = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).safeParse(formulario.get('fecha'))
@@ -39,7 +39,7 @@ export async function POST(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
-    const perfil = await exigirAdministrador(request)
+    const perfil = await exigirKikeadminNomina(request)
     const entrada = z.object({ ruta: z.string().refine(rutaFotoTrabajoValida) }).safeParse(await request.json())
     if (!entrada.success || !entrada.data.ruta.split('/')[1]?.toLowerCase().includes(perfil.id.toLowerCase())) {
       return Response.json({ ok: false, mensaje: 'La ruta de fotografía no es válida.' }, { status: 400 })

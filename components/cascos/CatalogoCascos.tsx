@@ -174,7 +174,7 @@ export default function CatalogoCascos({ productos, rol, error, onReintentar, on
       } else {
         const subida = imagen ? await subirImagen(imagen, datos.codigo) : null
         if (subida) rutasNuevas = subida.rutas
-        const urls = subida ? { imagen_url: subida.imagen_url, imagen_thumbnail_url: subida.imagen_thumbnail_url } : { imagen_url: datos.imagen_url, imagen_thumbnail_url: datos.imagen_thumbnail_url || '' }
+        const urls = subida ? { imagen_url: subida.imagen_url, imagen_thumbnail_url: subida.imagen_thumbnail_url, ...(datos.usar_imagen_principal === undefined ? {} : { usar_imagen_principal: false }) } : { imagen_url: datos.imagen_url, imagen_thumbnail_url: datos.imagen_thumbnail_url || '' }
         body = editando
           ? { operacion: 'EDITAR', productoId: formularioCasco.id, casco: { ...datos, ...urls } }
           : { operacion: 'CREAR', solicitudId: crypto.randomUUID(), casco: { ...datos, ...urls } }

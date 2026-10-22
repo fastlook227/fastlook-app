@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Session } from '@supabase/supabase-js'
-import { AlertTriangle, Barcode, CheckCircle, ChevronDown, ChevronUp, Edit3, Hash, MoreVertical, PackagePlus, Plus, RefreshCw, ScanLine, SlidersHorizontal, Trash2, X } from 'lucide-react'
+import { AlertTriangle, Banknote, Barcode, CheckCircle, ChevronDown, ChevronUp, CreditCard, Edit3, Hash, Landmark, Minus, MoreVertical, PackagePlus, Plus, RefreshCw, ScanLine, ShoppingCart, SlidersHorizontal, Trash2, X } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import type {
   Cliente,
@@ -91,6 +91,8 @@ import TarjetaProducto from '@/components/TarjetaProducto'
 export default function Home() {
   const [tab, setTab] = useState<Tab>('venta')
   const [productos, setProductos] = useState<Producto[]>([])
+  // La preferencia sólo se envía cuando la migración fastlook_preferencia_imagen_principal.sql ya expuso la columna.
+  const columnaFuenteImagen = useMemo(() => productos.some((producto) => 'usar_imagen_principal' in producto), [productos])
   const [errorProductos, setErrorProductos] = useState('')
   const [ventas, setVentas] = useState<Venta[]>([])
   const [devoluciones, setDevoluciones] = useState<Devolucion[]>([])
@@ -262,6 +264,7 @@ export default function Home() {
     proveedor: '',
     imagen_url: '',
     imagen_thumbnail_url: '',
+    usar_imagen_principal: false,
   })
   const formRef = useRef<HTMLDivElement>(null)
   const primerCampoInventarioRef = useRef<HTMLInputElement>(null)
@@ -278,6 +281,7 @@ export default function Home() {
     proveedor: '',
     imagen_url: '',
     imagen_thumbnail_url: '',
+    usar_imagen_principal: false,
   })
   const [formularioInventarioAbierto, setFormularioInventarioAbierto] = useState(Boolean(form.id))
   const [detallesProductoAbiertos, setDetallesProductoAbiertos] = useState(false)
@@ -602,6 +606,7 @@ const fetchMovimientosClientes = async () => {
       ...prev,
       imagen_url: data.publicUrl,
       imagen_thumbnail_url: supabase.storage.from('productos').getPublicUrl(nombreMiniatura).data.publicUrl,
+      usar_imagen_principal: false,
     }))
 
     setNotificacionImagen({ tipo: 'ok', mensaje: 'Imagen subida correctamente.' })
@@ -1121,6 +1126,7 @@ const fetchMovimientosClientes = async () => {
       proveedor: form.proveedor,
       imagen_url: form.imagen_url,
       imagen_thumbnail_url: form.imagen_thumbnail_url || null,
+      ...(columnaFuenteImagen ? { usar_imagen_principal: Boolean(form.usar_imagen_principal) } : {}),
     })
 
     if (form.id) {
@@ -1230,6 +1236,7 @@ const fetchMovimientosClientes = async () => {
       proveedor: '',
       imagen_url: '',
       imagen_thumbnail_url: '',
+      usar_imagen_principal: false,
     }
     setForm(formularioVacio)
     formularioInventarioBaseRef.current = formularioVacio
@@ -1290,6 +1297,7 @@ const fetchMovimientosClientes = async () => {
       proveedor: p.proveedor || '',
       imagen_url: p.imagen_url || '',
       imagen_thumbnail_url: p.imagen_thumbnail_url || '',
+      usar_imagen_principal: Boolean(p.usar_imagen_principal),
     }
     formularioInventarioBaseRef.current = productoParaEditar
     tipoOriginalEdicionRef.current = p.tipo || ''
@@ -1875,17 +1883,14 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
 
     </>}
     {carritoAbierto && (
-      <div style={styles.fondoCarrito} onClick={cerrarCarrito} role="presentation">
-        <div ref={panelCarritoRef} style={styles.carritoMovil} onClick={(evento) => evento.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="titulo-carrito" tabIndex={-1}>
-          <button style={styles.cerrarCarrito} onClick={cerrarCarrito} aria-label="Cerrar carrito">×</button>
-          <h2 id="titulo-carrito">Ticket actual</h2>
-          <select value={metodoPago} disabled={procesandoCarritoActivo} onChange={(e) => { abandonarIntentoVenta(); setMetodoPago(e.target.value) }} style={styles.input}><option value="Efectivo">Efectivo</option><option value="Transferencia">Transferencia</option><option value="Tarjeta">Tarjeta</option></select>
-          {carrito.length === 0 && <div style={styles.alert}>Aún no hay productos en el ticket.</div>}
-          {carrito.map((item) => { const id = claveLinea(item); const nombre = obtenerNombreLinea(item); const precio = obtenerPrecioLinea(item); return <div key={id} style={styles.ticketItem}><p><b>{nombre}</b></p><p>Precio: ${precio}</p>{!esLineaInventario(item) && <p>Personalizado · Sin reserva de stock</p>}<div style={styles.qtyRow}><button style={styles.qtyBtn} disabled={procesandoCarritoActivo} onClick={() => disminuirCantidad(id)} aria-label={`Restar ${nombre}`}>-</button><input type="number" disabled={procesandoCarritoActivo} value={item.cantidad} onChange={(e) => cambiarCantidad(id, Number(e.target.value))} style={styles.qtyInput} aria-label={`Cantidad de ${nombre}`} /><button style={styles.qtyBtn} disabled={procesandoCarritoActivo} onClick={() => aumentarCantidad(id)} aria-label={`Sumar ${nombre}`}>+</button></div><p>Subtotal: ${precio * item.cantidad}</p><button style={styles.blackButton} disabled={procesandoCarritoActivo} onClick={() => eliminarDelCarrito(id)}>Eliminar</button></div> })}
-          <div style={styles.ticketBox}><h2>Total: ${totalCarrito}</h2>{usuarioRol === 'Admin' && <p>Ganancia estimada: ${gananciaCarrito}</p>}<p>Método de pago: {metodoPago}</p></div>
-          <button style={styles.bigButton} onClick={() => void solicitarFinalizarVenta()} disabled={procesandoCarritoActivo || carrito.length === 0}>{procesandoCarritoActivo ? 'Procesando venta…' : 'Finalizar venta'}</button>
-          <button style={styles.redButton} onClick={enviarWhatsApp} disabled={procesandoCarritoActivo}>Enviar por WhatsApp</button>
-          <button style={styles.grayButton} onClick={cancelarTicket} disabled={procesandoCarritoActivo}>Cancelar ticket</button>
+      <div className="fl-cart-backdrop" onClick={cerrarCarrito} role="presentation">
+        <div ref={panelCarritoRef} className="fl-cart-panel" onClick={(evento) => evento.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="titulo-carrito" tabIndex={-1}>
+          <header className="fl-cart-header"><div><span>FAST LOOK</span><h2 id="titulo-carrito">Venta actual</h2><small>{resumirCarritoMixto(carrito).unidades} artículos</small></div><button type="button" onClick={cerrarCarrito} aria-label="Cerrar carrito"><X /></button></header>
+          <div className="fl-cart-lines">
+            {carrito.length === 0 && <div className="fl-cart-empty"><ShoppingCart /><strong>Tu ticket está vacío</strong><span>Agrega productos para comenzar la venta.</span></div>}
+            {carrito.map((item) => { const id = claveLinea(item); const nombre = obtenerNombreLinea(item); const precio = obtenerPrecioLinea(item); const inventario = esLineaInventario(item); return <article key={id} className="fl-cart-line"><div className="fl-cart-line-image">{inventario && item.producto.imagen_url ? <ImagenProducto src={item.producto.imagen_url} miniatura={item.producto.imagen_thumbnail_url} usarPrincipal={item.producto.usar_imagen_principal} alt="" /> : <ShoppingCart aria-hidden="true" />}</div><div className="fl-cart-line-copy"><strong title={nombre}>{nombre}</strong><span>${precio.toFixed(2)} c/u</span>{!inventario && <small>Personalizado · Sin reserva de stock</small>}<div className="fl-cart-quantity"><button type="button" disabled={procesandoCarritoActivo} onClick={() => disminuirCantidad(id)} aria-label={`Restar ${nombre}`}><Minus /></button><input type="number" min="1" disabled={procesandoCarritoActivo} value={item.cantidad} onChange={(e) => cambiarCantidad(id, Number(e.target.value))} aria-label={`Cantidad de ${nombre}`} /><button type="button" disabled={procesandoCarritoActivo} onClick={() => aumentarCantidad(id)} aria-label={`Sumar ${nombre}`}><Plus /></button></div></div><div className="fl-cart-line-end"><strong>${(precio * item.cantidad).toFixed(2)}</strong><button type="button" className="fl-cart-remove" disabled={procesandoCarritoActivo} onClick={() => eliminarDelCarrito(id)} aria-label={`Eliminar ${nombre}`}><Trash2 /></button></div></article> })}
+          </div>
+          <footer className="fl-cart-summary"><fieldset disabled={procesandoCarritoActivo}><legend>Método de pago</legend><div className="fl-cart-payments">{([{ valor: 'Efectivo', icono: Banknote }, { valor: 'Transferencia', icono: Landmark }, { valor: 'Tarjeta', icono: CreditCard }] as const).map(({ valor, icono: Icono }) => <button type="button" key={valor} className={metodoPago === valor ? 'is-selected' : ''} aria-pressed={metodoPago === valor} onClick={() => { abandonarIntentoVenta(); setMetodoPago(valor) }}><Icono /><span>{valor}</span></button>)}</div></fieldset><div className="fl-cart-total"><span>Total</span><strong>${totalCarrito.toFixed(2)}</strong>{usuarioRol === 'Admin' && <small>Ganancia estimada: ${gananciaCarrito.toFixed(2)}</small>}</div><button type="button" className="fl-cart-charge" onClick={() => void solicitarFinalizarVenta()} disabled={procesandoCarritoActivo || carrito.length === 0}>{procesandoCarritoActivo ? 'Guardando venta…' : `Cobrar $${totalCarrito.toFixed(2)}`}</button><div className="fl-cart-secondary"><button type="button" onClick={enviarWhatsApp} disabled={procesandoCarritoActivo || carrito.length === 0}>Enviar por WhatsApp</button><button type="button" className="is-danger" onClick={cancelarTicket} disabled={procesandoCarritoActivo || carrito.length === 0}>Cancelar ticket</button></div></footer>
         </div>
       </div>
     )}
@@ -1934,7 +1939,8 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
               <label><span>Tipo de producto</span><select style={styles.input} value={form.tipo} onChange={(e) => { setForm({ ...form, tipo: e.target.value }); setTipoModificadoManualmente(true); if (e.target.value !== 'OTROS') setTipoPersonalizado('') }}><option value="">Selecciona un tipo</option>{tiposProducto.map((tipo) => <option key={tipo} value={tipo}>{tipo}</option>)}</select></label>
               <label><span>Precio de venta</span><input style={styles.input} placeholder="Precio de venta" value={form.precio} onChange={(e) => setForm({ ...form, precio: e.target.value })} /></label>
               <label><span>Stock</span><input style={styles.input} placeholder="Stock" value={form.stock} onChange={(e) => setForm({ ...form, stock: e.target.value })} /></label>
-              <div className="fl-product-photo-field"><span>Foto</span><SelectorImagen imagenUrl={form.imagen_url} deshabilitado={subiendoImagen} onSeleccionar={subirImagenProducto} onEliminar={() => setForm((actual) => ({ ...actual, imagen_url: '', imagen_thumbnail_url: '' }))} />{subiendoImagen && <div className="fl-image-notice" role="status">{faseImagen}</div>}{notificacionImagen && <div className={`fl-image-notice is-${notificacionImagen.tipo}`} role="status">{notificacionImagen.mensaje}</div>}</div>
+              <div className="fl-product-photo-field"><span>Foto</span><SelectorImagen imagenUrl={form.imagen_url} deshabilitado={subiendoImagen} onSeleccionar={subirImagenProducto} onEliminar={() => setForm((actual) => ({ ...actual, imagen_url: '', imagen_thumbnail_url: '', usar_imagen_principal: false }))} />{subiendoImagen && <div className="fl-image-notice" role="status">{faseImagen}</div>}{notificacionImagen && <div className={`fl-image-notice is-${notificacionImagen.tipo}`} role="status">{notificacionImagen.mensaje}</div>}</div>
+              {usuarioRol === 'Admin' && columnaFuenteImagen && form.id && form.imagen_url && form.imagen_thumbnail_url && <fieldset className="fl-image-source-picker"><legend>Imagen para tarjetas</legend><div><label><input type="radio" name="fuente-producto" checked={!form.usar_imagen_principal} onChange={() => setForm({ ...form, usar_imagen_principal: false })} /><span>Miniatura</span><span className="fl-image-source-preview"><ImagenProducto src={form.imagen_thumbnail_url} alt="Vista previa de la miniatura" /></span></label><label><input type="radio" name="fuente-producto" checked={Boolean(form.usar_imagen_principal)} onChange={() => setForm({ ...form, usar_imagen_principal: true })} /><span>Imagen principal</span><span className="fl-image-source-preview"><ImagenProducto src={form.imagen_url} alt="Vista previa de la imagen principal" /></span></label></div><small>Elige la principal si la miniatura existente está recortada.</small></fieldset>}
             </div>
 
             <section className={`fl-product-details ${detallesProductoAbiertos ? 'is-open' : ''}`}>
@@ -1953,7 +1959,7 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
                 <label><span>Stock mínimo</span><input style={styles.input} placeholder="Stock mínimo" value={form.stock_minimo} onChange={(e) => setForm({ ...form, stock_minimo: e.target.value })} /></label>
                 <label><span>Ubicación</span><input style={styles.input} placeholder="Ubicación" value={form.ubicacion} onChange={(e) => setForm({ ...form, ubicacion: e.target.value })} /></label>
                 <label><span>Proveedor</span><input style={styles.input} placeholder="Proveedor" value={form.proveedor} onChange={(e) => setForm({ ...form, proveedor: e.target.value })} /></label>
-                  <label className="is-wide"><span>URL de imagen</span><input style={styles.input} placeholder="URL de imagen" value={form.imagen_url} onChange={(e) => setForm({ ...form, imagen_url: e.target.value, imagen_thumbnail_url: '' })} /></label>
+                  <label className="is-wide"><span>URL de imagen</span><input style={styles.input} placeholder="URL de imagen" value={form.imagen_url} onChange={(e) => setForm({ ...form, imagen_url: e.target.value, imagen_thumbnail_url: '', usar_imagen_principal: false })} /></label>
               </div>}
             </section>
 
@@ -2291,59 +2297,10 @@ productosVenta: {
   minWidth: 0,
 },
 
-ticketFijo: {
-  position: 'sticky',
-  top: 12,
-  backgroundColor: '#fff',
-  border: '2px solid #111',
-  borderTop: '6px solid #c40000',
-  borderRadius: 10,
-  padding: 14,
-  maxHeight: 'calc(100vh - 24px)',
-  overflowY: 'auto',
-},
-
-listaTicket: {
-  maxHeight: 300,
-  overflowY: 'auto',
-  marginBottom: 10,
-},
 '@media (max-width: 800px)': {
   ventaLayout: {
     gridTemplateColumns: '1fr',
   },
-},
-fondoCarrito: {
-  position: 'fixed',
-  inset: 0,
-  backgroundColor: 'rgba(0,0,0,0.45)',
-  zIndex: 1000,
-  display: 'flex',
-  justifyContent: 'flex-end',
-},
-
-carritoMovil: {
-  width: 'min(420px, 92vw)',
-  height: '100vh',
-  backgroundColor: '#fff',
-  padding: 16,
-  overflowY: 'auto',
-  boxShadow: '-8px 0 24px rgba(0,0,0,0.25)',
-  position: 'relative',
-},
-
-cerrarCarrito: {
-  position: 'absolute',
-  top: 10,
-  right: 12,
-  border: 'none',
-  backgroundColor: '#c40000',
-  color: '#fff',
-  borderRadius: '50%',
-  width: 44,
-  height: 44,
-  fontSize: 22,
-  cursor: 'pointer',
 },
 deudaBox: {
   backgroundColor: '#ffe5e5',

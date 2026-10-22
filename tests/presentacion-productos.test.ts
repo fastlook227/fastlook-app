@@ -44,6 +44,7 @@ test('detalle se abre sólo por clic, cierra con Escape y no expone costo', () =
 test('tarjetas contienen imágenes completas y recortan textos sólo visualmente', () => {
   assert.match(estilos, /fl-product-card-media > img[^}]*object-fit: contain/)
   assert.match(estilos, /fl-product-card-media > img[^}]*object-position: center/)
+  assert.match(estilos, /fl-product-card-media[^}]*padding: 8px[^}]*background: #fff/)
   assert.doesNotMatch(estilos, /fl-helmet-image-button:hover img/)
   assert.match(estilos, /-webkit-line-clamp: 2/)
   assert.match(estilos, /overflow-wrap: anywhere/)
@@ -61,4 +62,13 @@ test('Venta rápida no monta carrito lateral, barra móvil ni cobro duplicado', 
   assert.doesNotMatch(rapida, /CarritoRapido|fl-quick-cart|fl-quick-payment|cobroAbierto/)
   assert.doesNotMatch(estilos, /\.fl-quick-cart|\.fl-quick-payment/)
   assert.match(estilos, /\.fl-quick-sale \{ display: block; width: 100%/)
+})
+
+test('panel de venta mantiene lista desplazable, resumen fijo y cobro con total real', () => {
+  assert.match(pagina, /className="fl-cart-lines"/)
+  assert.match(pagina, /className="fl-cart-summary"/)
+  assert.match(pagina, /`Cobrar \$\$\{totalCarrito\.toFixed\(2\)\}`/)
+  assert.match(pagina, /Guardando venta…/)
+  assert.match(estilos, /fl-cart-panel[^}]*grid-template-rows: auto minmax\(0,1fr\) auto/)
+  assert.match(estilos, /fl-cart-lines[^}]*overflow-y: auto/)
 })
