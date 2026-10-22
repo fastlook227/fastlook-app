@@ -9,7 +9,6 @@ import { accionDisponible, finSeguroJornadaAbierta, mensajeErrorCheckIn, operaci
 import { formatearFechaHoraFastLook } from '@/utils/fechas'
 
 const hoy = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Mexico_City' }).format(new Date())
-const inicioMes = () => `${hoy().slice(0, 7)}-01`
 const dinero = (valor: number) => new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(valor)
 const horas = (minutos: number) => `${Math.floor(minutos / 60)}h ${Math.floor(minutos % 60)}min`
 
@@ -31,7 +30,7 @@ function validarPanel(valor: unknown): PanelNominaCheckIn {
 
 export default function CheckInNomina() {
   const [panel, setPanel] = useState<PanelNominaCheckIn | null>(null)
-  const [desde, setDesde] = useState(inicioMes); const [hasta, setHasta] = useState(hoy)
+  const [desde, setDesde] = useState(hoy); const [hasta, setHasta] = useState(hoy)
   const [abiertos, setAbiertos] = useState<Set<string>>(new Set())
   const [error, setError] = useState(''); const [cargando, setCargando] = useState(true); const [guardando, setGuardando] = useState(false)
   const [ahora, setAhora] = useState(new Date()); const [incierta, setIncierta] = useState<{ empleadoId: string; accion: AccionCheckIn } | null>(null)

@@ -72,3 +72,13 @@ test('índices y bloqueos existentes siguen evitando asistencia duplicada', () =
   assert.match(fase1, /asistencias_una_abierta_por_usuario_uidx/)
   assert.match(sql, /pg_advisory_xact_lock/)
 })
+
+test('el filtro de nómina abre en el día de hoy (hora de México) e incluye el día completo', () => {
+  assert.match(vista, /const hoy = \(\) => new Intl\.DateTimeFormat\('en-CA', \{ timeZone: 'America\/Mexico_City' \}\)/)
+  assert.match(vista, /useState\(hoy\); const \[hasta, setHasta\] = useState\(hoy\)/)
+  assert.doesNotMatch(vista, /toISOString\(\)\.slice\(0, 10\)/)
+  // p_hasta es date y se compara con BETWEEN sobre columnas date: incluye todo el día
+  assert.match(sql, /obtener_nomina_checkin\(p_desde date, p_hasta date\)/)
+  assert.match(sql, /a\.fecha between p_desde and p_hasta/)
+  assert.match(sql, /t\.fecha between p_desde and p_hasta/)
+})
