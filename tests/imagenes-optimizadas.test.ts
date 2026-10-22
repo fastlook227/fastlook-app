@@ -33,7 +33,16 @@ test('genera principal y miniatura sin transformaciones remotas', () => {
   assert.match(compresion, /ladoMaximo: 900/)
   assert.match(compresion, /ladoMaximo: 320/)
   assert.match(compresion, /image\/webp/)
+  assert.match(compresion, /anchoOriginal \* escala/)
+  assert.match(compresion, /altoOriginal \* escala/)
+  assert.match(compresion, /drawImage\(imagen, 0, 0, anchoFinal, altoFinal\)/)
   assert.doesNotMatch(compresion, /render\/image|transform/)
+})
+
+test('compara de forma selectiva miniaturas antiguas cuadradas con el original', () => {
+  assert.match(imagen, /comprobarMiniaturaAntigua/)
+  assert.match(imagen, /Math\.abs\(proporcionMiniatura - 1\) > 0\.02/)
+  assert.match(imagen, /Math\.abs\(proporcionPrincipal - proporcionMiniatura\) > 0\.12/)
 })
 
 test('la migración conserva originales y la consulta de huérfanas es sólo lectura', () => {

@@ -919,19 +919,6 @@ const fetchMovimientosClientes = async () => {
       : { tipo: 'error', mensaje: Number(producto.stock) <= 0 ? 'Producto sin stock' : resultado.mensaje.includes('máximo') ? `Stock máximo disponible: ${producto.stock}` : resultado.mensaje, nombre: producto.nombre })
   }
 
-  const cambiarCantidadVentaRapida = (id: string, cantidad: number) => {
-    const item = obtenerVentaActiva(estadoVentasRef.current).carrito.find((linea) => claveLinea(linea) === id)
-    if (item && esLineaInventario(item) && cantidad > Number(item.producto.stock)) mostrarFeedbackEscaneo({ tipo: 'error', mensaje: `Stock máximo disponible: ${item.producto.stock}`, nombre: item.producto.nombre })
-    cambiarCantidad(id, cantidad, false)
-  }
-
-  const cobrarVentaRapida = async (metodo: string) => {
-    if (metodo !== metodoPago) abandonarIntentoVenta(estadoVentasRef.current.activaId)
-    setMetodoPago(metodo)
-    if (requiereCapturaEfectivo(esDesktopPOS, metodo)) { setCobroEfectivoPOS({ ventaId: estadoVentasRef.current.activaId, total: resumirCarritoMixto(obtenerVentaActiva(estadoVentasRef.current).carrito).total }); return 'pendiente' as const }
-    return finalizarVenta(metodo)
-  }
-
   const solicitarFinalizarVenta = async () => {
     if (requiereCapturaEfectivo(esDesktopPOS, metodoPago)) { setCobroEfectivoPOS({ ventaId: estadoVentasRef.current.activaId, total: totalCarrito }); return }
     await finalizarVenta()
@@ -1792,7 +1779,7 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
       }}
       onCerrarSistema={cerrarSistema}
       onBuscarProductos={() => { setModoVenta('normal'); setTab('venta'); setSolicitudFocoVenta((actual) => actual + 1) }}
-      floatingCart={<CarritoFlotanteGlobal carrito={carrito} onAbrirVenta={() => { setTab('venta'); if (modoVenta === 'normal') setCarritoAbierto(true) }} />}
+      floatingCart={<CarritoFlotanteGlobal carrito={carrito} onAbrirVenta={() => { setTab('venta'); setCarritoAbierto(true) }} />}
     >
       <main style={styles.main}>
         {avisoCorte && <div style={styles.alert} role="alert">{avisoCorte}</div>}
@@ -1840,7 +1827,6 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
       productos={productosActivos}
       resultados={productosVentaFiltrados}
       ventas={ventas}
-      carrito={carrito}
       busqueda={busquedaVenta}
       filtros={filtrosVenta}
       procesando={procesandoCarritoActivo}
@@ -1850,14 +1836,9 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
       onBusqueda={setBusquedaVenta}
       onFiltros={setFiltrosVenta}
       onAgregar={agregarProductoVentaRapida}
-      onAumentar={(id) => aumentarCantidad(id, false)}
-      onDisminuir={disminuirCantidad}
-      onCantidad={cambiarCantidadVentaRapida}
-      onEliminar={eliminarDelCarrito}
       onEscanear={(elemento) => abrirScanner('venta', elemento)}
       onScannerContinuo={setScannerContinuo}
       onEnter={() => manejarCodigoDetectado(busquedaVenta, 'venta')}
-      onCobrar={cobrarVentaRapida}
     /> : <>
 
     <div className="fl-scanner-actions">
@@ -1889,110 +1870,25 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
 
     <h3>Productos</h3>
 
-    <div className="fl-product-grid">{listaVenta.visibles.map((p) => <TarjetaProducto key={p.id} producto={p} accion="Añadir al ticket" disabled={procesandoCarritoActivo || Number(p.stock) <= 0} onSeleccionar={(producto, disparador) => { agregarAlCarrito(producto); abrirCarrito(disparador) }} />)}</div>
+    <div className="fl-product-grid">{listaVenta.visibles.map((p) => <TarjetaProducto key={p.id} producto={p} accion="Añadir al ticket" disabled={procesandoCarritoActivo || Number(p.stock) <= 0} onSeleccionar={(producto) => { agregarAlCarrito(producto) }} />)}</div>
     <CargarMasProductos visibles={listaVenta.visibles.length} total={listaVenta.total} onCargarMas={listaVenta.cargarMas} />
 
+    </>}
     {carritoAbierto && (
       <div style={styles.fondoCarrito} onClick={cerrarCarrito} role="presentation">
         <div ref={panelCarritoRef} style={styles.carritoMovil} onClick={(evento) => evento.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="titulo-carrito" tabIndex={-1}>
-          <button
-            style={styles.cerrarCarrito}
-            onClick={cerrarCarrito}
-            aria-label="Cerrar carrito"
-          >
-            ×
-          </button>
-
+          <button style={styles.cerrarCarrito} onClick={cerrarCarrito} aria-label="Cerrar carrito">×</button>
           <h2 id="titulo-carrito">Ticket actual</h2>
-
-          <select
-            value={metodoPago}
-            disabled={procesandoCarritoActivo}
-            onChange={(e) => { abandonarIntentoVenta(); setMetodoPago(e.target.value) }}
-            style={styles.input}
-          >
-            <option value="Efectivo">Efectivo</option>
-            <option value="Transferencia">Transferencia</option>
-            <option value="Tarjeta">Tarjeta</option>
-          </select>
-
-          {carrito.length === 0 && (
-            <div style={styles.alert}>Aún no hay productos en el ticket.</div>
-          )}
-
-          {carrito.map((item) => {
-            const id = claveLinea(item)
-            const nombre = obtenerNombreLinea(item)
-            const precio = obtenerPrecioLinea(item)
-            return (
-            <div key={id} style={styles.ticketItem}>
-              <p><b>{nombre}</b></p>
-              <p>Precio: ${precio}</p>
-              {!esLineaInventario(item) && <p>Personalizado · Sin reserva de stock</p>}
-
-              <div style={styles.qtyRow}>
-                <button
-                  style={styles.qtyBtn}
-                  disabled={procesandoCarritoActivo}
-                  onClick={() => disminuirCantidad(id)}
-                >
-                  -
-                </button>
-
-                <input
-                  type="number"
-                  disabled={procesandoCarritoActivo}
-                  value={item.cantidad}
-                  onChange={(e) => cambiarCantidad(id, Number(e.target.value))}
-                  style={styles.qtyInput}
-                />
-
-                <button
-                  style={styles.qtyBtn}
-                  disabled={procesandoCarritoActivo}
-                  onClick={() => aumentarCantidad(id)}
-                >
-                  +
-                </button>
-              </div>
-
-              <p>Subtotal: ${precio * item.cantidad}</p>
-
-              <button
-                style={styles.blackButton}
-                disabled={procesandoCarritoActivo}
-                onClick={() => eliminarDelCarrito(id)}
-              >
-                Eliminar
-              </button>
-            </div>
-          )})}
-
-          <div style={styles.ticketBox}>
-            <h2>Total: ${totalCarrito}</h2>
-
-            {usuarioRol === 'Admin' && (
-              <p>Ganancia estimada: ${gananciaCarrito}</p>
-            )}
-
-            <p>Método de pago: {metodoPago}</p>
-          </div>
-
-          <button style={styles.bigButton} onClick={() => void solicitarFinalizarVenta()} disabled={procesandoCarritoActivo || carrito.length === 0}>
-            {procesandoCarritoActivo ? 'Procesando venta…' : 'Finalizar venta'}
-          </button>
-
-          <button style={styles.redButton} onClick={enviarWhatsApp} disabled={procesandoCarritoActivo}>
-            Enviar por WhatsApp
-          </button>
-
-          <button style={styles.grayButton} onClick={cancelarTicket} disabled={procesandoCarritoActivo}>
-            Cancelar ticket
-          </button>
+          <select value={metodoPago} disabled={procesandoCarritoActivo} onChange={(e) => { abandonarIntentoVenta(); setMetodoPago(e.target.value) }} style={styles.input}><option value="Efectivo">Efectivo</option><option value="Transferencia">Transferencia</option><option value="Tarjeta">Tarjeta</option></select>
+          {carrito.length === 0 && <div style={styles.alert}>Aún no hay productos en el ticket.</div>}
+          {carrito.map((item) => { const id = claveLinea(item); const nombre = obtenerNombreLinea(item); const precio = obtenerPrecioLinea(item); return <div key={id} style={styles.ticketItem}><p><b>{nombre}</b></p><p>Precio: ${precio}</p>{!esLineaInventario(item) && <p>Personalizado · Sin reserva de stock</p>}<div style={styles.qtyRow}><button style={styles.qtyBtn} disabled={procesandoCarritoActivo} onClick={() => disminuirCantidad(id)} aria-label={`Restar ${nombre}`}>-</button><input type="number" disabled={procesandoCarritoActivo} value={item.cantidad} onChange={(e) => cambiarCantidad(id, Number(e.target.value))} style={styles.qtyInput} aria-label={`Cantidad de ${nombre}`} /><button style={styles.qtyBtn} disabled={procesandoCarritoActivo} onClick={() => aumentarCantidad(id)} aria-label={`Sumar ${nombre}`}>+</button></div><p>Subtotal: ${precio * item.cantidad}</p><button style={styles.blackButton} disabled={procesandoCarritoActivo} onClick={() => eliminarDelCarrito(id)}>Eliminar</button></div> })}
+          <div style={styles.ticketBox}><h2>Total: ${totalCarrito}</h2>{usuarioRol === 'Admin' && <p>Ganancia estimada: ${gananciaCarrito}</p>}<p>Método de pago: {metodoPago}</p></div>
+          <button style={styles.bigButton} onClick={() => void solicitarFinalizarVenta()} disabled={procesandoCarritoActivo || carrito.length === 0}>{procesandoCarritoActivo ? 'Procesando venta…' : 'Finalizar venta'}</button>
+          <button style={styles.redButton} onClick={enviarWhatsApp} disabled={procesandoCarritoActivo}>Enviar por WhatsApp</button>
+          <button style={styles.grayButton} onClick={cancelarTicket} disabled={procesandoCarritoActivo}>Cancelar ticket</button>
         </div>
       </div>
     )}
-    </>}
     {ventaCerrarId && estadoVentas.ventas.find((venta) => venta.id === ventaCerrarId)?.carrito.length ? <div className="fl-pending-close-backdrop" role="presentation"><section className="fl-pending-close-dialog" role="alertdialog" aria-modal="true" aria-labelledby="titulo-cerrar-venta"><h2 id="titulo-cerrar-venta">Esta venta tiene productos pendientes</h2><p>Si la descartas se eliminarán sus productos y cantidades de este dispositivo.</p><div><button type="button" onClick={() => setVentaCerrarId(null)}>Seguir atendiendo</button><button type="button" className="is-danger" onClick={descartarVentaPendiente}>Descartar venta</button></div></section></div> : null}
   </>
 )}

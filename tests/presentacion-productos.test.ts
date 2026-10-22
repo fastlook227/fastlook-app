@@ -32,16 +32,19 @@ test('resultados completos conservan carga progresiva', () => {
   assert.match(rapida, /<CargarMasProductos/)
 })
 
-test('detalle ampliado espera, se ancla al viewport y no expone costo', () => {
-  assert.match(tarjeta, /setTimeout\(abrir, 900\)/)
+test('detalle se abre sólo por clic, cierra con Escape y no expone costo', () => {
+  assert.match(tarjeta, /onClick=\{\(\) => setDetalle\(true\)\}/)
   assert.match(tarjeta, /createPortal/)
-  assert.match(tarjeta, /window\.innerWidth - ancho/)
+  assert.match(tarjeta, /aria-modal="true"/)
   assert.match(tarjeta, /evento\.key === 'Escape'/)
+  assert.doesNotMatch(tarjeta, /onMouseEnter|onMouseLeave|setTimeout|fastlook:detalle-producto/)
   assert.doesNotMatch(tarjeta, /producto\.costo/)
 })
 
 test('tarjetas contienen imágenes completas y recortan textos sólo visualmente', () => {
   assert.match(estilos, /fl-product-card-media > img[^}]*object-fit: contain/)
+  assert.match(estilos, /fl-product-card-media > img[^}]*object-position: center/)
+  assert.doesNotMatch(estilos, /fl-helmet-image-button:hover img/)
   assert.match(estilos, /-webkit-line-clamp: 2/)
   assert.match(estilos, /overflow-wrap: anywhere/)
   assert.doesNotMatch(estilos, /\.fl-quick-products button \{/)
@@ -52,4 +55,10 @@ test('carrito flotante se minimiza, persiste en sesión y tiene controles accesi
   assert.match(carrito, /is-minimized/)
   assert.match(carrito, /aria-label="Mover carrito"/)
   assert.match(carrito, /aria-label="Restablecer posición del carrito"/)
+})
+
+test('Venta rápida no monta carrito lateral, barra móvil ni cobro duplicado', () => {
+  assert.doesNotMatch(rapida, /CarritoRapido|fl-quick-cart|fl-quick-payment|cobroAbierto/)
+  assert.doesNotMatch(estilos, /\.fl-quick-cart|\.fl-quick-payment/)
+  assert.match(estilos, /\.fl-quick-sale \{ display: block; width: 100%/)
 })
