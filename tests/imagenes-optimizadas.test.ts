@@ -62,7 +62,8 @@ const formularioCasco = readFileSync(new URL('../components/cascos/FormularioCas
 const catalogoCascos = readFileSync(new URL('../components/cascos/CatalogoCascos.tsx', import.meta.url), 'utf8')
 const rutaCascos = readFileSync(new URL('../app/api/cascos/route.ts', import.meta.url), 'utf8')
 const estilos = readFileSync(new URL('../app/globals.css', import.meta.url), 'utf8')
-const usosImagen = ['../components/TarjetaProducto.tsx', '../components/cascos/TarjetaCasco.tsx', '../components/cascos/SelectorPDFCascos.tsx', '../components/codigos-barras/SelectorPDFProductos.tsx']
+const tarjetaProducto = readFileSync(new URL('../components/TarjetaProducto.tsx', import.meta.url), 'utf8')
+const usosImagen = ['../components/cascos/TarjetaCasco.tsx', '../components/cascos/SelectorPDFCascos.tsx', '../components/codigos-barras/SelectorPDFProductos.tsx']
   .map((ruta) => readFileSync(new URL(ruta, import.meta.url), 'utf8'))
 
 test('la preferencia explícita descarga sólo la principal y nunca ambas', () => {
@@ -102,4 +103,13 @@ test('la migración es mínima, no borra fotos ni cambia productos existentes', 
   assert.doesNotMatch(preferencia, /\bdelete\b|drop |storage\.objects|update public\.productos set usar_imagen_principal = true/i)
   assert.equal((preferencia.match(/ROL_NO_PERMITIDO/g) || []).length, 2)
   assert.match(preferencia, /from public, anon;/)
+})
+
+test('tarjeta de producto usa la principal por defecto con el formato de la tarjeta de casco', () => {
+  assert.match(tarjetaProducto, /<ImagenProducto src=\{producto\.imagen_url\} miniatura=\{producto\.imagen_thumbnail_url\} usarPrincipal alt=\{producto\.nombre\} \/>/)
+  assert.doesNotMatch(tarjetaProducto, /usar_imagen_principal/)
+  assert.match(estilos, /\.fl-product-card-media \{ width: 100%; aspect-ratio: 1 \/ \.86;[^}]*padding: 8px; background: #fff;/)
+  assert.match(estilos, /\.fl-helmet-image-button \{[^}]*aspect-ratio: 1 \/ \.86;[^}]*padding: 8px; background: #fff;/)
+  assert.doesNotMatch(estilos, /\.fl-product-card-media \{ height:/)
+  assert.match(estilos, /\.fl-product-grid \{ grid-template-columns: 1fr; \}\n  \.fl-product-card-media \{ aspect-ratio: 1\.15 \/ 1; \}/)
 })

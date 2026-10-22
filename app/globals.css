@@ -1154,7 +1154,8 @@ button.fl-product-card-select { min-height: 100%; cursor: pointer; }
 button.fl-product-card-select { flex: 1; }
 button.fl-product-card-select:hover:not(:disabled) { box-shadow: inset 0 0 0 2px var(--fl-red); }
 button.fl-product-card-select:disabled { cursor: not-allowed; opacity: .52; }
-.fl-product-card-media { height: 148px; display: grid; place-items: center; overflow: hidden; padding: 8px; background: #fff; }
+/* Mismo formato que .fl-helmet-image-button: proporción fija, foto completa centrada sobre blanco. */
+.fl-product-card-media { width: 100%; aspect-ratio: 1 / .86; display: grid; place-items: center; overflow: hidden; padding: 8px; background: #fff; border: 0; }
 .fl-product-card-media > img { display: block; width: 100%; height: 100%; max-width: 100%; max-height: 100%; object-fit: contain; object-position: center; transform: none; }
 .fl-product-card-placeholder { display: grid; place-items: center; gap: 6px; color: #8a93a2; font-size: .76rem; }
 .fl-product-card-placeholder svg { width: 34px; height: 34px; }
@@ -1214,7 +1215,6 @@ img.fl-image-full { object-fit: contain; object-position: center; background: #f
   .fl-module-menu > footer { padding: 12px 14px calc(12px + env(safe-area-inset-bottom)); }
   .fl-module-menu > footer .fl-user-copy small, .fl-module-logout span { display: none; }
   .fl-product-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
-  .fl-product-card-media { height: 122px; }
   .fl-product-card-copy { padding: 10px; }
   .fl-product-card-action { margin: auto 9px 9px; }
   .fl-quick-products > div { display: flex; }
@@ -1223,6 +1223,7 @@ img.fl-image-full { object-fit: contain; object-position: center; background: #f
 
 @media (max-width: 370px) {
   .fl-product-grid { grid-template-columns: 1fr; }
+  .fl-product-card-media { aspect-ratio: 1.15 / 1; }
 }
 /* Ventas pendientes / múltiples clientes */
 .fl-pending-sales { margin: 8px 0 12px; }

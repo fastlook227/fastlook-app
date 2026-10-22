@@ -34,7 +34,7 @@ export default function TarjetaProducto({ producto, onSeleccionar, accion = 'Agr
       botonDetalleRef.current?.focus()
     }
   }, [detalle])
-  const imagen = producto.imagen_url ? <ImagenProducto src={producto.imagen_url} miniatura={producto.imagen_thumbnail_url} usarPrincipal={producto.usar_imagen_principal} alt={producto.nombre} /> : <div className="fl-product-card-placeholder"><ImageOff aria-hidden="true" /><span>Sin imagen</span></div>
+  const imagen = producto.imagen_url ? <ImagenProducto src={producto.imagen_url} miniatura={producto.imagen_thumbnail_url} usarPrincipal alt={producto.nombre} /> : <div className="fl-product-card-placeholder"><ImageOff aria-hidden="true" /><span>Sin imagen</span></div>
   const imagenDetalle = producto.imagen_url ? <ImagenProducto src={producto.imagen_url} alt={producto.nombre} /> : imagen
   const contenido = <><div className="fl-product-card-media">{imagen}</div><div className="fl-product-card-copy"><strong title={producto.nombre}>{producto.nombre}</strong>{descripcion ? <p title={descripcion}>{descripcion}</p> : <p aria-hidden="true">&nbsp;</p>}{mostrarCodigo && <small>{producto.codigo}</small>}<div><b>${Number(producto.precio).toFixed(2)}</b><span>Stock {producto.stock}</span></div></div></>
   return <article className="fl-product-card">
