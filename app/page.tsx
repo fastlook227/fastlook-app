@@ -892,13 +892,11 @@ const fetchMovimientosClientes = async () => {
       intentosVentaRef.current.delete(ventaIdProcesada)
       establecerEstadoVentas(cerrarVentaPendiente(estadoVentasRef.current, ventaIdProcesada, crypto.randomUUID()))
       setCarritoAbierto(false)
-      const actualizaciones = await Promise.allSettled([fetchProductos(true), fetchVentas(true), fetchMovimientos()])
-      const refrescoIncompleto = actualizaciones.some((actualizacion) => actualizacion.status === 'rejected')
-      setNotificacionOperacion({
-        tipo: 'ok',
-        mensaje: refrescoIncompleto
-          ? `Venta registrada. Folio ${respuesta.folio}. No se pudo refrescar toda la información; vuelve a cargar la vista.`
-          : `Venta registrada. Folio ${respuesta.folio}.`,
+      const cantidadesVendidas = new Map(intento.lineasNormales.map((linea) => [linea.producto_id, linea.cantidad]))
+      setProductos((actuales) => actuales.map((producto) => cantidadesVendidas.has(producto.id) ? { ...producto, stock: Math.max(0, Number(producto.stock) - (cantidadesVendidas.get(producto.id) || 0)) } : producto))
+      setNotificacionOperacion({ tipo: 'ok', mensaje: `Venta registrada. Folio ${respuesta.folio}.` })
+      void Promise.allSettled([fetchProductos(true), fetchVentas(true), fetchMovimientos()]).then((actualizaciones) => {
+        if (actualizaciones.some((actualizacion) => actualizacion.status === 'rejected')) setNotificacionOperacion({ tipo: 'error', mensaje: `La venta ${respuesta.folio} está guardada, pero no se pudo actualizar toda la información en segundo plano.` })
       })
       return true
     } catch (causa) {
@@ -1104,6 +1102,7 @@ const fetchMovimientosClientes = async () => {
 
   const ejecutarGuardadoProducto = async () => {
     const editando = Boolean(form.id)
+    let productoGuardado: Producto | null = null
     if (usuarioRol !== 'Admin') {
       alert('Solo el administrador puede editar inventario')
       return
@@ -1145,10 +1144,12 @@ const fetchMovimientosClientes = async () => {
         setMensajeCodigo('El código ya existe.')
         return
       }
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('productos')
         .update(crearDatosProducto(codigoFinal))
         .eq('id', form.id)
+        .select('*')
+        .single()
 
       if (error) {
         if (esErrorCodigoDuplicado(error)) {
@@ -1160,6 +1161,7 @@ const fetchMovimientosClientes = async () => {
         alert('Error al editar producto: ' + error.message)
         return
       }
+      productoGuardado = data as Producto
     } else if (!generarCodigoAutomatico) {
       const ocupado = await comprobarCodigoProducto(supabase, codigoFinal)
       if (ocupado) {
@@ -1168,7 +1170,7 @@ const fetchMovimientosClientes = async () => {
         setMensajeCodigo('El código ya existe.')
         return
       }
-      const { error } = await supabase.from('productos').insert([crearDatosProducto(codigoFinal)])
+      const { data, error } = await supabase.from('productos').insert([crearDatosProducto(codigoFinal)]).select('*').single()
       if (error) {
         if (esErrorCodigoDuplicado(error)) {
           abrirDetallesPorError()
@@ -1179,14 +1181,16 @@ const fetchMovimientosClientes = async () => {
         alert('Error al agregar producto: ' + error.message)
         return
       }
+      productoGuardado = data as Producto
     } else {
       let guardado = false
       for (let intento = 0; intento < 5 && !guardado; intento += 1) {
         const ocupado = await comprobarCodigoProducto(supabase, codigoFinal)
         if (ocupado) codigoFinal = await generarCodigoInventario(true) || ''
         if (!codigoFinal) return
-        const { error } = await supabase.from('productos').insert([crearDatosProducto(codigoFinal)])
+        const { data, error } = await supabase.from('productos').insert([crearDatosProducto(codigoFinal)]).select('*').single()
         if (!error) {
+          productoGuardado = data as Producto
           guardado = true
           break
         }
@@ -1204,8 +1208,12 @@ const fetchMovimientosClientes = async () => {
       }
     }
 
+    if (!productoGuardado) return
+    setProductos((actuales) => {
+      const siguiente = editando ? actuales.map((producto) => producto.id === productoGuardado!.id ? productoGuardado! : producto) : [...actuales, productoGuardado!]
+      return siguiente.sort((a, b) => a.nombre.localeCompare(b.nombre, 'es-MX'))
+    })
     limpiarFormulario()
-    fetchProductos()
     setNotificacionOperacion({ tipo: 'ok', mensaje: editando ? 'Producto actualizado.' : 'Producto guardado.' })
   }
 
@@ -2030,7 +2038,7 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
               <label><span>Tipo de producto</span><select style={styles.input} value={form.tipo} onChange={(e) => { setForm({ ...form, tipo: e.target.value }); setTipoModificadoManualmente(true); if (e.target.value !== 'OTROS') setTipoPersonalizado('') }}><option value="">Selecciona un tipo</option>{tiposProducto.map((tipo) => <option key={tipo} value={tipo}>{tipo}</option>)}</select></label>
               <label><span>Precio de venta</span><input style={styles.input} placeholder="Precio de venta" value={form.precio} onChange={(e) => setForm({ ...form, precio: e.target.value })} /></label>
               <label><span>Stock</span><input style={styles.input} placeholder="Stock" value={form.stock} onChange={(e) => setForm({ ...form, stock: e.target.value })} /></label>
-              <div className="fl-product-photo-field"><span>Foto</span><SelectorImagen imagenUrl={form.imagen_url} deshabilitado={subiendoImagen} onSeleccionar={subirImagenProducto} onEliminar={() => setForm((actual) => ({ ...actual, imagen_url: '', imagen_thumbnail_url: '' }))} />{notificacionImagen && <div className={`fl-image-notice is-${notificacionImagen.tipo}`} role="status">{notificacionImagen.mensaje}</div>}</div>
+              <div className="fl-product-photo-field"><span>Foto</span><SelectorImagen imagenUrl={form.imagen_url} deshabilitado={subiendoImagen} onSeleccionar={subirImagenProducto} onEliminar={() => setForm((actual) => ({ ...actual, imagen_url: '', imagen_thumbnail_url: '' }))} />{subiendoImagen && <div className="fl-image-notice" role="status">{faseImagen}</div>}{notificacionImagen && <div className={`fl-image-notice is-${notificacionImagen.tipo}`} role="status">{notificacionImagen.mensaje}</div>}</div>
             </div>
 
             <section className={`fl-product-details ${detallesProductoAbiertos ? 'is-open' : ''}`}>
@@ -2056,6 +2064,7 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
             <button style={styles.bigButton} onClick={guardarProducto} disabled={guardandoProducto || subiendoImagen}>
               {guardandoProducto ? (form.id ? 'Actualizando…' : 'Guardando…') : (form.id ? 'Guardar cambios' : 'Agregar producto')}
             </button>
+            {guardandoProducto && <div className="fl-image-notice" role="status">Guardando producto…</div>}
 
               <button style={styles.grayButton} onClick={limpiarFormulario} disabled={guardandoProducto || subiendoImagen}>
                 Cancelar
@@ -2260,11 +2269,7 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
         onDetect={(codigo) => scannerContexto ? manejarCodigoDetectado(codigo, scannerContexto) : undefined}
         onCerrar={cerrarScanner}
       />
-      <LoadingOverlay
-        visible={subiendoImagen || guardandoProducto || Boolean(operacionAbono)}
-        titulo={operacionAbono ? 'Registrando abono…' : guardandoProducto ? (form.id ? 'Actualizando producto…' : 'Guardando producto…') : faseImagen}
-        detalle={operacionAbono ? 'Actualizando el cliente y registrando el movimiento en Corte.' : guardandoProducto ? 'Guardando la información del producto.' : 'Estamos optimizando y guardando la fotografía del producto.'}
-      />
+      <LoadingOverlay visible={Boolean(operacionAbono)} titulo="Registrando abono…" detalle="Actualizando el cliente y registrando el movimiento en Corte." />
       {esDesktopPOS && cobroEfectivoPOS && <CobroEfectivoDesktop total={cobroEfectivoPOS.total} onCancelar={() => setCobroEfectivoPOS(null)} onCobrar={async (recibido) => cobroEfectivoPOS.ventaId === estadoVentasRef.current.activaId && finalizarVenta('Efectivo', recibido)} />}
       {esDesktopPOS && ticketPOS && <ConfirmarImpresionDesktop ticket={ticketPOS} onCerrar={() => setTicketPOS(null)} />}
       {notificacionOperacion && <div className={`fl-operation-toast is-${notificacionOperacion.tipo}`} role="status"><span>{notificacionOperacion.mensaje}</span><button type="button" aria-label="Cerrar notificación" onClick={() => setNotificacionOperacion(null)}><X size={17} /></button></div>}

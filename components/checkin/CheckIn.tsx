@@ -6,7 +6,7 @@ import ScannerCodigoBarras, { type FeedbackScanner } from '@/components/codigos-
 import CredencialCheckIn from '@/components/checkin/CredencialCheckIn'
 import TrabajosMecanicos from '@/components/checkin/TrabajosMecanicos'
 import { supabase } from '@/lib/supabase'
-import type { EmpleadoCheckIn } from '@/types/checkin'
+import type { EmpleadoCheckIn, JornadaCheckIn } from '@/types/checkin'
 import { accionDisponible, calcularJornada, finSeguroJornadaAbierta, mensajeErrorCheckIn, operacionConfirmada, resolverQrCheckIn, resumirPanelCheckIn, validarPanelCheckIn, type AccionCheckIn } from '@/utils/checkin'
 import { formatearFechaHoraFastLook } from '@/utils/fechas'
 
@@ -80,15 +80,19 @@ export default function CheckIn() {
     bloqueoRef.current = true; setGuardando(true); setError('')
     try {
       const funcion = operacion.accion === 'entrada' ? 'registrar_entrada_empleado' : 'registrar_salida_empleado'
-      const { error: errorRpc } = await supabase.rpc(funcion, { p_usuario_id: operacion.empleado.id })
+      const { data, error: errorRpc } = await supabase.rpc(funcion, { p_usuario_id: operacion.empleado.id })
       if (errorRpc) throw errorRpc
-      const panel = await cargar(true)
-      if (!panel) {
-        setRequiereVerificacion(true)
-        setError('El servidor aceptó la operación, pero no se pudo verificar el panel. Pulsa “Comprobar estado” antes de intentar de nuevo.')
-        return
-      }
+      const respuesta = data as { ok?: boolean; id?: string; timestamp?: string }
+      if (!respuesta.ok || !respuesta.id || !respuesta.timestamp) throw new Error('RESULTADO_INCIERTO: El servidor no devolvió una confirmación completa.')
+      setEmpleados((actuales) => actuales.map((empleado) => {
+        if (empleado.id !== operacion.empleado.id) return empleado
+        if (operacion.accion === 'salida' && empleado.jornada) return { ...empleado, jornada: { ...empleado.jornada, salida: respuesta.timestamp! } }
+        const jornada: JornadaCheckIn = { id: respuesta.id!, fecha: new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Mexico_City' }).format(new Date(respuesta.timestamp!)), entrada: respuesta.timestamp!, salida: null, tarifa_normal: 35, tarifa_extra: 45, limite_horas_normales: 8, es_anterior: false }
+        return { ...empleado, jornada }
+      }))
       setSeleccion(null)
+      setRequiereVerificacion(false)
+      void cargar(true)
     } catch (motivo) {
       setRequiereVerificacion(true)
       const panel = await cargar(true)
