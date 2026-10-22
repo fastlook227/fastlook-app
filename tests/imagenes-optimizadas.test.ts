@@ -108,8 +108,21 @@ test('la migración es mínima, no borra fotos ni cambia productos existentes', 
 test('tarjeta de producto usa la principal por defecto con el formato de la tarjeta de casco', () => {
   assert.match(tarjetaProducto, /<ImagenProducto src=\{producto\.imagen_url\} miniatura=\{producto\.imagen_thumbnail_url\} usarPrincipal alt=\{producto\.nombre\} \/>/)
   assert.doesNotMatch(tarjetaProducto, /usar_imagen_principal/)
-  assert.match(estilos, /\.fl-product-card-media \{ width: 100%; aspect-ratio: 1 \/ \.86;[^}]*padding: 8px; background: #fff;/)
+  assert.match(estilos, /\.fl-product-card-media \{ display: block; width: 100%; aspect-ratio: 1 \/ \.86;[^}]*padding: 8px; background: #fff;/)
   assert.match(estilos, /\.fl-helmet-image-button \{[^}]*aspect-ratio: 1 \/ \.86;[^}]*padding: 8px; background: #fff;/)
   assert.doesNotMatch(estilos, /\.fl-product-card-media \{ height:/)
   assert.match(estilos, /\.fl-product-grid \{ grid-template-columns: 1fr; \}\n  \.fl-product-card-media \{ aspect-ratio: 1\.15 \/ 1; \}/)
+})
+
+test('ningún contenedor de foto en grid deja crecer la fila con la imagen vertical', () => {
+  // Una fila auto crece hasta la altura natural de la foto; height: 100% la sigue y overflow: hidden la recorta.
+  assert.doesNotMatch(estilos, /\.fl-product-card-media \{[^}]*display: grid/)
+  for (const selector of ['fl-product-barcode-pdf-thumb', 'fl-helmet-pdf-thumb', 'fl-image-source-preview', 'fl-cart-line-image'])
+    assert.match(estilos, new RegExp(String.raw`\.${selector} \{[^}]*display: grid; grid-template: minmax\(0, 1fr\) \/ minmax\(0, 1fr\);`))
+})
+
+test('Ver detalles muestra la foto completa sin recuadro fijo y hasta 60vh', () => {
+  assert.match(estilos, /\.fl-product-details-media \{ min-height: 160px; max-height: 60vh; display: flex;[^}]*background: #fff;/)
+  assert.match(estilos, /\.fl-product-details-media > img \{ display: block; width: auto; height: auto; max-width: 100%; max-height: calc\(60vh - 18px\); object-fit: contain;/)
+  assert.doesNotMatch(estilos, /\.fl-product-details-media \{ height:/)
 })
