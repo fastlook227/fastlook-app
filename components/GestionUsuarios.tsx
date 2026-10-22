@@ -180,17 +180,17 @@ export default function GestionUsuarios() {
 }
 
 const estilos: Record<string, CSSProperties> = {
-  formulario: { display: 'grid', gap: 10, padding: 16, marginBottom: 24, border: '2px solid #c40000', borderRadius: 10, backgroundColor: '#fff' },
+  formulario: { display: 'grid', gap: 10, padding: 16, marginBottom: 24, border: '2px solid var(--fl-red)', borderRadius: 10, backgroundColor: '#fff' },
   input: { width: '100%', boxSizing: 'border-box', padding: 11, border: '1px solid #999', borderRadius: 6, fontSize: 16 },
   checkbox: { display: 'flex', gap: 9, alignItems: 'center', minHeight: 40 },
   resumen: { padding: 10, backgroundColor: '#eee', borderRadius: 6 },
-  advertencia: { padding: 10, color: '#900', backgroundColor: '#ffe5e5', border: '1px solid #c40000', borderRadius: 6, fontWeight: 'bold' },
+  advertencia: { padding: 10, color: 'var(--fl-red-dark)', backgroundColor: 'var(--fl-red-soft)', border: '1px solid var(--fl-red)', borderRadius: 6, fontWeight: 'bold' },
   botones: { display: 'flex', flexWrap: 'wrap', gap: 8 },
-  botonRojo: { minHeight: 44, padding: '10px 14px', border: 0, borderRadius: 6, backgroundColor: '#c40000', color: '#fff', fontWeight: 'bold', cursor: 'pointer' },
+  botonRojo: { minHeight: 44, padding: '10px 14px', border: 0, borderRadius: 6, backgroundColor: 'var(--fl-red)', color: '#fff', fontWeight: 'bold', cursor: 'pointer' },
   botonNegro: { minHeight: 44, padding: '10px 14px', border: 0, borderRadius: 6, backgroundColor: '#111', color: '#fff', fontWeight: 'bold', cursor: 'pointer' },
   botonBlanco: { minHeight: 44, padding: '10px 14px', border: '1px solid #111', borderRadius: 6, backgroundColor: '#fff', color: '#111', fontWeight: 'bold', cursor: 'pointer' },
   lista: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(270px, 1fr))', gap: 12 },
-  tarjeta: { padding: 15, border: '1px solid #aaa', borderLeft: '5px solid #c40000', borderRadius: 8, backgroundColor: '#fff' },
-  error: { padding: 12, marginBottom: 12, color: '#900', backgroundColor: '#ffe5e5', borderRadius: 7 },
+  tarjeta: { padding: 15, border: '1px solid #aaa', borderLeft: '5px solid var(--fl-red)', borderRadius: 8, backgroundColor: '#fff' },
+  error: { padding: 12, marginBottom: 12, color: 'var(--fl-red-dark)', backgroundColor: 'var(--fl-red-soft)', borderRadius: 7 },
   exito: { padding: 12, marginBottom: 12, color: '#064', backgroundColor: '#e2fff2', borderRadius: 7 },
 }
