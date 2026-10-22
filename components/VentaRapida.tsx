@@ -8,6 +8,9 @@ import { contarFiltrosActivos } from '@/utils/filtrosProductos'
 import { obtenerProductosFrecuentes, obtenerUltimosProductosVendidos, resumirCarritoVenta } from '@/utils/ventaRapida'
 import { claveLinea, esLineaInventario, obtenerNombreLinea, obtenerPrecioLinea } from '@/utils/carritoMixto'
 import FiltrosProductos from '@/components/FiltrosProductos'
+import TarjetaProducto from '@/components/TarjetaProducto'
+import CargarMasProductos from '@/components/CargarMasProductos'
+import useListaProgresiva from '@/hooks/useListaProgresiva'
 
 interface Props {
   productos: readonly Producto[]
@@ -41,6 +44,8 @@ export default function VentaRapida(props: Props) {
   const ultimos = useMemo(() => obtenerUltimosProductosVendidos(props.productos, props.ventas, 8), [props.productos, props.ventas])
   const resumen = useMemo(() => resumirCarritoVenta(props.carrito), [props.carrito])
   const hayExploracion = Boolean(props.busqueda.trim() || contarFiltrosActivos(props.filtros))
+  const resultados = useMemo(() => Array.from(props.resultados), [props.resultados])
+  const listaResultados = useListaProgresiva(resultados)
 
   const enfocarBuscador = () => {
     if (window.matchMedia('(hover: hover) and (pointer: fine)').matches) requestAnimationFrame(() => buscadorRef.current?.focus())
@@ -64,7 +69,7 @@ export default function VentaRapida(props: Props) {
       {!hayExploracion && frecuentes.length > 0 && <CarruselProductos titulo="Frecuentes" productos={frecuentes} onAgregar={agregar} />}
       {!hayExploracion && ultimos.length > 0 && <CarruselProductos titulo="Últimos vendidos" productos={ultimos} onAgregar={agregar} />}
 
-      {hayExploracion && <section className="fl-quick-results"><header><h3>Resultados</h3><span>{props.resultados.length}</span></header>{props.resultados.length > 0 ? props.resultados.map((producto) => <button type="button" key={producto.id} disabled={Number(producto.stock) <= 0 || props.procesando} onClick={() => agregar(producto)}><span><strong>{producto.nombre}</strong><small>{producto.codigo}</small></span><span><b>${Number(producto.precio).toFixed(2)}</b><small>Stock {producto.stock}</small></span><Plus aria-label="Agregar" /></button>) : <div className="fl-quick-empty"><strong>No encontramos productos para: “{props.busqueda}”</strong><button type="button" onClick={() => props.onBusqueda('')}>Limpiar búsqueda</button></div>}</section>}
+      {hayExploracion && <section className="fl-quick-results"><header><h3>Resultados</h3><span>{props.resultados.length}</span></header>{props.resultados.length > 0 ? <><div className="fl-product-grid">{listaResultados.visibles.map((producto) => <TarjetaProducto key={producto.id} producto={producto} mostrarCodigo accion="Agregar" disabled={Number(producto.stock) <= 0 || props.procesando} onSeleccionar={agregar} />)}</div><CargarMasProductos visibles={listaResultados.visibles.length} total={listaResultados.total} onCargarMas={listaResultados.cargarMas} /></> : <div className="fl-quick-empty"><strong>No encontramos productos para: “{props.busqueda}”</strong><button type="button" onClick={() => props.onBusqueda('')}>Limpiar búsqueda</button></div>}</section>}
     </div>
 
     <aside className="fl-quick-cart-desktop"><CarritoRapido {...props} resumen={resumen} onCobrar={() => setCobroAbierto(true)} /></aside>
@@ -76,7 +81,7 @@ export default function VentaRapida(props: Props) {
 }
 
 function CarruselProductos({ titulo, productos, onAgregar }: { titulo: string; productos: readonly Producto[]; onAgregar: (producto: Producto) => void }) {
-  return <section className="fl-quick-products"><h3>{titulo}</h3><div>{productos.map((producto) => <button type="button" key={producto.id} disabled={Number(producto.stock) <= 0} onClick={() => onAgregar(producto)}><strong>{producto.nombre}</strong><span><b>${Number(producto.precio).toFixed(2)}</b><small>Stock {producto.stock}</small></span></button>)}</div></section>
+  return <section className="fl-quick-products"><h3>{titulo}</h3><div>{productos.map((producto) => <TarjetaProducto key={producto.id} producto={producto} disabled={Number(producto.stock) <= 0} onSeleccionar={onAgregar} />)}</div></section>
 }
 
 function CarritoRapido(props: Pick<Props, 'carrito' | 'procesando' | 'onAumentar' | 'onDisminuir' | 'onCantidad' | 'onEliminar'> & { resumen: { unidades: number; total: number }; onCobrar: () => void }) {

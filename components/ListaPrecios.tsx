@@ -3,7 +3,7 @@
 import type { CSSProperties } from 'react'
 import { ScanLine } from 'lucide-react'
 import type { Producto } from '@/types'
-import ImagenProducto from '@/components/ImagenProducto'
+import TarjetaProducto from '@/components/TarjetaProducto'
 import CargarMasProductos from '@/components/CargarMasProductos'
 import useListaProgresiva from '@/hooks/useListaProgresiva'
 
@@ -41,20 +41,7 @@ export default function ListaPrecios({
         onKeyDown={(e) => { if (e.key === 'Enter') onConfirmarBusqueda(busqueda) }}
       />
 
-      {lista.visibles.map((p) => (
-        <div key={p.id} style={styles.card}>
-          {p.imagen_url && (
-            <ImagenProducto src={p.imagen_url} miniatura={p.imagen_thumbnail_url} alt={p.nombre} style={styles.image} />
-          )}
-          <h3>{p.nombre}</h3>
-          <p><b>Código:</b> {p.codigo}</p>
-          <p><b>Tipo:</b> {p.tipo}</p>
-          <p><b>Precio:</b> ${p.precio}</p>
-          <p><b>Stock:</b> {p.stock}</p>
-          <p><b>Ubicación:</b> {p.ubicacion}</p>
-          <p><b>Proveedor:</b> {p.proveedor}</p>
-        </div>
-      ))}
+      <div className="fl-product-grid">{lista.visibles.map((p) => <TarjetaProducto key={p.id} producto={p} mostrarCodigo><dl className="fl-product-card-details"><div><dt>Tipo</dt><dd>{p.tipo}</dd></div><div><dt>Ubicación</dt><dd>{p.ubicacion || 'Sin asignar'}</dd></div><div><dt>Proveedor</dt><dd>{p.proveedor || 'Sin asignar'}</dd></div></dl></TarjetaProducto>)}</div>
       <CargarMasProductos visibles={lista.visibles.length} total={lista.total} onCargarMas={lista.cargarMas} />
     </>
   )

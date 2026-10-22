@@ -86,6 +86,7 @@ import type { PanelEntregas } from '@/types/entregas'
 import ImagenProducto from '@/components/ImagenProducto'
 import CargarMasProductos from '@/components/CargarMasProductos'
 import useListaProgresiva from '@/hooks/useListaProgresiva'
+import TarjetaProducto from '@/components/TarjetaProducto'
 
 export default function Home() {
   const [tab, setTab] = useState<Tab>('venta')
@@ -103,7 +104,7 @@ export default function Home() {
   const estadoVentasRef = useRef<EstadoVentasPendientes>(estadoVentas)
   const [ventasHidratadas, setVentasHidratadas] = useState(false)
   const [ventaCerrarId, setVentaCerrarId] = useState<string | null>(null)
-  const [modoVenta, setModoVenta] = useState<'normal' | 'rapida'>('normal')
+  const [modoVenta, setModoVenta] = useState<'normal' | 'rapida'>('rapida')
   const [procesandoVenta, setProcesandoVenta] = useState(false)
   const procesandoVentaRef = useRef(false)
   const intentosVentaRef = useRef(new Map<string, { idempotencyKey: string; metodoPago: string; efectivoRecibido: number | null; rpc: 'procesar_venta' | 'procesar_venta_mixta' | 'procesar_venta_pos' | 'procesar_venta_mixta_pos'; lineasNormales: Array<{ producto_id: string; cantidad: number }>; lineasPersonalizadas: Array<{ tipo_personalizado: string; cantidad: number; configuracion: Record<string, unknown> }> }>())
@@ -1823,8 +1824,8 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
     <VentasPendientesTabs ventas={estadoVentas.ventas} activaId={estadoVentas.activaId} procesandoId={ventaProcesandoIdRef.current} onSeleccionar={seleccionarVentaPendiente} onNueva={nuevaVentaPendiente} onCerrar={solicitarCerrarVentaPendiente} />
 
     <div className="fl-sale-mode" role="group" aria-label="Modo de venta">
-      <button type="button" className={modoVenta === 'normal' ? 'is-active' : ''} onClick={() => setModoVenta('normal')}>Venta normal</button>
       <button type="button" className={modoVenta === 'rapida' ? 'is-active' : ''} onClick={() => setModoVenta('rapida')}>Venta rápida</button>
+      <button type="button" className={modoVenta === 'normal' ? 'is-active' : ''} onClick={() => setModoVenta('normal')}>Venta normal</button>
     </div>
 
     {modoVenta === 'rapida' ? <VentaRapida
@@ -1880,28 +1881,7 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
 
     <h3>Productos</h3>
 
-    {listaVenta.visibles.map((p) => (
-      <div key={p.id} style={styles.card}>
-        {p.imagen_url && (
-          <ImagenProducto src={p.imagen_url} miniatura={p.imagen_thumbnail_url} alt={p.nombre} style={styles.image} />
-        )}
-
-        <h3>{p.nombre}</h3>
-        <p><b>Precio:</b> ${p.precio}</p>
-        <p><b>Stock:</b> {p.stock}</p>
-
-        <button
-          style={styles.redButton}
-          disabled={procesandoCarritoActivo}
-          onClick={(evento) => {
-            agregarAlCarrito(p)
-            abrirCarrito(evento.currentTarget)
-          }}
-        >
-          Añadir al ticket
-        </button>
-      </div>
-    ))}
+    <div className="fl-product-grid">{listaVenta.visibles.map((p) => <TarjetaProducto key={p.id} producto={p} accion="Añadir al ticket" disabled={procesandoCarritoActivo || Number(p.stock) <= 0} onSeleccionar={(producto, disparador) => { agregarAlCarrito(producto); abrirCarrito(disparador) }} />)}</div>
     <CargarMasProductos visibles={listaVenta.visibles.length} total={listaVenta.total} onCargarMas={listaVenta.cargarMas} />
 
     {carritoAbierto && (
@@ -2118,18 +2098,9 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
               onEnter={() => manejarCodigoDetectado(busquedaInventario, 'inventario')}
             />
 
-            {listaInventario.visibles.map((p) => (
-            <div key={p.id} style={styles.card}>
-                {p.imagen_url && <ImagenProducto src={p.imagen_url} miniatura={p.imagen_thumbnail_url} alt={p.nombre} style={styles.image} />}
-                <h3>{p.nombre}</h3>
-                <p><b>Código:</b> {p.codigo}</p>
-                <p><b>Precio:</b> ${p.precio}</p>
-                {usuarioRol === 'Admin' && (
-                <p><b>Costo:</b> ${p.costo || 0}</p>
-                )}
-                <p><b>Stock:</b> {p.stock}</p>
-                <p><b>Stock mínimo:</b> {p.stock_minimo || 5}</p>
-
+            <div className="fl-product-grid">{listaInventario.visibles.map((p) => (
+            <TarjetaProducto key={p.id} producto={p} mostrarCodigo>
+                <div className="fl-inventory-card-data">{usuarioRol === 'Admin' && <span><b>Costo:</b> ${p.costo || 0}</span>}<span><b>Stock mínimo:</b> {p.stock_minimo || 5}</span></div>
                 {usuarioRol === 'Admin' && <details className="fl-inventory-actions">
                   <summary aria-label={`Acciones para ${p.nombre}`}><MoreVertical size={20} />Acciones</summary>
                   <div>
@@ -2144,8 +2115,8 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
                     <button type="button" className="is-danger" onClick={(evento) => { evento.currentTarget.closest('details')?.removeAttribute('open'); setProductoEliminar(p) }}><Trash2 size={16} />Eliminar producto</button>
                   </div>
                 </details>}
-            </div>
-            ))}
+            </TarjetaProducto>
+            ))}</div>
             <CargarMasProductos visibles={listaInventario.visibles.length} total={listaInventario.total} onCargarMas={listaInventario.cargarMas} />
 
             {usuarioRol === 'Admin' && productoCambioStock && <CambiarStockDialog

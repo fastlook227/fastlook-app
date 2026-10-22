@@ -1,4 +1,4 @@
-import { Bell, Search } from 'lucide-react'
+import { Bell, Menu, Search } from 'lucide-react'
 import type { RolUsuario } from '@/types'
 
 interface TopHeaderProps {
@@ -7,11 +7,13 @@ interface TopHeaderProps {
   notificaciones?: number
   onNotificaciones?: () => void
   onBuscar: () => void
+  onMenu: (boton: HTMLButtonElement) => void
 }
 
-export default function TopHeader({ usuarioNombre, usuarioRol, notificaciones = 0, onBuscar, onNotificaciones }: TopHeaderProps) {
+export default function TopHeader({ usuarioNombre, usuarioRol, notificaciones = 0, onBuscar, onNotificaciones, onMenu }: TopHeaderProps) {
   return (
     <header className="fl-top-header">
+      <button type="button" className="fl-menu-button" onClick={(evento) => onMenu(evento.currentTarget)} aria-haspopup="dialog"><Menu aria-hidden="true" /><span>Menú</span></button>
       <img className="fl-mobile-brand-logo" src="/fast-look-logo.png" alt="" aria-hidden="true" />
       <div className="fl-top-title">
         <span>Hola,</span>

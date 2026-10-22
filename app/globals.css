@@ -70,7 +70,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 }
 
 .fl-app-shell { min-height: 100vh; background: var(--fl-gray-100); }
-.fl-app-frame { min-width: 0; min-height: 100vh; margin-left: var(--fl-sidebar-width); }
+.fl-app-frame { min-width: 0; min-height: 100vh; }
 .fl-app-content { width: 100%; padding: 0 var(--fl-space-5) var(--fl-space-6); }
 
 .fl-sidebar {
@@ -110,6 +110,23 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .fl-icon-button { position: relative; display: inline-grid; width: 44px; height: 44px; place-items: center; padding: 0; color: var(--fl-gray-900); background: var(--fl-white); border: 1px solid var(--fl-gray-200); border-radius: 13px; cursor: pointer; transition: border .18s ease, background .18s ease, transform .18s ease; }
 .fl-icon-button:hover { background: var(--fl-gray-100); border-color: var(--fl-gray-300); transform: translateY(-1px); }
 .fl-notification-badge { position: absolute; top: -5px; right: -5px; min-width: 19px; height: 19px; padding: 0 5px; color: white; background: var(--fl-red); border: 2px solid white; border-radius: 999px; font-size: 9px; font-weight: 800; line-height: 15px; }
+.fl-menu-button { display: inline-flex; min-width: 112px; min-height: 48px; align-items: center; justify-content: center; gap: 9px; padding: 10px 17px; color: white; background: var(--fl-black); border: 0; border-radius: 13px; cursor: pointer; font-weight: 900; }
+.fl-menu-button:hover { background: #303030; }
+
+.fl-module-menu-backdrop { position: fixed; z-index: 1800; inset: 0; display: grid; place-items: center; padding: 20px; background: rgba(8,8,8,.62); backdrop-filter: blur(5px); }
+.fl-module-menu { display: flex; width: min(980px, 100%); max-height: min(88vh, 820px); flex-direction: column; overflow: hidden; background: white; border-radius: 22px; box-shadow: 0 28px 90px rgba(0,0,0,.35); }
+.fl-module-menu > header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 20px 22px; border-bottom: 1px solid var(--fl-gray-200); }
+.fl-module-menu > header span { color: var(--fl-red-dark); font-size: 12px; font-weight: 900; letter-spacing: 1.3px; }
+.fl-module-menu > header h2 { margin: 3px 0 0; font-size: 24px; }
+.fl-module-menu > header button { width: 48px; height: 48px; display: grid; place-items: center; flex: 0 0 auto; border: 0; border-radius: 14px; background: var(--fl-gray-100); cursor: pointer; }
+.fl-module-menu-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; overflow-y: auto; padding: 22px; }
+.fl-module-menu-grid button { position: relative; min-height: 116px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 14px; color: var(--fl-gray-900); background: var(--fl-gray-100); border: 1px solid var(--fl-gray-200); border-radius: 16px; cursor: pointer; font-weight: 850; text-align: center; }
+.fl-module-menu-grid button:hover { border-color: #d58a91; background: var(--fl-red-soft); }
+.fl-module-menu-grid button.is-active { color: white; background: var(--fl-red); border-color: var(--fl-red); box-shadow: 0 8px 22px rgba(214,0,0,.22); }
+.fl-module-menu-grid svg { width: 31px; height: 31px; }
+.fl-module-menu-grid small { position: absolute; top: 8px; right: 8px; min-width: 22px; padding: 3px 6px; border-radius: 99px; color: white; background: var(--fl-black); font-size: 10px; }
+.fl-module-menu > footer { display: flex; align-items: center; gap: 11px; padding: 15px 22px; border-top: 1px solid var(--fl-gray-200); }
+.fl-module-logout { min-height: 48px; display: inline-flex; align-items: center; gap: 8px; margin-left: auto; padding: 10px 15px; color: white; background: var(--fl-black); border: 0; border-radius: 12px; cursor: pointer; font-weight: 800; }
 
 .fl-mobile-nav, .fl-mobile-sheet-backdrop { display: none; }
 
@@ -689,7 +706,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 @media (max-width: 1023px) {
   :root { --fl-header-height: 76px; }
   .fl-sidebar { display: none; }
-  .fl-app-frame { margin-left: 0; padding-bottom: calc(var(--fl-mobile-nav-height) + env(safe-area-inset-bottom)); }
+  .fl-app-frame { padding-bottom: 0; }
   .fl-app-content { padding: 0 16px 24px; }
   .fl-top-header { min-height: var(--fl-header-height); padding: 10px 18px; }
   .fl-mobile-brand-logo { display: block; }
@@ -1090,8 +1107,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .is-invalid { border-color: #c8202f!important; box-shadow: 0 0 0 2px rgba(200,32,47,.1); }
 @media (max-width: 760px) { .fl-custom-products { padding-bottom: 76px; } .fl-custom-products > header { align-items: flex-start; flex-direction: column; } .fl-custom-layout { grid-template-columns: 1fr; } .fl-custom-layout > aside { flex-direction: row; overflow-x: auto; } .fl-custom-layout > aside h3 { display: none; } .fl-custom-layout > aside > button { min-width: 210px; } .fl-custom-grid { grid-template-columns: 1fr; } .fl-custom-options > div { grid-template-columns: 1fr; } }
 /* Venta rápida */
-.fl-sale-mode { width: fit-content; display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin: 10px 0 14px; padding: 4px; border-radius: 12px; background: #edf0f4; }
-.fl-sale-mode button { min-height: 42px; padding: 8px 18px; border: 0; border-radius: 9px; background: transparent; color: #5a6475; font-weight: 800; cursor: pointer; }
+.fl-sale-mode { width: min(100%, 560px); display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 12px 0 20px; padding: 6px; border-radius: 15px; background: #e7eaf0; }
+.fl-sale-mode button { min-height: 54px; padding: 10px 20px; border: 0; border-radius: 11px; background: transparent; color: #4d5768; font-size: 1rem; font-weight: 900; cursor: pointer; }
 .fl-sale-mode button.is-active { background: #fff; color: #bd1726; box-shadow: 0 2px 9px rgba(15,23,42,.12); }
 .fl-quick-sale { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 18px; align-items: start; padding-bottom: 20px; }
 .fl-quick-sale-main { min-width: 0; }
@@ -1178,6 +1195,57 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .fl-quick-feedback small { margin-left: 0; }
   .fl-quick-payment > div { grid-template-columns: 1fr; }
   .fl-quick-payment > div button { min-height: 58px; }
+}
+
+/* Tarjetas de producto compartidas */
+.fl-product-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 14px; margin: 12px 0; }
+.fl-product-card { min-width: 0; overflow: hidden; background: white; border: 1px solid #dfe3ea; border-radius: 15px; box-shadow: 0 4px 14px rgba(15,23,42,.06); }
+.fl-product-card-select { width: 100%; display: flex; flex-direction: column; align-items: stretch; padding: 0; color: #182230; background: white; border: 0; text-align: left; }
+button.fl-product-card-select { min-height: 100%; cursor: pointer; }
+button.fl-product-card-select:hover:not(:disabled) { box-shadow: inset 0 0 0 2px var(--fl-red); }
+button.fl-product-card-select:disabled { cursor: not-allowed; opacity: .52; }
+.fl-product-card-media { height: 148px; display: grid; place-items: center; overflow: hidden; background: #f2f4f7; }
+.fl-product-card-media > img { width: 100%; height: 100%; object-fit: contain; }
+.fl-product-card-placeholder { display: grid; place-items: center; gap: 6px; color: #8a93a2; font-size: .76rem; }
+.fl-product-card-placeholder svg { width: 34px; height: 34px; }
+.fl-product-card-copy { display: grid; gap: 6px; padding: 12px 13px; }
+.fl-product-card-copy > strong { min-height: 2.4em; line-height: 1.2; }
+.fl-product-card-copy > small { overflow: hidden; color: #687386; text-overflow: ellipsis; white-space: nowrap; }
+.fl-product-card-copy > div { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.fl-product-card-copy b { color: #b71928; font-size: 1.08rem; }
+.fl-product-card-copy span { color: #667085; font-size: .78rem; }
+.fl-product-card-action { min-height: 48px; display: flex; align-items: center; justify-content: center; gap: 7px; margin: auto 12px 12px; color: white; background: var(--fl-red); border-radius: 10px; font-weight: 900; }
+.fl-product-card-action svg { width: 18px; }
+.fl-product-card-extra { padding: 0 12px 12px; }
+.fl-product-card-details { display: grid; gap: 7px; margin: 0; }
+.fl-product-card-details > div, .fl-inventory-card-data { display: flex; justify-content: space-between; gap: 8px; color: #667085; font-size: .78rem; }
+.fl-product-card-details dd { margin: 0; color: #303846; text-align: right; }
+.fl-inventory-card-data { flex-direction: column; margin-bottom: 10px; }
+.fl-quick-products > div { grid-template-columns: repeat(5, minmax(160px, 1fr)); }
+.fl-quick-products .fl-product-card-select { min-height: 100%; padding: 0; }
+.fl-quick-results .fl-product-grid { margin-top: 10px; }
+
+@media (max-width: 700px) {
+  .fl-top-header { gap: 9px; }
+  .fl-menu-button { min-width: 48px; width: 48px; padding: 0; }
+  .fl-menu-button span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .fl-mobile-brand-logo { display: block; width: 34px; height: 34px; }
+  .fl-module-menu-backdrop { align-items: end; padding: 0; }
+  .fl-module-menu { max-height: 92vh; border-radius: 22px 22px 0 0; }
+  .fl-module-menu-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 14px; }
+  .fl-module-menu-grid button { min-height: 102px; }
+  .fl-module-menu > footer { padding: 12px 14px calc(12px + env(safe-area-inset-bottom)); }
+  .fl-module-menu > footer .fl-user-copy small, .fl-module-logout span { display: none; }
+  .fl-product-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+  .fl-product-card-media { height: 122px; }
+  .fl-product-card-copy { padding: 10px; }
+  .fl-product-card-action { margin: auto 9px 9px; }
+  .fl-quick-products > div { display: flex; }
+  .fl-quick-products .fl-product-card { min-width: 168px; scroll-snap-align: start; }
+}
+
+@media (max-width: 370px) {
+  .fl-product-grid { grid-template-columns: 1fr; }
 }
 /* Ventas pendientes / múltiples clientes */
 .fl-pending-sales { margin: 8px 0 12px; }
