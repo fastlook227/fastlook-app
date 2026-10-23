@@ -49,9 +49,9 @@ export default function MenuModulos({ abierto, items, tab, usuarioNombre, usuari
 
   return (
     <div className="fl-module-menu-backdrop" onMouseDown={(evento) => { if (evento.target === evento.currentTarget) onCerrar() }}>
-      <section ref={dialogoRef} className="fl-module-menu" role="dialog" aria-modal="true" aria-labelledby="titulo-menu-modulos" tabIndex={-1}>
+      <section ref={dialogoRef} className="fl-module-menu fl-module-menu-island" role="dialog" aria-modal="true" aria-label="Menú principal" tabIndex={-1}>
         <header>
-          <div><span>FAST LOOK</span><h2 id="titulo-menu-modulos">Menú de secciones</h2></div>
+          <div><img src="/fast-look-logo.png" alt="" aria-hidden="true" /><span>FAST LOOK</span></div>
           <button type="button" onClick={onCerrar} aria-label="Cerrar menú"><X aria-hidden="true" /></button>
         </header>
         <nav className="fl-module-menu-grid" aria-label="Secciones disponibles">

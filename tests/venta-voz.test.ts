@@ -40,14 +40,16 @@ test('un toque de Shift abre el overlay sin panel permanente, repetición ni cam
   assert.doesNotMatch(componente, /fl-voice-sale|Activar micrófono|Desactivar/)
   assert.match(componente, /contenteditable/)
 })
-test('Shift sostenido no repite y el reconocimiento termina solo después de un importe', () => {
+test('Shift sostenido no repite, muestra parciales y registra sólo el resultado final', () => {
   assert.match(componente, /evento\.repeat/)
   assert.match(componente, /continuous = false/)
-  assert.match(componente, /interimResults = false/)
+  assert.match(componente, /interimResults = true/)
+  assert.match(componente, /setTranscripcion\(parcial\)/)
   assert.match(componente, /filter\(\(r\) => r\.isFinal\)/)
   assert.match(componente, /const vigente = \(\) => reconocedorRef\.current === reconocedor && !terminada/)
-  assert.match(componente, /if \(!texto\.trim\(\)\)/)
+  assert.match(componente, /if \(!textoFinal\)/)
 })
+test('muestra la cantidad detectada antes de registrar', () => { assert.match(componente, /mostrar\('detectado', `Cantidad detectada: \$\{moneda\(resultado\.importe\)\}`\)/); assert.match(componente, /mostrar\('guardando', 'Registrando venta/); assert.match(componente, /fl-voice-transcript/) })
 test('combinaciones, Escape, formularios y otros modales no generan una venta', () => {
   assert.match(componente, /if \(shiftPresionadoRef\.current && capturaActivaRef\.current\) cancelar\(\)/)
   assert.match(componente, /evento\.key === 'Escape'.*cancelar\(true\)/)
@@ -55,7 +57,7 @@ test('combinaciones, Escape, formularios y otros modales no generan una venta', 
   assert.match(componente, /\[aria-modal="true"\],dialog\[open\]/)
 })
 test('no se permite otra captura mientras se guarda o el guardado es incierto', () => {
-  assert.match(componente, /ocupadaRef\.current \|\| capturaActivaRef\.current \|\| reconocedorRef\.current \|\| estadoRef\.current === 'incierto'/)
+  assert.match(componente, /ocupadaRef\.current \|\| hablandoRef\.current \|\| capturaActivaRef\.current \|\| reconocedorRef\.current \|\| estadoRef\.current === 'incierto'/)
   assert.match(componente, /AbortSignal\.timeout\(TIMEOUT_RPC_MS\)/)
   assert.match(componente, /consultar\(capturaId\)/)
 })
@@ -77,6 +79,15 @@ test('éxito sólo aparece tras respuesta confirmada y se cierra automáticament
   assert.match(guardado, /verificada\?\.ok && verificada\.folio[\s\S]*confirmarExito/)
   assert.match(componente, /Venta registrada:/)
   assert.match(componente, /setTimeout\(\(\) =>[\s\S]*ocultarOverlay\(\)/)
+})
+test('confirmación hablada ocurre tras éxito real, se deduplica y no bloquea el guardado', () => {
+  const confirmacion = componente.slice(componente.indexOf('const anunciarVenta'), componente.indexOf('const guardar'))
+  assert.match(confirmacion, /avisosHabladosRef\.current\.has\(capturaId\)/)
+  assert.match(confirmacion, /SpeechSynthesisUtterance/)
+  assert.match(confirmacion, /getVoices\(\).*startsWith\('es'\)/)
+  assert.match(confirmacion, /mostrar\('exito', texto\)[\s\S]*anunciarVenta\(capturaId, total\)/)
+  assert.match(componente, /hablandoRef\.current \|\| capturaActivaRef/)
+  assert.match(confirmacion, /catch \{ window\.clearTimeout/)
 })
 test('guardado no usa carrito, impresión, PDF ni POS Bridge', () => {
   assert.match(componente, /registrar_venta_voz/)
