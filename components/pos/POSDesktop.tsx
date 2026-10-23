@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import type { TicketPOS } from '@/utils/pos'
 import { aCentavos, calcularCambioCentavos, efectivoSuficiente, debeAbrirCajon, obtenerMontosRapidosEfectivo } from '@/utils/pos'
 
@@ -31,6 +31,10 @@ export function CobroEfectivoDesktop({ total, onCancelar, onCobrar }: { total: n
 export function ConfirmarImpresionDesktop({ ticket, onCerrar }: { ticket: TicketPOS; onCerrar: () => void }) {
   const [estado, setEstado] = useState<'pregunta' | 'imprimiendo' | 'error' | 'impreso' | 'cajon-error'>('pregunta')
   const imprimiendoRef = useRef(false)
+  useLayoutEffect(() => {
+    const dialogos = document.querySelectorAll<HTMLElement>('.fl-pos-dialog')
+    dialogos.item(dialogos.length - 1)?.querySelector<HTMLButtonElement>('footer button')?.focus()
+  }, [])
   const imprimir = async () => {
     if (imprimiendoRef.current) return
     imprimiendoRef.current = true

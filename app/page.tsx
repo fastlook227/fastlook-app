@@ -87,6 +87,7 @@ import ImagenProducto from '@/components/ImagenProducto'
 import CargarMasProductos from '@/components/CargarMasProductos'
 import useListaProgresiva from '@/hooks/useListaProgresiva'
 import TarjetaProducto from '@/components/TarjetaProducto'
+import TarjetaProductoPersonalizado from '@/components/TarjetaProductoPersonalizado'
 import useNavegacionPOS from '@/hooks/useNavegacionPOS'
 import { construirMovimientosCompletos } from '@/utils/movimientos'
 
@@ -1843,7 +1844,8 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
       onEscanear={(elemento) => abrirScanner('venta', elemento)}
       onScannerContinuo={setScannerContinuo}
       onEnter={() => manejarCodigoDetectado(busquedaVenta, 'venta')}
-      accionesBusqueda={<>{usuarioRol === 'Admin' && <button type="button" className="fl-custom-product-shortcut" onClick={() => setTab('productos-personalizados')}><PackagePlus size={18} />Producto personalizado</button>}<div className="fl-sale-mode" role="group" aria-label="Modo de venta"><button type="button" className="is-active" onClick={() => setModoVenta('rapida')}>Venta rápida</button><button type="button" onClick={() => setModoVenta('normal')}>Venta normal</button></div></>}
+      onAbrirPersonalizado={() => setTab('productos-personalizados')}
+      accionesBusqueda={<div className="fl-sale-mode" role="group" aria-label="Modo de venta"><button type="button" className="is-active" onClick={() => setModoVenta('rapida')}>Venta rápida</button><button type="button" onClick={() => setModoVenta('normal')}>Venta normal</button></div>}
     /> : <>
 
     {resultadoVenta && <section className="fl-sale-result"><CheckCircle size={34} /><div><span>Venta registrada</span><strong>{resultadoVenta.folio}</strong><small>Total: ${resultadoVenta.total.toFixed(2)}</small></div><button type="button" onClick={() => setResultadoVenta(null)}>Nueva venta</button><button type="button" onClick={() => setTab('movimientos')}>Ver movimiento</button></section>}
@@ -1859,7 +1861,7 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
       onBusqueda={setBusquedaVenta}
       onFiltros={setFiltrosVenta}
       onEnter={() => manejarCodigoDetectado(busquedaVenta, 'venta')}
-      accionesBusqueda={<>{usuarioRol === 'Admin' && <button type="button" className="fl-custom-product-shortcut" onClick={() => setTab('productos-personalizados')}><PackagePlus size={18} />Producto personalizado</button>}<div className="fl-sale-mode" role="group" aria-label="Modo de venta"><button type="button" onClick={() => setModoVenta('rapida')}>Venta rápida</button><button type="button" className="is-active" onClick={() => setModoVenta('normal')}>Venta normal</button></div></>}
+      accionesBusqueda={<div className="fl-sale-mode" role="group" aria-label="Modo de venta"><button type="button" onClick={() => setModoVenta('rapida')}>Venta rápida</button><button type="button" className="is-active" onClick={() => setModoVenta('normal')}>Venta normal</button></div>}
       accionesFiltros={<><button type="button" className="fl-filter-scanner" onClick={(evento) => abrirScanner('venta', evento.currentTarget)}><ScanLine size={17} />Cámara</button><label className="fl-filter-continuous"><input type="checkbox" checked={scannerContinuo} onChange={(evento) => setScannerContinuo(evento.target.checked)} />Continuo</label></>}
     />
 
@@ -1872,7 +1874,7 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
 
     <h3>Productos</h3>
 
-    <div className="fl-product-grid">{listaVenta.visibles.map((p) => <TarjetaProducto key={p.id} producto={p} accion="Añadir al ticket" disabled={procesandoCarritoActivo || Number(p.stock) <= 0} onSeleccionar={(producto) => { agregarAlCarrito(producto) }} />)}</div>
+    <div className="fl-product-grid">{usuarioRol === 'Admin' && <TarjetaProductoPersonalizado onSeleccionar={() => setTab('productos-personalizados')} />}{listaVenta.visibles.map((p) => <TarjetaProducto key={p.id} producto={p} accion="Añadir al ticket" disabled={procesandoCarritoActivo || Number(p.stock) <= 0} onSeleccionar={(producto) => { agregarAlCarrito(producto) }} />)}</div>
     <CargarMasProductos visibles={listaVenta.visibles.length} total={listaVenta.total} onCargarMas={listaVenta.cargarMas} />
 
     </>}
