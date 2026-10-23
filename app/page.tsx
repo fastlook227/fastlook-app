@@ -63,6 +63,7 @@ import CarritoFlotanteGlobal from '@/components/CarritoFlotanteGlobal'
 import usePOSDesktop from '@/hooks/usePOSDesktop'
 import { CobroEfectivoDesktop, ConfirmarImpresionDesktop } from '@/components/pos/POSDesktop'
 import ConfiguracionPOS from '@/components/pos/ConfiguracionPOS'
+import VentaVozGlobal from '@/components/VentaVozGlobal'
 import { crearTicketPOS, requiereCapturaEfectivo, rpcPOS, type TicketPOS } from '@/utils/pos'
 import CheckIn from '@/components/checkin/CheckInNomina'
 import PreparacionCajasTianguis from '@/components/tianguis/PreparacionCajasTianguis'
@@ -165,6 +166,7 @@ export default function Home() {
   const registrandoAbonoRef = useRef(false)
   const [fechaOperativa, setFechaOperativa] = useState(obtenerFechaActualFastLook)
   const [avisosEntregas, setAvisosEntregas] = useState(0)
+  const [revisionVentaVoz, setRevisionVentaVoz] = useState(0)
 
   useEffect(() => {
     const temporizador = window.setInterval(() => setFechaOperativa(obtenerFechaActualFastLook()), 30_000)
@@ -2052,7 +2054,7 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
         )}
 
         {tab === 'corte' && puedeAccederCorteCaja(perfilUsuario.correo) && (
-          <CorteCajaDashboard />
+          <CorteCajaDashboard key={revisionVentaVoz} />
         )}
         {tab === 'corte' && !puedeAccederCorteCaja(perfilUsuario.correo) && (
           <div style={styles.alert} role="alert">No tienes permiso para acceder a Corte de caja.</div>
@@ -2159,6 +2161,10 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
         onCerrar={cerrarScanner}
       />
       <LoadingOverlay visible={Boolean(operacionAbono)} titulo="Registrando abono…" detalle="Actualizando el cliente y registrando el movimiento en Corte." />
+      <VentaVozGlobal onActualizar={async () => {
+        await Promise.allSettled([fetchVentas(true), fetchMovimientos(), ...(puedeAccederCorteCaja(perfilUsuario.correo) ? [fetchCortes(true)] : [])])
+        setRevisionVentaVoz((actual) => actual + 1)
+      }} />
       {esDesktopPOS && cobroEfectivoPOS && <CobroEfectivoDesktop total={cobroEfectivoPOS.total} onCancelar={() => setCobroEfectivoPOS(null)} onCobrar={async (recibido) => cobroEfectivoPOS.ventaId === estadoVentasRef.current.activaId && finalizarVenta('Efectivo', recibido)} />}
       {esDesktopPOS && ticketPOS && <ConfirmarImpresionDesktop ticket={ticketPOS} onCerrar={() => setTicketPOS(null)} />}
       {notificacionOperacion && <div className={`fl-operation-toast is-${notificacionOperacion.tipo}`} role="status"><span>{notificacionOperacion.mensaje}</span><button type="button" aria-label="Cerrar notificación" onClick={() => setNotificacionOperacion(null)}><X size={17} /></button></div>}

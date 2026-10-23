@@ -1298,6 +1298,22 @@ img.fl-image-full { object-fit: contain; object-position: center; background: #f
 .fl-global-cart.is-dragging { transform: scale(1.07); box-shadow: 0 12px 28px rgba(0,0,0,.46); cursor: grabbing; transition: transform .12s ease, box-shadow .12s ease; }
 .fl-global-cart:disabled { opacity: .45; pointer-events: none; }
 body:has([aria-modal="true"]) .fl-global-cart { opacity: 0; pointer-events: none; }
+.fl-voice-sale { position: fixed; right: 18px; bottom: 18px; z-index: 70; width: min(390px, calc(100vw - 28px)); padding: 11px 12px; color: #fff; background: #111; border: 2px solid var(--fl-red); border-radius: 13px; box-shadow: 0 12px 32px rgba(0,0,0,.24); }
+.fl-voice-sale > div:first-child { display: flex; align-items: center; gap: 9px; }
+.fl-voice-sale > div:first-child > svg { flex: 0 0 auto; color: #ff4a4a; }
+.fl-voice-sale span { min-width: 0; display: grid; gap: 2px; }
+.fl-voice-sale strong, .fl-voice-sale small { display: block; }
+.fl-voice-sale small { color: #e5e7eb; line-height: 1.25; }
+.fl-voice-sale p { margin: 7px 0 0; color: #aeb4be; font-size: .68rem; }
+.fl-voice-sale.is-escuchando { border-color: #fff; box-shadow: 0 0 0 4px rgba(190,0,0,.3), 0 12px 32px rgba(0,0,0,.24); }
+.fl-voice-sale.is-exito { border-color: #33c06f; }
+.fl-voice-sale.is-error, .fl-voice-sale.is-incierto { border-color: #ffb020; }
+.fl-voice-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
+.fl-voice-actions button { min-height: 34px; display: inline-flex; align-items: center; gap: 5px; padding: 5px 9px; color: #111; background: #fff; border: 0; border-radius: 8px; cursor: pointer; font-size: .74rem; font-weight: 850; }
+.fl-voice-actions button svg { width: 15px; height: 15px; }
+.fl-voice-actions button.is-danger { color: #fff; background: var(--fl-red); }
+body:has([aria-modal="true"]) .fl-voice-sale { pointer-events: none; opacity: .45; }
+@media (max-width: 700px) { .fl-voice-sale { right: 10px; bottom: calc(76px + env(safe-area-inset-bottom)); width: calc(100vw - 20px); } }
 .fl-global-cart-badge { position: absolute; top: -6px; right: -6px; display: grid; min-width: 24px; height: 24px; place-items: center; padding: 0 5px; color: #fff; background: var(--fl-red); border: 2px solid #fff; border-radius: 999px; font-size: 12px; font-weight: 900; line-height: 1; }
 .fl-global-cart.is-expanded { width: 230px; height: 64px; display: grid; grid-template-columns: 40px minmax(0,1fr) 40px; place-items: stretch; padding: 4px; border-radius: 18px; cursor: default; }
 .fl-global-cart button { min-width: 0; min-height: 48px; color: inherit; background: transparent; border: 0; cursor: pointer; }
