@@ -47,3 +47,48 @@ export interface DatosCorte {
   ventasSinCosto: number
   devolucionesSinUtilidad: number
 }
+
+export interface TicketCorte {
+  ticketId: string
+  folio: string
+  createdAt: string
+  metodoPago: string
+  total: number
+  estado: string
+  lineasNormales: LineaCorte[]
+  lineasPersonalizadas: LineaCorte[]
+}
+
+export interface LineaCorte {
+  id: string
+  nombre: string
+  codigo?: string
+  cantidad: number
+  precioUnitario: number
+  total: number
+  costoUnitario: number | null
+  personalizada: boolean
+}
+
+export interface OperacionConciliacionCorte {
+  id: string
+  createdAt: string
+  concepto: string
+  total: number
+  metodoPago: string
+  tipo: 'ajuste' | 'sin_ticket'
+}
+
+export interface ReporteCorte {
+  resumen: ResumenCorte & { ventasInventario: number; ventasPersonalizadas: number; ajustesTicket: number; operacionesSinConciliar: number; totalAjustes: number }
+  ventasAgrupadas: VentaAgrupadaFecha[]
+  metodos: ResumenMetodoPago[]
+  productos: ProductoVendidoResumen[]
+  tickets: TicketCorte[]
+  totalTicketsFiltrados: number
+  pagina: number
+  paginas: number
+  conciliacion: OperacionConciliacionCorte[]
+  ventasSinCosto: number
+  devolucionesSinUtilidad: number
+}

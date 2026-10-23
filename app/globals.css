@@ -491,6 +491,29 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .fl-corte-history article strong { font-size: 12px; }
 .fl-corte-history article span { font-size: 12px; }
 .fl-corte-history article small, .fl-corte-history-empty { color: var(--fl-gray-700); font-size: 11px; }
+.fl-corte-section-title { margin: 4px 0 12px; }
+.fl-corte-section-title h2, .fl-corte-breakdown h2, .fl-corte-tickets h2, .fl-corte-reconcile h2 { margin: 0 0 4px; font-size: 18px; }
+.fl-corte-section-title p, .fl-corte-breakdown small, .fl-corte-reconcile > p { margin: 0; color: var(--fl-gray-700); font-size: 12px; }
+.fl-corte-breakdown, .fl-corte-tickets, .fl-corte-reconcile { margin: 0 0 16px; padding: 18px; background: white; border: 1px solid var(--fl-gray-200); border-radius: var(--fl-radius-md); box-shadow: var(--fl-shadow-sm); }
+.fl-corte-breakdown > div { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; margin: 13px 0 10px; }
+.fl-corte-breakdown article { display: flex; justify-content: space-between; gap: 8px; padding: 12px; background: var(--fl-gray-100); border-radius: 10px; font-size: 12px; }
+.fl-corte-breakdown article.is-total { color: white; background: var(--fl-black); }
+.fl-corte-tickets { margin-top: 16px; }
+.fl-corte-tickets .fl-corte-panel-heading form { display: flex; align-items: center; gap: 7px; padding: 6px 7px 6px 11px; border: 1px solid var(--fl-gray-300); border-radius: 10px; }
+.fl-corte-tickets input { min-width: 230px; border: 0; outline: 0; }
+.fl-corte-tickets form button, .fl-corte-tickets footer button { padding: 8px 12px; color: white; background: var(--fl-red); border: 0; border-radius: 8px; cursor: pointer; font-weight: 800; }
+.fl-corte-ticket-list { display: grid; gap: 7px; }
+.fl-corte-ticket-list details { border: 1px solid var(--fl-gray-200); border-radius: 10px; }
+.fl-corte-ticket-list summary { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px; cursor: pointer; }
+.fl-corte-ticket-list summary span, .fl-corte-ticket-list summary small { display: grid; }
+.fl-corte-ticket-list summary small { margin-top: 3px; color: var(--fl-gray-700); font-size: 10px; }
+.fl-corte-ticket-list details > div { padding: 0 12px 10px; }
+.fl-corte-ticket-list p, .fl-corte-reconcile article { display: flex; justify-content: space-between; gap: 10px; margin: 0; padding: 8px 0; border-top: 1px solid var(--fl-gray-200); font-size: 12px; }
+.fl-corte-ticket-list em { margin-left: 5px; color: var(--fl-red); font-size: 10px; font-style: normal; font-weight: 800; }
+.fl-corte-tickets footer { display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 13px; font-size: 12px; }
+.fl-corte-tickets footer button:disabled { opacity: .45; cursor: default; }
+.fl-corte-reconcile article span, .fl-corte-reconcile article small { display: grid; }
+.fl-corte-reconcile article small { color: var(--fl-gray-700); font-size: 10px; }
 
 .fl-helmets-catalog { padding: 10px 0 34px; }
 .fl-helmets-header { display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; margin: 5px 0 18px; }
@@ -770,6 +793,9 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .fl-corte-chart { height: 260px; min-width: 520px; }
   .fl-corte-panel--wide { overflow-x: auto; }
   .fl-corte-history > div:last-child { grid-template-columns: 1fr; }
+  .fl-corte-breakdown > div { grid-template-columns: 1fr; }
+  .fl-corte-tickets .fl-corte-panel-heading { align-items: stretch; flex-direction: column; gap: 10px; }
+  .fl-corte-tickets .fl-corte-panel-heading form, .fl-corte-tickets input { width: 100%; min-width: 0; }
   .fl-corte-products article { grid-template-columns: 28px minmax(0, 1fr); }
   .fl-corte-products article > span { grid-column: 2; text-align: left; }
   .fl-helmets-header { align-items: flex-start; flex-direction: column; }

@@ -2056,15 +2056,7 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
         )}
 
         {tab === 'corte' && puedeAccederCorteCaja(perfilUsuario.correo) && (
-          <CorteCajaDashboard
-            ventas={ventas}
-            devoluciones={devoluciones}
-            devolucionesDetalle={devolucionesDetalle}
-            cortes={cortes}
-            onActualizar={async () => {
-              await Promise.all([fetchVentas(true), fetchDevoluciones(true), fetchCortes(true)])
-            }}
-          />
+          <CorteCajaDashboard />
         )}
         {tab === 'corte' && !puedeAccederCorteCaja(perfilUsuario.correo) && (
           <div style={styles.alert} role="alert">No tienes permiso para acceder a Corte de caja.</div>

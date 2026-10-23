@@ -6,10 +6,10 @@ interface CorteMetricCardProps {
   valor: string
   detalle: string
   tono?: 'positivo' | 'neutro' | 'alerta'
-  tooltip: string
+  tooltip?: string
 }
 
-export default function CorteMetricCard({ icono: Icono, titulo, valor, detalle, tono = 'neutro', tooltip }: CorteMetricCardProps) {
+export default function CorteMetricCard({ icono: Icono, titulo, valor, detalle, tono = 'neutro', tooltip = detalle }: CorteMetricCardProps) {
   return (
     <article className={`fl-corte-metric fl-corte-metric--${tono}`} title={tooltip} tabIndex={0}>
       <span className="fl-corte-metric-icon"><Icono size={21} aria-hidden="true" /></span>
