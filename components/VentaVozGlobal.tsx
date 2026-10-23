@@ -140,6 +140,7 @@ export default function VentaVozGlobal({ onActualizar }: { onActualizar: () => P
     ocupadaRef.current = true; mostrar('guardando', 'Deshaciendo…')
     try {
       const { data, error } = await supabase.rpc('deshacer_venta_voz', { p_captura_id: ultima.capturaId, p_idempotency_key: ultima.deshacerKey }).abortSignal(AbortSignal.timeout(TIMEOUT_RPC_MS))
+      if (error?.message.includes('VENTA_CON_DEVOLUCION:')) { setUltima(null); mostrar('error', `No se puede deshacer ${ultima.folio}: ya tiene una devolución registrada.`); return }
       if (error || !(data as ResultadoVoz)?.ok) throw error
       setUltima(null); mostrar('listo', `Venta ${ultima.folio} cancelada. ${MENSAJE_LISTO}`); await onActualizar()
     } catch { mostrar('exito', `No se pudo confirmar la cancelación de ${ultima.folio}; revisa la conexión y vuelve a pulsar “Deshacer”.`) } finally { ocupadaRef.current = false }

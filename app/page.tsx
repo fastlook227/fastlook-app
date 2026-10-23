@@ -20,6 +20,7 @@ import type {
   Venta,
 } from '@/types'
 import type { Devolucion, DevolucionDetalle } from '@/types/devoluciones'
+import { detallesPersonalizadosDevolucion, lineasPersonalizadasDevolucion } from '@/utils/devoluciones'
 import { obtenerFechaActualFastLook, obtenerFechaLocal } from '@/utils/fechas'
 import { filtrarProductosPorBusqueda } from '@/utils/busqueda'
 import { aplicarFiltrosProductos, crearFiltrosProductosVacios, esProductoStockBajo } from '@/utils/filtrosProductos'
@@ -102,6 +103,8 @@ export default function Home() {
   const [ventas, setVentas] = useState<Venta[]>([])
   const [devoluciones, setDevoluciones] = useState<Devolucion[]>([])
   const [devolucionesDetalle, setDevolucionesDetalle] = useState<DevolucionDetalle[]>([])
+  const [personalizadasDevolucion, setPersonalizadasDevolucion] = useState<Venta[]>([])
+  const [ticketsCancelados, setTicketsCancelados] = useState<ReadonlySet<string>>(new Set())
   const [busqueda, setBusqueda] = useState('')
   const [busquedaVenta, setBusquedaVenta] = useState('')
   const [busquedaInventario, setBusquedaInventario] = useState('')
@@ -190,6 +193,7 @@ export default function Home() {
     return () => { activo = false; window.clearInterval(temporizador) }
   }, [perfilUsuario])
 
+  const ventasDevolucion = useMemo(() => [...ventas, ...personalizadasDevolucion].filter((venta) => !ticketsCancelados.has(String(venta.ticket_id))), [ventas, personalizadasDevolucion, ticketsCancelados])
   const ventaActiva = obtenerVentaActiva(estadoVentas)
   const carrito = ventaActiva.carrito
   const metodoPago = ventaActiva.metodoPago
@@ -468,17 +472,25 @@ export default function Home() {
   }
 
   const fetchDevoluciones = async (silencioso = false) => {
-    const [cabeceras, detalles] = await Promise.all([
+    const [cabeceras, detalles, detallesPersonalizados, personalizadas, cancelados, ventasVoz] = await Promise.all([
       supabase.from('devoluciones').select('*').order('created_at', { ascending: false }),
       supabase.from('devoluciones_detalle').select('*').order('created_at', { ascending: false }),
+      supabase.from('devoluciones_personalizadas_detalle').select('*').order('created_at', { ascending: false }),
+      supabase.from('ventas_personalizadas').select('id,ticket_id,folio,created_at,nombre,tipo_personalizado,precio_unitario,cantidad,total,metodo_pago'),
+      supabase.from('ventas_tickets').select('ticket_id').eq('estado', 'Cancelado'),
+      supabase.from('ventas_voz_operaciones').select('ticket_id').not('ticket_id', 'is', null),
     ])
-    if (cabeceras.error || detalles.error) {
-      const mensaje = cabeceras.error?.message || detalles.error?.message || 'Error desconocido.'
-      if (silencioso) throw new Error('No fue posible actualizar las devoluciones: ' + mensaje)
+    const fallo = cabeceras.error || detalles.error || personalizadas.error || cancelados.error
+    if (fallo) {
+      if (silencioso) throw new Error('No fue posible actualizar las devoluciones: ' + (fallo.message || 'Error desconocido.'))
       return
     }
+    // Sin la tabla nueva (migración pendiente) las personalizadas no se ofrecen; ventasVoz sólo aporta la etiqueta.
+    const conPersonalizadas = !detallesPersonalizados.error
     setDevoluciones((cabeceras.data || []) as Devolucion[])
-    setDevolucionesDetalle((detalles.data || []) as DevolucionDetalle[])
+    setDevolucionesDetalle([...((detalles.data || []) as DevolucionDetalle[]), ...detallesPersonalizadosDevolucion(conPersonalizadas ? detallesPersonalizados.data || [] : [])])
+    setPersonalizadasDevolucion(conPersonalizadas ? lineasPersonalizadasDevolucion(personalizadas.data || [], new Set((ventasVoz.data || []).map((v) => String(v.ticket_id)))) : [])
+    setTicketsCancelados(new Set((cancelados.data || []).map((t) => String(t.ticket_id))))
   }
 
   const fetchClientes = async () => {
@@ -1817,7 +1829,7 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
 
         {tab === 'devoluciones' && (
           <Devoluciones
-            ventas={ventas}
+            ventas={ventasDevolucion}
             productos={productos}
             devoluciones={devoluciones}
             detalles={devolucionesDetalle}

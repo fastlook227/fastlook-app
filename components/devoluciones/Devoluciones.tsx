@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Producto, Venta } from '@/types'
 import type { Devolucion, DevolucionDetalle, MotivoDevolucion, PeriodoDevoluciones, ResultadoDevolucion, TicketDevolucion } from '@/types/devoluciones'
 import { supabase } from '@/lib/supabase'
-import { agruparVentasPorTicket, esErrorCantidadExcedida, filtrarTicketsDevolucion, mensajeErrorDevolucion, monedaDevolucion } from '@/utils/devoluciones'
+import { agruparVentasPorTicket, esErrorCantidadExcedida, filtrarTicketsDevolucion, mensajeErrorDevolucion, monedaDevolucion, separarLineasDevolucion } from '@/utils/devoluciones'
 import { obtenerFechaActualFastLook, obtenerRangoPeriodoFastLook } from '@/utils/fechas'
 import LoadingOverlay from '@/components/LoadingOverlay'
 import BuscarVentaDevolucion from '@/components/devoluciones/BuscarVentaDevolucion'
@@ -86,12 +86,11 @@ export default function Devoluciones({ ventas, productos, devoluciones, detalles
     setProcesando(true)
     setError('')
     try {
-      const { data, error: errorRpc } = await supabase.rpc('procesar_devolucion', {
-        p_idempotency_key: idempotencyKeyRef.current,
-        p_motivo: motivo,
-        p_motivo_otro: motivo === 'Otro' ? motivoOtro.trim() : null,
-        p_lineas: lineas,
-      })
+      const { normales, personalizadas } = separarLineasDevolucion(lineas)
+      const comunes = { p_idempotency_key: idempotencyKeyRef.current, p_motivo: motivo, p_motivo_otro: motivo === 'Otro' ? motivoOtro.trim() : null }
+      let { data, error: errorRpc } = await supabase.rpc('procesar_devolucion_mixta', { ...comunes, p_lineas: normales, p_lineas_personalizadas: personalizadas })
+      // shortcut: mientras fastlook_devoluciones_personalizadas.sql no esté aplicada (PGRST202), sólo se devuelve inventario con el RPC anterior; quitar al aplicarla.
+      if (errorRpc?.code === 'PGRST202' && !personalizadas.length) ({ data, error: errorRpc } = await supabase.rpc('procesar_devolucion', { ...comunes, p_lineas: normales }))
       if (errorRpc) throw errorRpc
       const respuesta = data as ResultadoDevolucion
       if (!respuesta?.ok) throw new Error('La devolución no fue confirmada.')

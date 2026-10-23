@@ -37,6 +37,9 @@ async function obtenerReporte(inicio: string, fin: string, busqueda = '', pagina
     const { data, error } = await obtenerSupabaseAdmin().from('devoluciones_detalle').select('*').in('devolucion_id', idsDevoluciones.slice(i, i + 100))
     if (error) throw error
     devolucionesDetalle.push(...((data || []) as Fila[]))
+    // Unidades personalizadas devueltas; el dinero ya se resta por la cabecera (total_devuelto).
+    const detallePersonalizado = await obtenerSupabaseAdmin().from('devoluciones_personalizadas_detalle').select('devolucion_id,cantidad').in('devolucion_id', idsDevoluciones.slice(i, i + 100))
+    if (!detallePersonalizado.error) devolucionesDetalle.push(...((detallePersonalizado.data || []) as Fila[]))
   }
   const idsServicio = [...new Set(personalizadas.filter(p => p.tipo_personalizado === 'SERVICIO_MOTO' && p.ticket_id).map(p => String(p.ticket_id)))], ticketsVoz = new Set<string>()
   for (let i = 0; i < idsServicio.length; i += 100) {

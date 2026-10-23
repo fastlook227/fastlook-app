@@ -1,12 +1,37 @@
 import type { Producto, Venta } from '@/types'
 import type { DevolucionDetalle, EstadoDevolucionVenta, TicketDevolucion, VentaConDevolucion } from '@/types/devoluciones'
-import { normalizarTextoBusqueda } from '@/utils/busqueda'
-import { buscarCodigoBarrasExacto } from '@/utils/codigoBarras'
+// @ts-expect-error Node ejecuta las pruebas TypeScript nativas y requiere la extensión explícita.
+import { normalizarTextoBusqueda } from './busqueda.ts'
+// @ts-expect-error Node ejecuta las pruebas TypeScript nativas y requiere la extensión explícita.
+import { buscarCodigoBarrasExacto } from './codigoBarras.ts'
+// @ts-expect-error Node ejecuta las pruebas TypeScript nativas y requiere la extensión explícita.
+import { CONCEPTO_VENTA_VOZ } from './ventaVoz.ts'
 
 const numero = (valor: unknown) => {
   const resultado = Number(valor || 0)
   return Number.isFinite(resultado) ? resultado : 0
 }
+
+type Fila = Record<string, unknown>
+
+// Las líneas personalizadas usan el prefijo "p:" para no chocar con ventas.id y para separarlas al procesar.
+export const PREFIJO_PERSONALIZADA = 'p:'
+
+export const lineasPersonalizadasDevolucion = (filas: Fila[], ticketsVoz: ReadonlySet<string>): Venta[] => filas.map((fila) => ({
+  id: `${PREFIJO_PERSONALIZADA}${fila.id}`, created_at: String(fila.created_at), ticket_id: fila.ticket_id ? String(fila.ticket_id) : null, folio: fila.folio ? String(fila.folio) : null,
+  producto_id: null, codigo: 'Personalizado', nombre: ticketsVoz.has(String(fila.ticket_id)) ? CONCEPTO_VENTA_VOZ : String(fila.nombre || fila.tipo_personalizado || 'Producto personalizado'),
+  precio: numero(fila.precio_unitario), costo_unitario: null, cantidad: numero(fila.cantidad), total: numero(fila.total), metodo_pago: fila.metodo_pago ? String(fila.metodo_pago) : undefined,
+}))
+
+export const detallesPersonalizadosDevolucion = (filas: Fila[]): DevolucionDetalle[] => filas.map((fila) => ({
+  id: String(fila.id), devolucion_id: String(fila.devolucion_id), venta_id: `${PREFIJO_PERSONALIZADA}${fila.venta_personalizada_id}`, producto_id: `${PREFIJO_PERSONALIZADA}${fila.venta_personalizada_id}`,
+  codigo: 'Personalizado', nombre: String(fila.nombre || 'Producto personalizado'), cantidad: numero(fila.cantidad), precio_unitario_original: numero(fila.precio_unitario_original), subtotal_devuelto: numero(fila.subtotal_devuelto), created_at: String(fila.created_at),
+}))
+
+export const separarLineasDevolucion = (lineas: Array<{ venta_id: string; cantidad: number }>) => ({
+  normales: lineas.filter((linea) => !linea.venta_id.startsWith(PREFIJO_PERSONALIZADA)),
+  personalizadas: lineas.filter((linea) => linea.venta_id.startsWith(PREFIJO_PERSONALIZADA)).map((linea) => ({ venta_personalizada_id: linea.venta_id.slice(PREFIJO_PERSONALIZADA.length), cantidad: linea.cantidad })),
+})
 
 export const monedaDevolucion = (valor: number) => new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(valor)
 
@@ -85,6 +110,7 @@ const mensajes: Record<string, string> = {
   CANTIDAD_EXCEDIDA: 'Parte de esta venta ya fue devuelta. Actualiza la información e inténtalo nuevamente.',
   METODO_INCONSISTENTE: 'El ticket contiene métodos de pago inconsistentes.',
   PRODUCTO_INVALIDO: 'No fue posible actualizar el inventario de uno de los productos.',
+  TICKET_CANCELADO: 'El ticket está cancelado y no admite devoluciones.',
 }
 
 export const mensajeErrorDevolucion = (mensaje?: string) => {

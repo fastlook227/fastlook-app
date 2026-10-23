@@ -54,3 +54,5 @@ fastlook-interphone-android/gradle/errors/*.log
 fastlook-interphone-android/gradle/errors/*.log
 
 node_modules/
+
+consultas-supabase/
