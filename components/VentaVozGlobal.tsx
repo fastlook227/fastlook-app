@@ -1,51 +1,66 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Mic, MicOff, RotateCcw, Volume2 } from 'lucide-react'
+import { Mic } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { reconocerImporteVoz } from '@/utils/ventaVoz'
 
-type Estado = 'listo' | 'escuchando' | 'procesando' | 'guardando' | 'exito' | 'error' | 'incierto'
-type ResultadoVoz = { ok?: boolean; captura_id?: string; ticket_id?: string; folio?: string; total?: number | string; deshecha?: boolean }
+type Estado = 'oculto' | 'escuchando' | 'procesando' | 'guardando' | 'exito' | 'incierto'
+type Aviso = { tipo: 'exito' | 'error'; texto: string } | null
+type ResultadoVoz = { ok?: boolean; captura_id?: string; ticket_id?: string; folio?: string; total?: number | string }
 interface ResultadoReconocimiento { isFinal: boolean; 0: { transcript: string }; length: number }
 interface EventoReconocimiento extends Event { results: ArrayLike<ResultadoReconocimiento> }
 interface ErrorReconocimiento extends Event { error: string }
 interface ReconocedorVoz { lang: string; continuous: boolean; interimResults: boolean; maxAlternatives: number; start(): void; stop(): void; abort(): void; onresult: ((evento: EventoReconocimiento) => void) | null; onerror: ((evento: ErrorReconocimiento) => void) | null; onend: (() => void) | null }
 type ConstructorReconocedor = new () => ReconocedorVoz
 
-const ESPERA_SHIFT_MS = 280, ESPERA_RESULTADO_MS = 10_000, TIMEOUT_RPC_MS = 15_000, CLAVE_HABILITADA = 'fastlook-venta-voz-habilitada'
-const MENSAJE_LISTO = 'Mantén Shift para registrar una venta'
+const ESPERA_RESULTADO_MS = 10_000, TIMEOUT_RPC_MS = 15_000, DURACION_AVISO_MS = 4_500, DURACION_EXITO_MS = 1_350
 const esEdicion = (objetivo: EventTarget | null) => objetivo instanceof HTMLInputElement || objetivo instanceof HTMLTextAreaElement || objetivo instanceof HTMLSelectElement || (objetivo instanceof HTMLElement && (objetivo.isContentEditable || Boolean(objetivo.closest('[contenteditable="true"],[role="textbox"]'))))
-const moneda = (importe: number) => new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(importe)
-const mensajeErrorMicrofono = (error: string) => error === 'not-allowed' || error === 'service-not-allowed' ? 'No se registró: el navegador no tiene permiso para usar el micrófono. Pulsa “Activar micrófono”.' : error === 'no-speech' ? 'No se registró; no se escuchó un importe.' : error === 'audio-capture' ? 'No se registró: no se encontró un micrófono conectado.' : error === 'network' ? 'No se registró: sin conexión con el servicio de voz del navegador.' : 'No se registró; repite el importe.'
-const leerHabilitada = () => { try { return window.localStorage.getItem(CLAVE_HABILITADA) !== '0' } catch { return true } }
+const hayModalAbierto = () => Boolean(document.querySelector('[aria-modal="true"],dialog[open]'))
+const esDispositivoMovil = () => /Android|webOS|iPhone|iPad|iPod|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.matchMedia('(hover: none) and (pointer: coarse)').matches
+const moneda = (importe: number) => new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 2 }).format(importe)
+const mensajeErrorMicrofono = (error: string) => error === 'not-allowed' || error === 'service-not-allowed' ? 'No se registró. Habilita el permiso de micrófono para FAST LOOK en el navegador.' : error === 'audio-capture' ? 'No se registró. No se encontró un micrófono conectado.' : error === 'network' ? 'No se registró. El servicio de voz necesita conexión a Internet.' : 'No se registró; repite el importe.'
 
 export default function VentaVozGlobal({ onActualizar }: { onActualizar: () => Promise<void> }) {
-  const [habilitada, setHabilitada] = useState(leerHabilitada)
-  const [estado, setEstadoUI] = useState<Estado>('listo')
-  const [mensaje, setMensaje] = useState(MENSAJE_LISTO)
-  const [ultima, setUltima] = useState<{ capturaId: string; importe: number; folio: string; deshacerKey: string } | null>(null)
-  const reconocedorRef = useRef<ReconocedorVoz | null>(null), temporizadorRef = useRef<number | null>(null), shiftRef = useRef(false), soltoRef = useRef(false), ocupadaRef = useRef(false), hablandoRef = useRef(false), estadoRef = useRef<Estado>('listo')
+  const [estado, setEstadoUI] = useState<Estado>('oculto')
+  const [mensaje, setMensaje] = useState('Escuchando')
+  const [aviso, setAviso] = useState<Aviso>(null)
+  const [disponible, setDisponible] = useState(false)
+  const reconocedorRef = useRef<ReconocedorVoz | null>(null), ocupadaRef = useRef(false), capturaActivaRef = useRef(false), shiftPresionadoRef = useRef(false), estadoRef = useRef<Estado>('oculto'), avisoTimerRef = useRef<number | null>(null), cierreTimerRef = useRef<number | null>(null), resultadoTimerRef = useRef<number | null>(null), focoAnteriorRef = useRef<HTMLElement | null>(null), overlayRef = useRef<HTMLDivElement | null>(null)
+  const [esEscritorio, setEsEscritorio] = useState(false)
   const [Constructor] = useState(() => (window as unknown as { SpeechRecognition?: ConstructorReconocedor; webkitSpeechRecognition?: ConstructorReconocedor }).SpeechRecognition || (window as unknown as { webkitSpeechRecognition?: ConstructorReconocedor }).webkitSpeechRecognition)
   const mostrar = useCallback((siguiente: Estado, texto: string) => { estadoRef.current = siguiente; setEstadoUI(siguiente); setMensaje(texto) }, [])
-  const [disponible, setDisponible] = useState(false)
 
-  // PGRST202 = la función no existe: la migración de voz no está aplicada y la función queda oculta.
+  const restaurarFoco = useCallback(() => {
+    const anterior = focoAnteriorRef.current; focoAnteriorRef.current = null
+    if (anterior?.isConnected && !anterior.hasAttribute('disabled')) anterior.focus({ preventScroll: true })
+  }, [])
+  const ocultarOverlay = useCallback(() => { mostrar('oculto', 'Escuchando'); restaurarFoco() }, [mostrar, restaurarFoco])
+  const mostrarAviso = useCallback((tipo: 'exito' | 'error', texto: string) => {
+    setAviso({ tipo, texto })
+    if (avisoTimerRef.current !== null) window.clearTimeout(avisoTimerRef.current)
+    avisoTimerRef.current = window.setTimeout(() => { setAviso(null); avisoTimerRef.current = null }, DURACION_AVISO_MS)
+  }, [])
+
   useEffect(() => {
+    if (esDispositivoMovil()) return
+    setEsEscritorio(true)
     let activo = true
+    // PGRST202 significa que la migración todavía no está aplicada; en ese caso no se instala el atajo.
     void supabase.rpc('consultar_venta_voz', { p_captura_id: crypto.randomUUID() }).abortSignal(AbortSignal.timeout(TIMEOUT_RPC_MS)).then(({ error }) => { if (activo) setDisponible(error?.code !== 'PGRST202') })
     return () => { activo = false }
   }, [])
 
-  // Cancela sólo la captura en curso; los avisos de éxito o guardado incierto se conservan.
-  const cancelar = useCallback(() => {
-    const habiaCaptura = shiftRef.current || temporizadorRef.current !== null || reconocedorRef.current !== null
-    shiftRef.current = false; soltoRef.current = false
-    if (temporizadorRef.current !== null) window.clearTimeout(temporizadorRef.current)
-    temporizadorRef.current = null
+  useEffect(() => { if (estado !== 'oculto') window.requestAnimationFrame(() => overlayRef.current?.focus({ preventScroll: true })) }, [estado])
+
+  const cancelar = useCallback((avisar = false) => {
+    const habiaCaptura = capturaActivaRef.current || reconocedorRef.current !== null
+    capturaActivaRef.current = false
     const reconocedor = reconocedorRef.current; reconocedorRef.current = null; reconocedor?.abort()
-    if (habiaCaptura && !ocupadaRef.current) mostrar('listo', MENSAJE_LISTO)
-  }, [mostrar])
+    if (resultadoTimerRef.current !== null) window.clearTimeout(resultadoTimerRef.current)
+    resultadoTimerRef.current = null
+    if (habiaCaptura && !ocupadaRef.current) { ocultarOverlay(); if (avisar) mostrarAviso('error', 'Venta por voz cancelada. No se registró ninguna venta.') }
+  }, [mostrarAviso, ocultarOverlay])
 
   const consultar = useCallback(async (capturaId: string) => {
     const { data, error } = await supabase.rpc('consultar_venta_voz', { p_captura_id: capturaId }).abortSignal(AbortSignal.timeout(TIMEOUT_RPC_MS))
@@ -53,100 +68,98 @@ export default function VentaVozGlobal({ onActualizar }: { onActualizar: () => P
     return data as ResultadoVoz | null
   }, [])
 
-  const confirmarExito = useCallback(async (capturaId: string, respuesta: ResultadoVoz, importe: number) => {
-    const total = Number(respuesta.total ?? importe)
-    setUltima({ capturaId, importe: total, folio: String(respuesta.folio), deshacerKey: crypto.randomUUID() })
-    mostrar('exito', `Registrado: ${moneda(total)} · Efectivo`)
-    await onActualizar()
-    if ('speechSynthesis' in window) {
-      // No se inicia otra captura mientras habla el aviso, para no registrarlo como venta.
-      hablandoRef.current = true
-      const liberar = () => { hablandoRef.current = false }, respaldo = window.setTimeout(liberar, 8_000)
-      const aviso = new SpeechSynthesisUtterance(`Registrado: ${moneda(total)} en efectivo`); aviso.lang = 'es-MX'; aviso.onend = aviso.onerror = () => { window.clearTimeout(respaldo); liberar() }
-      window.speechSynthesis.speak(aviso)
-    }
-  }, [mostrar, onActualizar])
+  const confirmarExito = useCallback(async (respuesta: ResultadoVoz, importe: number) => {
+    const total = Number(respuesta.total ?? importe), texto = `Venta registrada: ${moneda(total)}`
+    mostrar('exito', texto)
+    // La venta ya fue confirmada por servidor; un fallo al refrescar vistas no debe dejar abierto el overlay.
+    await onActualizar().catch(() => undefined)
+    mostrarAviso('exito', texto)
+    cierreTimerRef.current = window.setTimeout(() => { cierreTimerRef.current = null; ocultarOverlay() }, DURACION_EXITO_MS)
+  }, [mostrar, mostrarAviso, ocultarOverlay, onActualizar])
 
   const guardar = useCallback(async (transcripcion: string) => {
     if (ocupadaRef.current) return
     const resultado = reconocerImporteVoz(transcripcion)
-    if (!resultado.ok) { mostrar('error', resultado.motivo === 'metodo' ? 'No se registró; la venta por voz sólo admite efectivo.' : 'No se registró; repite el importe'); return }
+    if (!resultado.ok) { ocultarOverlay(); mostrarAviso('error', 'No se registró; repite el importe.'); return }
     const capturaId = crypto.randomUUID()
-    ocupadaRef.current = true; mostrar('guardando', 'Guardando…')
+    ocupadaRef.current = true; mostrar('guardando', 'Registrando venta…')
     try {
       const { data, error } = await supabase.rpc('registrar_venta_voz', { p_captura_id: capturaId, p_importe: resultado.importe }).abortSignal(AbortSignal.timeout(TIMEOUT_RPC_MS))
       const respuesta = data as ResultadoVoz | null
-      if (!error && respuesta?.ok && respuesta.folio) { await confirmarExito(capturaId, respuesta, resultado.importe); return }
-      // Con código, el servidor respondió y revirtió la transacción: no hubo venta.
-      if (error?.code) { mostrar('error', `No se registró: ${error.message.replace(/^[A-Z_]+:\s*/, '')}`); return }
+      if (!error && respuesta?.ok && respuesta.folio) { await confirmarExito(respuesta, resultado.importe); return }
+      if (error?.code) { ocultarOverlay(); mostrarAviso('error', `No se registró: ${error.message.replace(/^[A-Z_]+:\s*/, '')}`); return }
       const verificada = await consultar(capturaId).catch(() => undefined)
-      if (verificada?.ok && verificada.folio) { await confirmarExito(capturaId, verificada, resultado.importe); return }
-      setUltima({ capturaId, importe: resultado.importe, folio: '', deshacerKey: crypto.randomUUID() })
-      mostrar('incierto', 'Sin conexión: no se pudo confirmar el guardado. Pulsa “Comprobar estado” antes de repetir.')
+      if (verificada?.ok && verificada.folio) { await confirmarExito(verificada, resultado.importe); return }
+      // No se permite otra captura hasta resolver este UUID: repetir podría duplicar una venta cuya respuesta se perdió.
+      mostrar('incierto', 'No se pudo confirmar el registro. Comprobando…')
+      const comprobar = async () => {
+        try {
+          const respuestaConsulta = await consultar(capturaId)
+          if (respuestaConsulta?.ok && respuestaConsulta.folio) await confirmarExito(respuestaConsulta, resultado.importe)
+          else { ocultarOverlay(); mostrarAviso('error', 'No se registró; repite el importe.') }
+        } catch { mostrar('incierto', 'Sin conexión. No repitas el importe hasta recuperar la conexión.') }
+      }
+      window.setTimeout(() => void comprobar(), 2_000)
     } finally { ocupadaRef.current = false }
-  }, [confirmarExito, consultar, mostrar])
+  }, [confirmarExito, consultar, mostrar, mostrarAviso, ocultarOverlay])
 
   const iniciar = useCallback(() => {
-    temporizadorRef.current = null
-    if (!Constructor || !shiftRef.current || ocupadaRef.current || hablandoRef.current || reconocedorRef.current) return
-    const reconocedor = new Constructor(); reconocedor.lang = 'es-MX'; reconocedor.continuous = true; reconocedor.interimResults = false; reconocedor.maxAlternatives = 1
+    if (!Constructor || ocupadaRef.current || capturaActivaRef.current || reconocedorRef.current || estadoRef.current === 'incierto') return
+    focoAnteriorRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    capturaActivaRef.current = true
+    const reconocedor = new Constructor(); reconocedor.lang = 'es-MX'; reconocedor.continuous = false; reconocedor.interimResults = false; reconocedor.maxAlternatives = 1
     let texto = '', terminada = false
     const vigente = () => reconocedorRef.current === reconocedor && !terminada
-    reconocedorRef.current = reconocedor; mostrar('escuchando', 'Escuchando…')
+    reconocedorRef.current = reconocedor; mostrar('escuchando', 'Escuchando')
     reconocedor.onresult = (evento) => { if (vigente()) texto = Array.from(evento.results).filter((r) => r.isFinal).map((r) => r[0].transcript).join(' ') }
-    reconocedor.onerror = (evento) => { if (!vigente()) return; terminada = true; reconocedorRef.current = null; mostrar('error', mensajeErrorMicrofono(evento.error)) }
+    reconocedor.onerror = (evento) => { if (!vigente()) return; terminada = true; capturaActivaRef.current = false; reconocedorRef.current = null; ocultarOverlay(); mostrarAviso('error', mensajeErrorMicrofono(evento.error)) }
     reconocedor.onend = () => {
       if (!vigente()) return
-      terminada = true; reconocedorRef.current = null
-      // Sólo se procesa el resultado final tras soltar Shift; si terminó antes, no se guarda nada.
-      if (!soltoRef.current || !texto.trim()) { mostrar('error', 'No se registró; repite el importe'); return }
-      mostrar('procesando', 'Procesando…'); void guardar(texto.trim())
+      terminada = true; capturaActivaRef.current = false; reconocedorRef.current = null
+      if (!texto.trim()) { ocultarOverlay(); mostrarAviso('error', 'No se registró; repite el importe.'); return }
+      mostrar('procesando', 'Procesando importe…'); void guardar(texto.trim())
     }
-    try { reconocedor.start() } catch { reconocedorRef.current = null; mostrar('error', 'No se pudo iniciar el micrófono. Pulsa “Activar micrófono” y concede permiso.') }
-  }, [Constructor, guardar, mostrar])
+    try {
+      reconocedor.start()
+      resultadoTimerRef.current = window.setTimeout(() => { if (reconocedorRef.current === reconocedor) { reconocedorRef.current = null; capturaActivaRef.current = false; reconocedor.abort(); ocultarOverlay(); mostrarAviso('error', 'No se registró; repite el importe.') } }, ESPERA_RESULTADO_MS)
+    } catch { reconocedorRef.current = null; capturaActivaRef.current = false; ocultarOverlay(); mostrarAviso('error', 'No se pudo iniciar. Habilita el permiso de micrófono para FAST LOOK en el navegador.') }
+  }, [Constructor, guardar, mostrar, mostrarAviso, ocultarOverlay])
 
   useEffect(() => {
-    if (!habilitada || !Constructor || !disponible) return
+    if (!esEscritorio || !Constructor || !disponible) return
     const keydown = (evento: KeyboardEvent) => {
-      if (evento.key === 'Shift' && !evento.repeat && !evento.ctrlKey && !evento.altKey && !evento.metaKey && !esEdicion(evento.target) && !ocupadaRef.current && !hablandoRef.current && !reconocedorRef.current && estadoRef.current !== 'incierto') { shiftRef.current = true; soltoRef.current = false; temporizadorRef.current = window.setTimeout(iniciar, ESPERA_SHIFT_MS); return }
-      if (evento.key !== 'Shift' && (shiftRef.current || temporizadorRef.current !== null)) cancelar()
+      if (evento.key === 'Escape' && capturaActivaRef.current) { evento.preventDefault(); cancelar(true); return }
+      if (evento.key === 'Shift') {
+        if (evento.repeat || evento.ctrlKey || evento.altKey || evento.metaKey || shiftPresionadoRef.current || esEdicion(evento.target) || hayModalAbierto() || ocupadaRef.current || capturaActivaRef.current || estadoRef.current !== 'oculto') return
+        shiftPresionadoRef.current = true; iniciar(); return
+      }
+      // Si aparece otra tecla antes de soltar Shift, era una combinación y la captura no es válida.
+      if (shiftPresionadoRef.current && capturaActivaRef.current) cancelar()
     }
-    const keyup = (evento: KeyboardEvent) => {
-      if (evento.key !== 'Shift' || !shiftRef.current) return
-      shiftRef.current = false; soltoRef.current = true
-      if (temporizadorRef.current !== null) { window.clearTimeout(temporizadorRef.current); temporizadorRef.current = null; return }
-      const reconocedor = reconocedorRef.current
-      if (!reconocedor) return
-      mostrar('procesando', 'Procesando…'); reconocedor.stop()
-      window.setTimeout(() => { if (reconocedorRef.current === reconocedor) { reconocedorRef.current = null; reconocedor.abort(); mostrar('error', 'No se registró: el servicio de voz no respondió. Repite el importe.') } }, ESPERA_RESULTADO_MS)
-    }
+    const keyup = (evento: KeyboardEvent) => { if (evento.key === 'Shift') shiftPresionadoRef.current = false }
     const visibilidad = () => { if (document.hidden) cancelar() }
-    document.addEventListener('keydown', keydown, true); document.addEventListener('keyup', keyup, true); window.addEventListener('blur', cancelar); document.addEventListener('visibilitychange', visibilidad)
-    return () => { document.removeEventListener('keydown', keydown, true); document.removeEventListener('keyup', keyup, true); window.removeEventListener('blur', cancelar); document.removeEventListener('visibilitychange', visibilidad); cancelar() }
-  }, [Constructor, cancelar, disponible, habilitada, iniciar, mostrar])
+    const perderFoco = () => cancelar()
+    document.addEventListener('keydown', keydown, true); document.addEventListener('keyup', keyup, true); window.addEventListener('blur', perderFoco); document.addEventListener('visibilitychange', visibilidad)
+    return () => { document.removeEventListener('keydown', keydown, true); document.removeEventListener('keyup', keyup, true); window.removeEventListener('blur', perderFoco); document.removeEventListener('visibilitychange', visibilidad); cancelar() }
+  }, [Constructor, cancelar, disponible, esEscritorio, iniciar])
 
-  const activarMicrofono = async () => { try { const stream = await navigator.mediaDevices.getUserMedia({ audio: true }); stream.getTracks().forEach((track) => track.stop()); mostrar('listo', `Micrófono listo. ${MENSAJE_LISTO}`) } catch { mostrar('error', 'No se concedió permiso para usar el micrófono o no hay uno conectado.') } }
-  const comprobar = async () => {
-    if (!ultima || ocupadaRef.current) return
-    ocupadaRef.current = true; mostrar('guardando', 'Comprobando…')
-    try {
-      const respuesta = await consultar(ultima.capturaId)
-      if (respuesta?.ok && respuesta.folio) await confirmarExito(ultima.capturaId, respuesta, ultima.importe)
-      else { setUltima(null); mostrar('error', 'Esa captura no generó venta. Ya puedes repetir el importe.') }
-    } catch { mostrar('incierto', 'Sigue sin conexión. Vuelve a pulsar “Comprobar estado” antes de repetir.') } finally { ocupadaRef.current = false }
-  }
-  const deshacer = async () => {
-    if (!ultima?.folio || ocupadaRef.current) return
-    ocupadaRef.current = true; mostrar('guardando', 'Deshaciendo…')
-    try {
-      const { data, error } = await supabase.rpc('deshacer_venta_voz', { p_captura_id: ultima.capturaId, p_idempotency_key: ultima.deshacerKey }).abortSignal(AbortSignal.timeout(TIMEOUT_RPC_MS))
-      if (error?.message.includes('VENTA_CON_DEVOLUCION:')) { setUltima(null); mostrar('error', `No se puede deshacer ${ultima.folio}: ya tiene una devolución registrada.`); return }
-      if (error || !(data as ResultadoVoz)?.ok) throw error
-      setUltima(null); mostrar('listo', `Venta ${ultima.folio} cancelada. ${MENSAJE_LISTO}`); await onActualizar()
-    } catch { mostrar('exito', `No se pudo confirmar la cancelación de ${ultima.folio}; revisa la conexión y vuelve a pulsar “Deshacer”.`) } finally { ocupadaRef.current = false }
-  }
-  const alternar = () => { cancelar(); const siguiente = !habilitada; setHabilitada(siguiente); try { window.localStorage.setItem(CLAVE_HABILITADA, siguiente ? '1' : '0') } catch { /* sin almacenamiento local: aplica sólo en esta sesión */ } if (estadoRef.current !== 'incierto') mostrar('listo', siguiente ? MENSAJE_LISTO : 'Venta por voz desactivada') }
+  useEffect(() => () => {
+    if (avisoTimerRef.current !== null) window.clearTimeout(avisoTimerRef.current)
+    if (cierreTimerRef.current !== null) window.clearTimeout(cierreTimerRef.current)
+    if (resultadoTimerRef.current !== null) window.clearTimeout(resultadoTimerRef.current)
+  }, [])
 
-  if (!disponible) return null
-  return <aside className={`fl-voice-sale is-${estado}`} aria-live="polite"><div>{habilitada ? <Mic aria-hidden="true" /> : <MicOff aria-hidden="true" />}<span><strong>Venta por voz</strong><small>{Constructor ? mensaje : 'Este navegador no admite reconocimiento de voz. Usa la venta manual.'}</small></span></div><div className="fl-voice-actions">{Constructor && habilitada && (estado === 'listo' || estado === 'error') && <button type="button" onClick={() => void activarMicrofono()}><Mic />Activar micrófono</button>}{estado === 'exito' && ultima?.folio && <button type="button" className="is-danger" onClick={() => void deshacer()}><RotateCcw />Deshacer última venta</button>}{estado === 'incierto' && <button type="button" onClick={() => void comprobar()}><RotateCcw />Comprobar estado</button>}<button type="button" onClick={alternar}>{habilitada ? <><MicOff />Desactivar</> : <><Volume2 />Activar</>}</button></div>{Constructor && <p>Sólo efectivo. La primera vez el navegador pedirá permiso de micrófono. El reconocimiento usa el servicio de voz del navegador y requiere internet; no se guardan grabaciones.</p>}</aside>
+  if (!esEscritorio || !disponible) return null
+  return <>
+    {estado !== 'oculto' && <div ref={overlayRef} className={`fl-voice-overlay is-${estado}`} role="dialog" aria-modal="true" aria-labelledby="fl-voice-title" aria-describedby="fl-voice-status" tabIndex={-1}>
+      <div className="fl-voice-content">
+        <div className="fl-voice-mic" aria-hidden="true"><Mic /></div>
+        <h2 id="fl-voice-title">DI LA CANTIDAD</h2>
+        <p id="fl-voice-status" role="status">{mensaje}</p>
+        {(estado === 'escuchando' || estado === 'procesando') && <div className="fl-voice-waves" aria-hidden="true">{[0, 1, 2, 3, 4].map((barra) => <i key={barra} />)}</div>}
+        {estado === 'escuchando' && <small>Escape para cancelar</small>}
+      </div>
+    </div>}
+    {aviso && <div className={`fl-voice-toast is-${aviso.tipo}`} role={aviso.tipo === 'error' ? 'alert' : 'status'}>{aviso.texto}</div>}
+  </>
 }

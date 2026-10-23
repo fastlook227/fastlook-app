@@ -1298,22 +1298,23 @@ img.fl-image-full { object-fit: contain; object-position: center; background: #f
 .fl-global-cart.is-dragging { transform: scale(1.07); box-shadow: 0 12px 28px rgba(0,0,0,.46); cursor: grabbing; transition: transform .12s ease, box-shadow .12s ease; }
 .fl-global-cart:disabled { opacity: .45; pointer-events: none; }
 body:has([aria-modal="true"]) .fl-global-cart { opacity: 0; pointer-events: none; }
-.fl-voice-sale { position: fixed; right: 18px; bottom: 18px; z-index: 70; width: min(390px, calc(100vw - 28px)); padding: 11px 12px; color: #fff; background: #111; border: 2px solid var(--fl-red); border-radius: 13px; box-shadow: 0 12px 32px rgba(0,0,0,.24); }
-.fl-voice-sale > div:first-child { display: flex; align-items: center; gap: 9px; }
-.fl-voice-sale > div:first-child > svg { flex: 0 0 auto; color: #ff4a4a; }
-.fl-voice-sale span { min-width: 0; display: grid; gap: 2px; }
-.fl-voice-sale strong, .fl-voice-sale small { display: block; }
-.fl-voice-sale small { color: #e5e7eb; line-height: 1.25; }
-.fl-voice-sale p { margin: 7px 0 0; color: #aeb4be; font-size: .68rem; }
-.fl-voice-sale.is-escuchando { border-color: #fff; box-shadow: 0 0 0 4px rgba(190,0,0,.3), 0 12px 32px rgba(0,0,0,.24); }
-.fl-voice-sale.is-exito { border-color: #33c06f; }
-.fl-voice-sale.is-error, .fl-voice-sale.is-incierto { border-color: #ffb020; }
-.fl-voice-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
-.fl-voice-actions button { min-height: 34px; display: inline-flex; align-items: center; gap: 5px; padding: 5px 9px; color: #111; background: #fff; border: 0; border-radius: 8px; cursor: pointer; font-size: .74rem; font-weight: 850; }
-.fl-voice-actions button svg { width: 15px; height: 15px; }
-.fl-voice-actions button.is-danger { color: #fff; background: var(--fl-red); }
-body:has([aria-modal="true"]) .fl-voice-sale { pointer-events: none; opacity: .45; }
-@media (max-width: 700px) { .fl-voice-sale { right: 10px; bottom: calc(76px + env(safe-area-inset-bottom)); width: calc(100vw - 20px); } }
+.fl-voice-overlay { position: fixed; inset: 0; z-index: 3000; display: grid; place-items: center; padding: 24px; color: #fff; background: radial-gradient(circle at center, #242424 0, #090909 58%, #000 100%); outline: none; }
+.fl-voice-content { display: grid; place-items: center; width: min(760px,100%); text-align: center; }
+.fl-voice-mic { display: grid; width: clamp(112px,16vw,180px); aspect-ratio: 1; place-items: center; color: #fff; background: var(--fl-red); border: 5px solid #ff7777; border-radius: 50%; box-shadow: 0 0 0 18px rgba(190,0,0,.16),0 0 70px rgba(190,0,0,.45); }
+.fl-voice-mic svg { width: 52%; height: 52%; stroke-width: 2.2; }
+.fl-voice-content h2 { margin: clamp(28px,5vh,52px) 0 8px; font-size: clamp(2.2rem,7vw,5.6rem); line-height: .95; letter-spacing: .055em; }
+.fl-voice-content p { min-height: 1.5em; margin: 8px 0; color: #f1f1f1; font-size: clamp(1.05rem,2.2vw,1.55rem); font-weight: 750; }
+.fl-voice-content small { margin-top: 26px; color: #aaa; font-size: .9rem; }
+.fl-voice-waves { height: 58px; display: flex; align-items: center; gap: 8px; margin-top: 18px; }
+.fl-voice-waves i { width: 7px; height: 18px; background: #ff3434; border-radius: 999px; animation: fl-voice-wave .9s ease-in-out infinite alternate; }
+.fl-voice-waves i:nth-child(2),.fl-voice-waves i:nth-child(4){animation-delay:.18s}.fl-voice-waves i:nth-child(3){animation-delay:.36s}
+.fl-voice-overlay.is-exito .fl-voice-mic { background: #168545; border-color: #49c87b; box-shadow: 0 0 0 18px rgba(22,133,69,.16),0 0 70px rgba(22,133,69,.4); }
+.fl-voice-overlay.is-incierto .fl-voice-mic { background: #9a5a00; border-color: #ffb020; }
+.fl-voice-toast { position: fixed; z-index: 3010; left: 50%; bottom: 26px; width: max-content; max-width: calc(100vw - 32px); padding: 13px 18px; color: #fff; background: #111; border: 2px solid #33c06f; border-radius: 11px; box-shadow: 0 12px 34px rgba(0,0,0,.35); font-weight: 850; transform: translateX(-50%); text-align: center; }
+.fl-voice-toast.is-error { border-color: #ffb020; }
+@keyframes fl-voice-wave { from { height: 15px; opacity: .55; } to { height: 52px; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .fl-voice-waves i { animation: none; height: 28px; } }
+@media (hover:none) and (pointer:coarse) { .fl-voice-overlay,.fl-voice-toast { display:none!important; } }
 .fl-global-cart-badge { position: absolute; top: -6px; right: -6px; display: grid; min-width: 24px; height: 24px; place-items: center; padding: 0 5px; color: #fff; background: var(--fl-red); border: 2px solid #fff; border-radius: 999px; font-size: 12px; font-weight: 900; line-height: 1; }
 .fl-global-cart.is-expanded { width: 230px; height: 64px; display: grid; grid-template-columns: 40px minmax(0,1fr) 40px; place-items: stretch; padding: 4px; border-radius: 18px; cursor: default; }
 .fl-global-cart button { min-width: 0; min-height: 48px; color: inherit; background: transparent; border: 0; cursor: pointer; }

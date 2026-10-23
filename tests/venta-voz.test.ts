@@ -32,31 +32,51 @@ test('rechaza métodos distintos de efectivo', () => {
   for (const frase of ['ciento cincuenta con tarjeta', 'doscientos transferencia', 'cien por spei', 'trescientos con tarjeta de débito'])
     assert.deepEqual(reconocerImporteVoz(frase), { ok: false, motivo: 'metodo' }, frase)
 })
-test('control global usa Shift sostenido sin capturar escritura ni combinaciones', () => {
-  assert.match(componente, /evento\.key === 'Shift' && !evento\.repeat && !evento\.ctrlKey && !evento\.altKey && !evento\.metaKey && !esEdicion\(evento\.target\)/)
-  assert.match(componente, /setTimeout\(iniciar, ESPERA_SHIFT_MS\)/)
-  assert.match(componente, /evento\.key !== 'Shift' && \(shiftRef\.current \|\| temporizadorRef\.current !== null\)\) cancelar\(\)/)
+test('un toque de Shift abre el overlay sin panel permanente, repetición ni campos de edición', () => {
+  assert.match(componente, /evento\.key === 'Shift'/)
+  assert.match(componente, /evento\.repeat \|\| evento\.ctrlKey \|\| evento\.altKey \|\| evento\.metaKey \|\| shiftPresionadoRef\.current \|\| esEdicion\(evento\.target\) \|\| hayModalAbierto\(\)/)
+  assert.match(componente, /shiftPresionadoRef\.current = true; iniciar\(\)/)
+  assert.match(componente, /estado !== 'oculto'[\s\S]*fl-voice-overlay/)
+  assert.doesNotMatch(componente, /fl-voice-sale|Activar micrófono|Desactivar/)
   assert.match(componente, /contenteditable/)
 })
-test('soltar Shift espera el resultado final y cada captura se procesa una vez', () => {
-  const keyup = componente.slice(componente.indexOf('const keyup'), componente.indexOf('const visibilidad'))
-  assert.match(keyup, /reconocedor\.stop\(\)/)
-  assert.match(componente, /continuous = true/)
+test('Shift sostenido no repite y el reconocimiento termina solo después de un importe', () => {
+  assert.match(componente, /evento\.repeat/)
+  assert.match(componente, /continuous = false/)
   assert.match(componente, /interimResults = false/)
   assert.match(componente, /filter\(\(r\) => r\.isFinal\)/)
   assert.match(componente, /const vigente = \(\) => reconocedorRef\.current === reconocedor && !terminada/)
-  assert.match(componente, /if \(!soltoRef\.current \|\| !texto\.trim\(\)\)/)
+  assert.match(componente, /if \(!texto\.trim\(\)\)/)
 })
-test('no se permite otra captura mientras se guarda, habla el aviso o el guardado es incierto', () => {
-  assert.match(componente, /!ocupadaRef\.current && !hablandoRef\.current && !reconocedorRef\.current && estadoRef\.current !== 'incierto'/)
+test('combinaciones, Escape, formularios y otros modales no generan una venta', () => {
+  assert.match(componente, /if \(shiftPresionadoRef\.current && capturaActivaRef\.current\) cancelar\(\)/)
+  assert.match(componente, /evento\.key === 'Escape'.*cancelar\(true\)/)
+  assert.match(componente, /HTMLInputElement|HTMLTextAreaElement|HTMLSelectElement/)
+  assert.match(componente, /\[aria-modal="true"\],dialog\[open\]/)
+})
+test('no se permite otra captura mientras se guarda o el guardado es incierto', () => {
+  assert.match(componente, /ocupadaRef\.current \|\| capturaActivaRef\.current \|\| reconocedorRef\.current \|\| estadoRef\.current === 'incierto'/)
   assert.match(componente, /AbortSignal\.timeout\(TIMEOUT_RPC_MS\)/)
   assert.match(componente, /consultar\(capturaId\)/)
 })
-test('pérdida de foco, pestaña oculta y desmontaje cancelan micrófono sin borrar el aviso de éxito', () => {
-  assert.match(componente, /window\.addEventListener\('blur', cancelar\)/)
+test('pérdida de foco, pestaña oculta y desmontaje cancelan el micrófono', () => {
+  assert.match(componente, /window\.addEventListener\('blur', perderFoco\)/)
   assert.match(componente, /document\.hidden/)
   assert.match(componente, /reconocedor\?\.abort\(\)/)
-  assert.match(componente, /if \(habiaCaptura && !ocupadaRef\.current\)/)
+})
+test('móvil/táctil primario no consulta disponibilidad ni instala listeners', () => {
+  const efecto = componente.slice(componente.indexOf('useEffect(() => {\n    if (esDispositivoMovil())'), componente.indexOf('useEffect(() => { if (estado'))
+  assert.match(componente, /Android\|webOS\|iPhone\|iPad\|iPod/)
+  assert.match(componente, /\(hover: none\) and \(pointer: coarse\)/)
+  assert.match(efecto, /if \(esDispositivoMovil\(\)\) return/)
+  assert.match(componente, /if \(!esEscritorio \|\| !Constructor \|\| !disponible\) return/)
+})
+test('éxito sólo aparece tras respuesta confirmada y se cierra automáticamente', () => {
+  const guardado = componente.slice(componente.indexOf('const guardar'), componente.indexOf('const iniciar'))
+  assert.match(guardado, /!error && respuesta\?\.ok && respuesta\.folio[\s\S]*confirmarExito/)
+  assert.match(guardado, /verificada\?\.ok && verificada\.folio[\s\S]*confirmarExito/)
+  assert.match(componente, /Venta registrada:/)
+  assert.match(componente, /setTimeout\(\(\) =>[\s\S]*ocultarOverlay\(\)/)
 })
 test('guardado no usa carrito, impresión, PDF ni POS Bridge', () => {
   assert.match(componente, /registrar_venta_voz/)
@@ -70,7 +90,6 @@ test('idempotencia, consulta incierta y deshacer viven en servidor', () => {
   assert.match(sql, /deshacer_venta_voz/)
   assert.match(sql, /for update/)
   assert.match(sql, /set estado='Cancelado'/)
-  assert.match(componente, /p_idempotency_key: ultima\.deshacerKey/)
   assert.doesNotMatch(sql, /delete from public\./i)
 })
 test('la partida por voz no inventa costo y no toca inventario', () => {
@@ -96,7 +115,7 @@ test('Movimientos marca tickets cancelados y la venta por voz se oculta sin migr
   assert.match(movimientos, /permitirReimpresion && !cancelada/)
   assert.match(pagina, /from\('ventas_tickets'\)\.select\('\*'\)\.order/)
   assert.match(componente, /error\?\.code !== 'PGRST202'/)
-  assert.match(componente, /if \(!disponible\) return null/)
+  assert.match(componente, /if \(!esEscritorio \|\| !disponible\) return null/)
 })
 test('registrar_venta_voz corregida no modifica ventas_personalizadas (trigger de inmutabilidad)', () => {
   const fix = readFileSync(new URL('../fastlook_venta_voz_fix_inmutables.sql', import.meta.url), 'utf8'), codigo = fix.replace(/--.*$/gm, '')

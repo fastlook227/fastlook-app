@@ -11,7 +11,6 @@ const codigo = sql.replace(/--.*$/gm, '')
 const funcion = codigo.slice(codigo.indexOf('function public.procesar_devolucion_mixta'), codigo.indexOf('revoke all on function public.procesar_devolucion_mixta'))
 const pagina = readFileSync(new URL('../app/page.tsx', import.meta.url), 'utf8')
 const componente = readFileSync(new URL('../components/devoluciones/Devoluciones.tsx', import.meta.url), 'utf8')
-const voz = readFileSync(new URL('../components/VentaVozGlobal.tsx', import.meta.url), 'utf8')
 
 const fecha = '2026-10-22T18:00:00.000Z'
 const normal = { id: 'n1', ticket_id: 't1', folio: 'F-1', producto_id: 'prod', codigo: 'C1', nombre: 'Cadena', precio: 100, cantidad: 2, total: 200, metodo_pago: 'Efectivo', created_at: fecha }
@@ -84,5 +83,4 @@ test('SQL: rechaza tickets cancelados y deshacer_venta_voz se bloquea con devolu
   const deshacer = codigo.slice(codigo.indexOf('function public.deshacer_venta_voz'))
   assert.match(deshacer, /exists \(select 1 from public\.devoluciones d where d\.ticket_id=v_op\.ticket_id\)[\s\S]*VENTA_CON_DEVOLUCION/)
   assert.ok(deshacer.indexOf('VENTA_CON_DEVOLUCION') < deshacer.indexOf("set estado='Cancelado'"))
-  assert.match(voz, /VENTA_CON_DEVOLUCION:/)
 })
