@@ -9,6 +9,12 @@ export const calcularCambioCentavos = (totalCentavos: number, recibidoCentavos: 
 export const efectivoSuficiente = (totalCentavos: number, recibidoCentavos: number) => recibidoCentavos >= totalCentavos
 export const requiereCapturaEfectivo = (esDesktop: boolean, metodo: string) => esDesktop && metodo === 'Efectivo'
 export const rpcPOS = (mixta: boolean) => mixta ? 'procesar_venta_mixta_pos' : 'procesar_venta_pos'
+const DENOMINACIONES_EFECTIVO = [50, 100, 150, 200, 250, 300, 350, 400, 500]
+export const obtenerMontosRapidosEfectivo = (totalCentavos: number) => {
+  const total = Math.max(0, totalCentavos)
+  const redondeos = [20, 50, 100].map((salto) => Math.ceil(total / (salto * 100)) * salto * 100)
+  return [...new Set([total, ...redondeos, ...DENOMINACIONES_EFECTIVO.map((monto) => monto * 100)].filter((monto) => monto >= total))].sort((a, b) => a - b)
+}
 
 export interface TicketPOS {
   ticketId: string

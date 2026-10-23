@@ -87,6 +87,7 @@ import ImagenProducto from '@/components/ImagenProducto'
 import CargarMasProductos from '@/components/CargarMasProductos'
 import useListaProgresiva from '@/hooks/useListaProgresiva'
 import TarjetaProducto from '@/components/TarjetaProducto'
+import useNavegacionPOS from '@/hooks/useNavegacionPOS'
 
 export default function Home() {
   const [tab, setTab] = useState<Tab>('venta')
@@ -150,6 +151,8 @@ export default function Home() {
   const [clienteNombre, setClienteNombre] = useState('')
   const [carritoAbierto, setCarritoAbierto] = useState(false)
   const panelCarritoRef = useRef<HTMLDivElement>(null)
+  const ventaPOSRef = useRef<HTMLElement>(null)
+  const manejarTeclasVentaPOS = useNavegacionPOS(ventaPOSRef)
   const disparadorCarritoRef = useRef<HTMLElement | null>(null)
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [movimientosClientes, setMovimientosClientes] = useState<MovimientoCliente[]>([])
@@ -1821,15 +1824,10 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
         )}
 
 {tab === 'venta' && (
-  <>
+  <section ref={ventaPOSRef} className="fl-sale-pos" onKeyDown={manejarTeclasVentaPOS}>
     <h2>Generar venta</h2>
 
     <VentasPendientesTabs ventas={estadoVentas.ventas} activaId={estadoVentas.activaId} procesandoId={ventaProcesandoIdRef.current} onSeleccionar={seleccionarVentaPendiente} onNueva={nuevaVentaPendiente} onCerrar={solicitarCerrarVentaPendiente} />
-
-    <div className="fl-sale-mode" role="group" aria-label="Modo de venta">
-      <button type="button" className={modoVenta === 'rapida' ? 'is-active' : ''} onClick={() => setModoVenta('rapida')}>Venta rápida</button>
-      <button type="button" className={modoVenta === 'normal' ? 'is-active' : ''} onClick={() => setModoVenta('normal')}>Venta normal</button>
-    </div>
 
     {modoVenta === 'rapida' ? <VentaRapida
       productos={productosActivos}
@@ -1847,12 +1845,8 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
       onEscanear={(elemento) => abrirScanner('venta', elemento)}
       onScannerContinuo={setScannerContinuo}
       onEnter={() => manejarCodigoDetectado(busquedaVenta, 'venta')}
+      accionesBusqueda={<>{usuarioRol === 'Admin' && <button type="button" className="fl-custom-product-shortcut" onClick={() => setTab('productos-personalizados')}><PackagePlus size={18} />Producto personalizado</button>}<div className="fl-sale-mode" role="group" aria-label="Modo de venta"><button type="button" className="is-active" onClick={() => setModoVenta('rapida')}>Venta rápida</button><button type="button" onClick={() => setModoVenta('normal')}>Venta normal</button></div></>}
     /> : <>
-
-    <div className="fl-scanner-actions">
-      <button type="button" onClick={(evento) => abrirScanner('venta', evento.currentTarget)}><ScanLine size={18} />Escanear producto</button>
-      <label><input type="checkbox" checked={scannerContinuo} onChange={(evento) => setScannerContinuo(evento.target.checked)} />Escáner continuo</label>
-    </div>
 
     {resultadoVenta && <section className="fl-sale-result"><CheckCircle size={34} /><div><span>Venta registrada</span><strong>{resultadoVenta.folio}</strong><small>Total: ${resultadoVenta.total.toFixed(2)}</small></div><button type="button" onClick={() => setResultadoVenta(null)}>Nueva venta</button><button type="button" onClick={() => setTab('movimientos')}>Ver movimiento</button></section>}
 
@@ -1867,7 +1861,13 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
       onBusqueda={setBusquedaVenta}
       onFiltros={setFiltrosVenta}
       onEnter={() => manejarCodigoDetectado(busquedaVenta, 'venta')}
+      accionesBusqueda={<>{usuarioRol === 'Admin' && <button type="button" className="fl-custom-product-shortcut" onClick={() => setTab('productos-personalizados')}><PackagePlus size={18} />Producto personalizado</button>}<div className="fl-sale-mode" role="group" aria-label="Modo de venta"><button type="button" onClick={() => setModoVenta('rapida')}>Venta rápida</button><button type="button" className="is-active" onClick={() => setModoVenta('normal')}>Venta normal</button></div></>}
     />
+
+    <div className="fl-scanner-actions">
+      <button type="button" onClick={(evento) => abrirScanner('venta', evento.currentTarget)}><ScanLine size={18} />Escanear producto</button>
+      <label><input type="checkbox" checked={scannerContinuo} onChange={(evento) => setScannerContinuo(evento.target.checked)} />Escáner continuo</label>
+    </div>
 
     {feedbackEscaneo && <section className={`fl-scan-feedback is-${feedbackEscaneo.tipo}`} role="status">
       <strong>{feedbackEscaneo.tipo === 'ok' ? '✓ ' : ''}{feedbackEscaneo.mensaje}</strong>
@@ -1884,7 +1884,7 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
     </>}
     {carritoAbierto && (
       <div className="fl-cart-backdrop" onClick={cerrarCarrito} role="presentation">
-        <div ref={panelCarritoRef} className="fl-cart-panel" onClick={(evento) => evento.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="titulo-carrito" tabIndex={-1}>
+        <div ref={panelCarritoRef} className="fl-cart-panel" onClick={(evento) => evento.stopPropagation()} onKeyDown={(evento) => { if (evento.key === 'Enter' && evento.target === evento.currentTarget && carrito.length > 0 && !procesandoCarritoActivo) { evento.preventDefault(); void solicitarFinalizarVenta() } }} role="dialog" aria-modal="true" aria-labelledby="titulo-carrito" tabIndex={-1}>
           <header className="fl-cart-header"><div><span>FAST LOOK</span><h2 id="titulo-carrito">Venta actual</h2><small>{resumirCarritoMixto(carrito).unidades} artículos</small></div><button type="button" onClick={cerrarCarrito} aria-label="Cerrar carrito"><X /></button></header>
           <div className="fl-cart-lines">
             {carrito.length === 0 && <div className="fl-cart-empty"><ShoppingCart /><strong>Tu ticket está vacío</strong><span>Agrega productos para comenzar la venta.</span></div>}
@@ -1895,7 +1895,7 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
       </div>
     )}
     {ventaCerrarId && estadoVentas.ventas.find((venta) => venta.id === ventaCerrarId)?.carrito.length ? <div className="fl-pending-close-backdrop" role="presentation"><section className="fl-pending-close-dialog" role="alertdialog" aria-modal="true" aria-labelledby="titulo-cerrar-venta"><h2 id="titulo-cerrar-venta">Esta venta tiene productos pendientes</h2><p>Si la descartas se eliminarán sus productos y cantidades de este dispositivo.</p><div><button type="button" onClick={() => setVentaCerrarId(null)}>Seguir atendiendo</button><button type="button" className="is-danger" onClick={descartarVentaPendiente}>Descartar venta</button></div></section></div> : null}
-  </>
+  </section>
 )}
 
         {tab === 'inventario' && (
@@ -2143,7 +2143,6 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
             onGenerarTicket={generarTicketPorId}
             onReimprimirTicket={reimprimirTicketPorId}
             permitirReimpresion={esDesktopPOS}
-            styles={styles}
           />
         )}
 

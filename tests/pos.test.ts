@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
 // @ts-expect-error Node ejecuta TypeScript nativo y requiere la extensión explícita.
-import { aCentavos, calcularCambioCentavos, crearTicketPOS, debeAbrirCajon, efectivoSuficiente, esViewportPOSDesktop, obtenerDatosEfectivoHistorico, requiereCapturaEfectivo, rpcPOS } from '../utils/pos.ts'
+import { aCentavos, calcularCambioCentavos, crearTicketPOS, debeAbrirCajon, efectivoSuficiente, esViewportPOSDesktop, obtenerDatosEfectivoHistorico, obtenerMontosRapidosEfectivo, requiereCapturaEfectivo, rpcPOS } from '../utils/pos.ts'
 import type { CarritoLinea, Venta } from '../types/index.ts'
 
 const pagina = readFileSync(new URL('../app/page.tsx', import.meta.url), 'utf8')
@@ -22,6 +22,7 @@ test('transferencia desktop no pregunta efectivo', () => assert.equal(requiereCa
 test('tarjeta desktop no pregunta efectivo', () => assert.equal(requiereCapturaEfectivo(true, 'Tarjeta'), false))
 test('$347 / $500 produce $153', () => assert.equal(calcularCambioCentavos(aCentavos(347), aCentavos(500)), 15300))
 test('pago exacto produce cero', () => assert.equal(calcularCambioCentavos(34700, 34700), 0))
+test('montos rápidos incluyen exacto y redondeos prácticos sin mil pesos', () => { const montos = obtenerMontosRapidosEfectivo(34700); assert.deepEqual(montos.slice(0, 5), [34700, 35000, 36000, 40000, 50000]); assert.equal(montos.includes(100000), false) })
 test('efectivo insuficiente se bloquea', () => assert.equal(efectivoSuficiente(34700, 34699), false))
 test('servidor calcula cambio usando total de respuesta', () => assert.match(sql, /v_cambio := round\(v_efectivo - v_total, 2\)/))
 test('recibido y cambio se persisten en cabecera', () => assert.match(sql, /update public\.ventas_tickets set efectivo_recibido/))
@@ -51,6 +52,8 @@ test('persistencia concurrente serializa la cabecera con FOR UPDATE', () => asse
 test('retry frontend conserva RPC, payload, idempotency y efectivo originales', () => { assert.match(pagina, /efectivoRecibido: usarPos/); assert.match(pagina, /p_efectivo_recibido: intento\.efectivoRecibido/) })
 test('venta confirmada ocurre antes de ofrecer impresión', () => assert.ok(pagina.indexOf('if (!respuesta.ok') < pagina.indexOf('setTicketPOS(crearTicketPOS')))
 test('usuario pulsa No y no imprime', () => assert.match(modal, /estado === 'pregunta'.*onClick=\{onCerrar\}>No<\/button>/))
+test('Enter en confirmación de impresión queda neutralizado', () => { assert.match(modal, /onKeyDownCapture=\{ignorarEnter\}/); assert.match(modal, /evento\.key === 'Enter'.*preventDefault/) })
+test('Enter en cobro usa exacto si el monto no es suficiente y bloquea repetición', () => { assert.match(modal, /valido \? recibidoCentavos : totalCentavos/); assert.match(modal, /procesandoRef\.current/); assert.match(modal, /onSubmit=.*confirmarConEnter/) })
 test('imprimir bloquea doble click y usa un solo endpoint print', () => { assert.match(modal, /if \(imprimiendoRef\.current\) return/); assert.equal((servicio.match(/solicitar\('\/print'/g) || []).length, 1) })
 test('impresión y retry no reprocesan venta', () => { assert.doesNotMatch(modal, /procesar_venta|supabase/); assert.doesNotMatch(servicio, /procesar_venta|supabase/) })
 test('impresión correcta en efectivo abre cajón después de print', () => { assert.ok(modal.indexOf('imprimirTicket(ticket)') < modal.indexOf('abrirCajon()')); assert.match(modal, /debeAbrirCajon\(true, true, ticket\.metodoPago\)/) })

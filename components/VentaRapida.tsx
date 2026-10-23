@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, type ReactNode } from 'react'
 import { ScanLine } from 'lucide-react'
 import type { Producto, Venta } from '@/types'
 import type { FiltrosProductos as EstadoFiltrosProductos } from '@/utils/filtrosProductos'
@@ -27,6 +27,7 @@ interface Props {
   onEscanear: (elemento: HTMLElement) => void
   onScannerContinuo: (activo: boolean) => void
   onEnter: () => void
+  accionesBusqueda: ReactNode
 }
 
 export default function VentaRapida(props: Props) {
@@ -45,8 +46,8 @@ export default function VentaRapida(props: Props) {
   const agregar = (producto: Producto) => { props.onAgregar(producto); enfocarBuscador() }
   return <div className="fl-quick-sale">
     <div className="fl-quick-sale-main">
+      <FiltrosProductos contexto="venta" productos={props.productos} busqueda={props.busqueda} filtros={props.filtros} totalResultados={props.resultados.length} esAdmin={props.esAdmin} inputRef={buscadorRef} onBusqueda={props.onBusqueda} onFiltros={props.onFiltros} onEnter={props.onEnter} accionesBusqueda={props.accionesBusqueda} />
       <div className="fl-quick-scanner"><button type="button" onClick={(evento) => props.onEscanear(evento.currentTarget)}><ScanLine size={20} />Escanear con cámara</button><label><input type="checkbox" checked={props.scannerContinuo} onChange={(e) => props.onScannerContinuo(e.target.checked)} />Continuo</label><small>Pistola: escanea y presiona Enter</small></div>
-      <FiltrosProductos contexto="venta" productos={props.productos} busqueda={props.busqueda} filtros={props.filtros} totalResultados={props.resultados.length} esAdmin={props.esAdmin} inputRef={buscadorRef} onBusqueda={props.onBusqueda} onFiltros={props.onFiltros} onEnter={props.onEnter} />
 
       {props.feedback && <div className={`fl-quick-feedback is-${props.feedback.tipo}`} role="status"><strong>{props.feedback.mensaje}</strong>{props.feedback.nombre && <span>{props.feedback.nombre}</span>}{props.feedback.cantidad !== undefined && <small>Cantidad: {props.feedback.cantidad}</small>}</div>}
 

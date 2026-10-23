@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Filter, Search, X } from 'lucide-react'
 import type { Producto } from '@/types'
 import {
@@ -23,12 +23,13 @@ interface Props {
   onBusqueda: (valor: string) => void
   onFiltros: (filtros: FiltrosProductos) => void
   onEnter?: () => void
+  accionesBusqueda?: ReactNode
 }
 
 const numeroOpcional = (valor: string) => valor.trim() === '' ? null : Number(valor)
 
 export default function FiltrosProductos({
-  contexto, productos, busqueda, filtros, totalResultados, esAdmin, inputRef, onBusqueda, onFiltros, onEnter,
+  contexto, productos, busqueda, filtros, totalResultados, esAdmin, inputRef, onBusqueda, onFiltros, onEnter, accionesBusqueda,
 }: Props) {
   const [abierto, setAbierto] = useState(false)
   const opciones = useMemo(() => obtenerOpcionesFiltrosProductos(productos), [productos])
@@ -98,6 +99,7 @@ export default function FiltrosProductos({
         onChange={(evento) => onBusqueda(evento.target.value)}
         onKeyDown={(evento) => { if (evento.key === 'Enter') { evento.preventDefault(); onEnter?.() } }}
       /></label>
+      {accionesBusqueda && <div className="fl-sale-search-actions">{accionesBusqueda}</div>}
       <button type="button" className={`fl-filter-toggle${activos ? ' is-active' : ''}`} onClick={() => setAbierto(true)} aria-expanded={abierto}>
         <Filter size={19} />Filtros{activos ? ` • ${activos}` : ''}
       </button>
