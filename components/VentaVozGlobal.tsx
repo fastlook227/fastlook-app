@@ -28,6 +28,14 @@ export default function VentaVozGlobal({ onActualizar }: { onActualizar: () => P
   const reconocedorRef = useRef<ReconocedorVoz | null>(null), temporizadorRef = useRef<number | null>(null), shiftRef = useRef(false), soltoRef = useRef(false), ocupadaRef = useRef(false), hablandoRef = useRef(false), estadoRef = useRef<Estado>('listo')
   const [Constructor] = useState(() => (window as unknown as { SpeechRecognition?: ConstructorReconocedor; webkitSpeechRecognition?: ConstructorReconocedor }).SpeechRecognition || (window as unknown as { webkitSpeechRecognition?: ConstructorReconocedor }).webkitSpeechRecognition)
   const mostrar = useCallback((siguiente: Estado, texto: string) => { estadoRef.current = siguiente; setEstadoUI(siguiente); setMensaje(texto) }, [])
+  const [disponible, setDisponible] = useState(false)
+
+  // PGRST202 = la función no existe: la migración de voz no está aplicada y la función queda oculta.
+  useEffect(() => {
+    let activo = true
+    void supabase.rpc('consultar_venta_voz', { p_captura_id: crypto.randomUUID() }).abortSignal(AbortSignal.timeout(TIMEOUT_RPC_MS)).then(({ error }) => { if (activo) setDisponible(error?.code !== 'PGRST202') })
+    return () => { activo = false }
+  }, [])
 
   // Cancela sólo la captura en curso; los avisos de éxito o guardado incierto se conservan.
   const cancelar = useCallback(() => {
@@ -98,7 +106,7 @@ export default function VentaVozGlobal({ onActualizar }: { onActualizar: () => P
   }, [Constructor, guardar, mostrar])
 
   useEffect(() => {
-    if (!habilitada || !Constructor) return
+    if (!habilitada || !Constructor || !disponible) return
     const keydown = (evento: KeyboardEvent) => {
       if (evento.key === 'Shift' && !evento.repeat && !evento.ctrlKey && !evento.altKey && !evento.metaKey && !esEdicion(evento.target) && !ocupadaRef.current && !hablandoRef.current && !reconocedorRef.current && estadoRef.current !== 'incierto') { shiftRef.current = true; soltoRef.current = false; temporizadorRef.current = window.setTimeout(iniciar, ESPERA_SHIFT_MS); return }
       if (evento.key !== 'Shift' && (shiftRef.current || temporizadorRef.current !== null)) cancelar()
@@ -115,7 +123,7 @@ export default function VentaVozGlobal({ onActualizar }: { onActualizar: () => P
     const visibilidad = () => { if (document.hidden) cancelar() }
     document.addEventListener('keydown', keydown, true); document.addEventListener('keyup', keyup, true); window.addEventListener('blur', cancelar); document.addEventListener('visibilitychange', visibilidad)
     return () => { document.removeEventListener('keydown', keydown, true); document.removeEventListener('keyup', keyup, true); window.removeEventListener('blur', cancelar); document.removeEventListener('visibilitychange', visibilidad); cancelar() }
-  }, [Constructor, cancelar, habilitada, iniciar, mostrar])
+  }, [Constructor, cancelar, disponible, habilitada, iniciar, mostrar])
 
   const activarMicrofono = async () => { try { const stream = await navigator.mediaDevices.getUserMedia({ audio: true }); stream.getTracks().forEach((track) => track.stop()); mostrar('listo', `Micrófono listo. ${MENSAJE_LISTO}`) } catch { mostrar('error', 'No se concedió permiso para usar el micrófono o no hay uno conectado.') } }
   const comprobar = async () => {
@@ -138,5 +146,6 @@ export default function VentaVozGlobal({ onActualizar }: { onActualizar: () => P
   }
   const alternar = () => { cancelar(); const siguiente = !habilitada; setHabilitada(siguiente); try { window.localStorage.setItem(CLAVE_HABILITADA, siguiente ? '1' : '0') } catch { /* sin almacenamiento local: aplica sólo en esta sesión */ } if (estadoRef.current !== 'incierto') mostrar('listo', siguiente ? MENSAJE_LISTO : 'Venta por voz desactivada') }
 
+  if (!disponible) return null
   return <aside className={`fl-voice-sale is-${estado}`} aria-live="polite"><div>{habilitada ? <Mic aria-hidden="true" /> : <MicOff aria-hidden="true" />}<span><strong>Venta por voz</strong><small>{Constructor ? mensaje : 'Este navegador no admite reconocimiento de voz. Usa la venta manual.'}</small></span></div><div className="fl-voice-actions">{Constructor && habilitada && (estado === 'listo' || estado === 'error') && <button type="button" onClick={() => void activarMicrofono()}><Mic />Activar micrófono</button>}{estado === 'exito' && ultima?.folio && <button type="button" className="is-danger" onClick={() => void deshacer()}><RotateCcw />Deshacer última venta</button>}{estado === 'incierto' && <button type="button" onClick={() => void comprobar()}><RotateCcw />Comprobar estado</button>}<button type="button" onClick={alternar}>{habilitada ? <><MicOff />Desactivar</> : <><Volume2 />Activar</>}</button></div>{Constructor && <p>Sólo efectivo. La primera vez el navegador pedirá permiso de micrófono. El reconocimiento usa el servicio de voz del navegador y requiere internet; no se guardan grabaciones.</p>}</aside>
 }

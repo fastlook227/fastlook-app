@@ -1419,6 +1419,8 @@ body:has([aria-modal="true"]) .fl-voice-sale { pointer-events: none; opacity: .4
 .fl-movement-card { display: grid; align-content: start; overflow: hidden; background: #fff; border: 1px solid #dfe3e9; border-top: 5px solid #687181; border-radius: 14px; box-shadow: 0 7px 22px rgba(15,23,42,.08); }
 .fl-movement-card.is-sale { border-top-color: var(--fl-red); }
 .fl-movement-card.is-pending { border-top-color: #d89614; }
+.fl-movement-card.is-cancelled { border-top-color: #111; opacity: .72; }
+.fl-movement-card.is-cancelled > header b { text-decoration: line-through; }
 .fl-movement-card > header { display: grid; grid-template-columns: 42px minmax(0,1fr) auto; align-items: center; gap: 10px; padding: 15px; background: #fafafa; border-bottom: 1px dashed #cbd0d8; }
 .fl-movement-card-icon { display: grid; width: 42px; height: 42px; place-items: center; color: #fff; background: #111; border-radius: 10px; }
 .fl-movement-card > header > div:nth-child(2) { min-width: 0; display: grid; }

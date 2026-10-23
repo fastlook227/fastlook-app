@@ -17,6 +17,13 @@ test('reconoce importes enteros y centavos en español de México', () => {
   ]
   for (const [frase, importe] of casos) assert.deepEqual(reconocerImporteVoz(frase), { ok: true, importe }, frase)
 })
+test('todo importe aceptado tiene como máximo 2 decimales al serializarse (regex del servidor)', () => {
+  assert.deepEqual(reconocerImporteVoz('un peso con catorce centavos'), { ok: true, importe: 1.14 })
+  for (const pesos of [1, 2, 9, 37, 150, 1999]) for (let c = 1; c < 100; c++) {
+    const r = reconocerImporteVoz(`${pesos} pesos con ${c} centavos`)
+    assert.ok(r.ok && /^[0-9]{1,12}([.][0-9]{1,2})?$/.test(JSON.stringify(r.importe)), `${pesos}.${c}`)
+  }
+})
 test('rechaza frases ambiguas, varios importes, silencio y formatos no admitidos', () => {
   for (const frase of ['dos de cincuenta', 'cien o doscientos', 'pagó con quinientos y fueron ciento cincuenta', '', '   ', 'hola', 'cincuenta cincuenta', 'ciento cincuenta y doscientos', 'cien cincuenta', 'mil mil', 'cero pesos', 'cincuenta centavos', '99,50', '1,25', 'ciento cincuenta pesos con cincuenta', 'cien pesos con ciento veinte centavos'])
     assert.equal(reconocerImporteVoz(frase).ok, false, frase)
@@ -67,8 +74,27 @@ test('idempotencia, consulta incierta y deshacer viven en servidor', () => {
   assert.doesNotMatch(sql, /delete from public\./i)
 })
 test('la partida por voz no inventa costo y no toca inventario', () => {
-  assert.match(sql, /costo_unitario=null/)
+  assert.match(sql, /'configuracion',jsonb_build_object\('nivel','Normal','precio_final',round\(p_importe,2\)\)/)
+  assert.doesNotMatch(sql, /set[^;]*configuracion\s*=/i)
   assert.match(sql, /'\[\]'::jsonb/)
   assert.doesNotMatch(sql, /update public\.productos|movimientos_inventario/)
   assert.match(pagina, /fetchVentas\(true\), fetchMovimientos\(\)/)
+})
+test('migración de estado: default Cobrado, sin tocar filas y validada antes de la de voz', () => {
+  const estado = readFileSync(new URL('../fastlook_ventas_tickets_estado.sql', import.meta.url), 'utf8')
+  assert.match(estado, /^begin;/m); assert.match(estado, /^commit;/m)
+  assert.match(estado, /add column if not exists estado text not null default 'Cobrado'/)
+  assert.match(estado, /check \(estado in \('Cobrado', 'Cancelado'\)\) not valid/)
+  assert.doesNotMatch(estado.replace(/--.*$/gm, ''), /\b(update|delete|truncate|drop)\b/i)
+  assert.match(sql, /Aplica antes fastlook_ventas_tickets_estado\.sql/)
+  assert.match(sql, /function public\.deshacer_venta_voz[\s\S]*?security definer/)
+})
+test('Movimientos marca tickets cancelados y la venta por voz se oculta sin migración', () => {
+  const movimientos = readFileSync(new URL('../components/Movimientos.tsx', import.meta.url), 'utf8')
+  assert.match(movimientos, /cancelada = esVenta && m\.estado === 'Cancelado'/)
+  assert.match(movimientos, /'TICKET CANCELADO'/)
+  assert.match(movimientos, /permitirReimpresion && !cancelada/)
+  assert.match(pagina, /from\('ventas_tickets'\)\.select\('\*'\)\.order/)
+  assert.match(componente, /error\?\.code !== 'PGRST202'/)
+  assert.match(componente, /if \(!disponible\) return null/)
 })

@@ -8,7 +8,7 @@ begin
     raise exception 'VENTA_VOZ_DEPENDENCIAS: faltan tablas del flujo de ventas existente.';
   end if;
   if not exists (select 1 from information_schema.columns where table_schema='public' and table_name='ventas_tickets' and column_name='estado') then
-    raise exception 'VENTA_VOZ_DEPENDENCIAS: ventas_tickets.estado es obligatorio para la reversión auditada.';
+    raise exception 'VENTA_VOZ_DEPENDENCIAS: ventas_tickets.estado es obligatorio para la reversión auditada. Aplica antes fastlook_ventas_tickets_estado.sql.';
   end if;
   if to_regprocedure('public.procesar_venta_mixta(uuid,text,jsonb,jsonb)') is null then
     raise exception 'VENTA_VOZ_DEPENDENCIAS: falta procesar_venta_mixta(uuid,text,jsonb,jsonb).';
@@ -64,11 +64,9 @@ begin
   v_ticket := (v_resultado->>'ticket_id')::uuid; v_folio := nullif(btrim(v_resultado->>'folio'),''); v_total := round((v_resultado->>'total')::numeric,2);
   if v_folio is null or v_total <> round(p_importe,2) then raise exception using errcode='P0001', message='VENTA_INCONSISTENTE: El ticket no coincide con la captura.'; end if;
 
-  -- costo_unitario NULL: Corte lo cuenta como ingreso sin costo, nunca como ganancia.
-  update public.ventas_personalizadas
-  set nombre=v_concepto,resumen=v_concepto,costo_unitario=null,
-      configuracion=configuracion || jsonb_build_object('nivel',v_concepto,'origen','venta_voz','captura_id',p_captura_id)
-  where ticket_id=v_ticket;
+  -- Sólo cambia el texto visible; la configuración queda como la validó calcular_linea_personalizada.
+  -- La trazabilidad vive en ventas_voz_operaciones.ticket_id. costo_unitario ya es NULL (sin ganancia).
+  update public.ventas_personalizadas set nombre=v_concepto,resumen=v_concepto where ticket_id=v_ticket;
   if not found then raise exception using errcode='P0001', message='VENTA_PERSONALIZADA_INEXISTENTE: No se creó la partida por voz.'; end if;
   v_resultado := v_resultado || jsonb_build_object('ok',true,'captura_id',p_captura_id,'ticket_id',v_ticket,'folio',v_folio,'total',v_total,'metodo_pago','Efectivo','concepto',v_concepto,'idempotente',false,'deshecha',false);
   update public.ventas_voz_operaciones set ticket_id=v_ticket,folio=v_folio,resultado=v_resultado,confirmada_at=clock_timestamp() where captura_id=p_captura_id;

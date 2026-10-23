@@ -1,5 +1,15 @@
 # FAST LOOK POS Bridge
 
+## Distribución portable para Windows
+
+Genera el paquete autosuficiente (incluye `node.exe`, pero nunca `config.json` ni el token) con:
+
+```powershell
+npm.cmd run package:windows
+```
+
+El ZIP y su suma SHA-256 se crean en `release/`. La PC destino no necesita Node.js. Consulta `windows/README-WINDOWS.txt` para instalar, actualizar, configurar, comprobar, reiniciar y desinstalar.
+
 Servicio local para Windows que escucha exclusivamente en `127.0.0.1`, recibe tickets ya confirmados y envía bytes ESC/POS por la cola RAW de Windows. No procesa ventas ni se conecta a Supabase.
 
 ## Configuración y ejecución

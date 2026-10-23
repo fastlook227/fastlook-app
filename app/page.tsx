@@ -433,7 +433,7 @@ export default function Home() {
   const fetchMovimientos = async () => {
     const [inventario, cabeceras, normales, personalizadas] = await Promise.all([
       supabase.from('movimientos_inventario').select('*').order('created_at', { ascending: false }),
-      supabase.from('ventas_tickets').select('ticket_id,folio,created_at,total,metodo_pago,efectivo_recibido,cambio').order('created_at', { ascending: false }),
+      supabase.from('ventas_tickets').select('*').order('created_at', { ascending: false }),
       supabase.from('ventas').select('id,ticket_id,nombre,codigo,cantidad'),
       supabase.from('ventas_personalizadas').select('id,ticket_id,created_at,nombre,tipo_personalizado,cantidad,total,metodo_pago'),
     ])

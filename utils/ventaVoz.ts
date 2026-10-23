@@ -52,6 +52,7 @@ export function reconocerImporteVoz(fraseOriginal: string): ResultadoImporteVoz 
   const pesos = enteroEspanol(principal)
   const centavos = centavosTexto ? enteroEspanol(centavosTexto) : 0
   if (pesos === null || centavos === null || centavos < 0 || centavos > 99) return { ok: false, motivo: 'formato' }
-  const importe = pesos + centavos / 100
+  // En centavos enteros: 1 + 14/100 daría 1.1400000000000001 y el servidor lo rechazaría.
+  const importe = (pesos * 100 + centavos) / 100
   return importe > 0 && importe <= IMPORTE_MAXIMO_VOZ ? { ok: true, importe } : { ok: false, motivo: 'limite' }
 }

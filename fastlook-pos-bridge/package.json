@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "tsc -p tsconfig.json && node scripts/copy-assets.mjs",
+    "package:windows": "npm run build && powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/build-windows-package.ps1",
     "test": "node --test --experimental-strip-types tests/*.test.ts",
     "start": "node dist/server.js"
   },
