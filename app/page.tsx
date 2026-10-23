@@ -64,6 +64,7 @@ import usePOSDesktop from '@/hooks/usePOSDesktop'
 import { CobroEfectivoDesktop, ConfirmarImpresionDesktop } from '@/components/pos/POSDesktop'
 import ConfiguracionPOS from '@/components/pos/ConfiguracionPOS'
 import VentaVozGlobal from '@/components/VentaVozGlobal'
+import { etiquetarVentasVoz } from '@/utils/ventaVoz'
 import { crearTicketPOS, requiereCapturaEfectivo, rpcPOS, type TicketPOS } from '@/utils/pos'
 import CheckIn from '@/components/checkin/CheckInNomina'
 import PreparacionCajasTianguis from '@/components/tianguis/PreparacionCajasTianguis'
@@ -431,18 +432,20 @@ export default function Home() {
   }
 
   const fetchMovimientos = async () => {
-    const [inventario, cabeceras, normales, personalizadas] = await Promise.all([
+    const [inventario, cabeceras, normales, personalizadas, ventasVoz] = await Promise.all([
       supabase.from('movimientos_inventario').select('*').order('created_at', { ascending: false }),
       supabase.from('ventas_tickets').select('*').order('created_at', { ascending: false }),
       supabase.from('ventas').select('id,ticket_id,nombre,codigo,cantidad'),
       supabase.from('ventas_personalizadas').select('id,ticket_id,created_at,nombre,tipo_personalizado,cantidad,total,metodo_pago'),
+      // Sin fastlook_venta_voz_lectura.sql falla por permisos y sólo se pierde la etiqueta.
+      supabase.from('ventas_voz_operaciones').select('ticket_id').not('ticket_id', 'is', null),
     ])
     const error = inventario.error || cabeceras.error || normales.error || personalizadas.error
     if (error) {
       alert('Error al cargar movimientos: ' + error.message)
       return
     }
-    setMovimientos(construirMovimientosCompletos((inventario.data || []) as MovimientoInventario[], cabeceras.data || [], normales.data || [], personalizadas.data || []))
+    setMovimientos(construirMovimientosCompletos((inventario.data || []) as MovimientoInventario[], cabeceras.data || [], normales.data || [], etiquetarVentasVoz(personalizadas.data || [], new Set((ventasVoz.data || []).map((v) => String(v.ticket_id))))))
   }
 
 
@@ -979,15 +982,16 @@ const fetchMovimientosClientes = async () => {
   }, [])
 
   const cargarTicketHistorico = async (ticketId: string) => {
-    const [normales, personalizadas, cabecera] = await Promise.all([
+    const [normales, personalizadas, cabecera, ventaVoz] = await Promise.all([
       supabase.from('ventas').select('*').eq('ticket_id', ticketId).order('created_at', { ascending: true }),
       supabase.from('ventas_personalizadas').select('*').eq('ticket_id', ticketId).order('created_at', { ascending: true }),
       supabase.from('ventas_tickets').select('*').eq('ticket_id', ticketId).maybeSingle(),
+      supabase.from('ventas_voz_operaciones').select('ticket_id').eq('ticket_id', ticketId).maybeSingle(),
     ])
     if (normales.error || personalizadas.error || cabecera.error) throw normales.error || personalizadas.error || cabecera.error
     const encabezado = (cabecera.data || {}) as Record<string, unknown>
     const meta = { efectivo_recibido: encabezado.efectivo_recibido ?? null, cambio: encabezado.cambio ?? null }
-    const lineas = [...(normales.data || []), ...(personalizadas.data || []).map((linea) => ({ ...linea, precio: linea.precio_unitario, nombre: linea.nombre || linea.tipo_personalizado }))].map((linea) => ({ ...linea, ...meta })) as Venta[]
+    const lineas = [...(normales.data || []), ...etiquetarVentasVoz(personalizadas.data || [], new Set(ventaVoz.data ? [ticketId] : [])).map((linea) => ({ ...linea, precio: linea.precio_unitario, nombre: linea.nombre || linea.tipo_personalizado }))].map((linea) => ({ ...linea, ...meta })) as Venta[]
     if (!lineas.length) throw new Error('TICKET_SIN_LINEAS')
     const primera = lineas[0]
     const totalLineas = lineas.reduce((suma, linea) => suma + Number(linea.total ?? Number(linea.precio || 0) * Number(linea.cantidad || 0)), 0)

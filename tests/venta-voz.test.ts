@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
 // @ts-expect-error Node ejecuta TypeScript nativo y requiere la extensión explícita.
-import { reconocerImporteVoz } from '../utils/ventaVoz.ts'
+import { etiquetarVentasVoz, reconocerImporteVoz } from '../utils/ventaVoz.ts'
 
 const componente = readFileSync(new URL('../components/VentaVozGlobal.tsx', import.meta.url), 'utf8')
 const pagina = readFileSync(new URL('../app/page.tsx', import.meta.url), 'utf8')
@@ -97,4 +97,33 @@ test('Movimientos marca tickets cancelados y la venta por voz se oculta sin migr
   assert.match(pagina, /from\('ventas_tickets'\)\.select\('\*'\)\.order/)
   assert.match(componente, /error\?\.code !== 'PGRST202'/)
   assert.match(componente, /if \(!disponible\) return null/)
+})
+test('registrar_venta_voz corregida no modifica ventas_personalizadas (trigger de inmutabilidad)', () => {
+  const fix = readFileSync(new URL('../fastlook_venta_voz_fix_inmutables.sql', import.meta.url), 'utf8'), codigo = fix.replace(/--.*$/gm, '')
+  assert.match(codigo, /^begin;/m); assert.match(codigo, /^commit;/m)
+  assert.match(codigo, /create or replace function public\.registrar_venta_voz\(p_captura_id uuid, p_importe numeric\)[\s\S]*?security definer/)
+  assert.doesNotMatch(codigo, /(update|delete from|insert into)\s+public\.ventas_personalizadas/i)
+  assert.doesNotMatch(codigo, /(delete|truncate|drop|alter table)/i)
+  assert.match(codigo, /'concepto',v_concepto/)
+  assert.match(codigo, /jsonb_build_object\('nivel','Normal','precio_final',round\(p_importe,2\)\)/)
+  const deshacer = sql.slice(sql.indexOf('function public.deshacer_venta_voz'), sql.indexOf('revoke all on function'))
+  assert.doesNotMatch(deshacer, /ventas_personalizadas/)
+  assert.match(deshacer, /update public\.ventas_tickets set estado='Cancelado'/)
+})
+test('lectura de ventas por voz: sólo SELECT de ticket_id para personal activo', () => {
+  const lectura = readFileSync(new URL('../fastlook_venta_voz_lectura.sql', import.meta.url), 'utf8').replace(/--.*$/gm, '')
+  assert.match(lectura, /for select to authenticated using \(public\.es_personal_fastlook_activo\(\)\)/)
+  assert.match(lectura, /grant select \(ticket_id\) on public\.ventas_voz_operaciones to authenticated/)
+  assert.doesNotMatch(lectura, /grant (all|insert|update|delete)|(delete|truncate|drop)/i)
+})
+test('etiqueta como venta por voz sólo los tickets registrados en ventas_voz_operaciones', () => {
+  const lineas = [{ ticket_id: 'v', nombre: 'Servicio de moto - Normal', total: 150 }, { ticket_id: 'm', nombre: 'Servicio de moto - Normal', total: 50 }]
+  const r = etiquetarVentasVoz(lineas, new Set(['v']))
+  assert.equal(r[0].nombre, 'Venta rápida por voz'); assert.equal(r[0].total, 150)
+  assert.equal(r[1].nombre, 'Servicio de moto - Normal')
+  assert.equal(etiquetarVentasVoz(lineas, new Set()), lineas)
+  const ruta = readFileSync(new URL('../app/api/corte-caja/route.ts', import.meta.url), 'utf8')
+  assert.match(ruta, /personalizadas: etiquetarVentasVoz\(personalizadas, ticketsVoz\)/)
+  assert.match(pagina, /etiquetarVentasVoz\(personalizadas\.data \|\| \[\], new Set\(\(ventasVoz\.data/)
+  assert.match(pagina, /etiquetarVentasVoz\(personalizadas\.data \|\| \[\], new Set\(ventaVoz\.data/)
 })

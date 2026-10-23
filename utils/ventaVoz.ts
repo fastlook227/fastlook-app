@@ -56,3 +56,8 @@ export function reconocerImporteVoz(fraseOriginal: string): ResultadoImporteVoz 
   const importe = (pesos * 100 + centavos) / 100
   return importe > 0 && importe <= IMPORTE_MAXIMO_VOZ ? { ok: true, importe } : { ok: false, motivo: 'limite' }
 }
+
+// La partida queda como "Servicio de moto - Normal" (ventas_personalizadas es inmutable); se reetiqueta sólo al mostrarla.
+export const CONCEPTO_VENTA_VOZ = 'Venta rápida por voz'
+export const etiquetarVentasVoz = <T extends Record<string, unknown>>(lineas: T[], ticketsVoz: ReadonlySet<string>): T[] =>
+  ticketsVoz.size ? lineas.map((linea) => ticketsVoz.has(String(linea.ticket_id)) ? { ...linea, nombre: CONCEPTO_VENTA_VOZ, resumen: CONCEPTO_VENTA_VOZ } : linea) : lineas

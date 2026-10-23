@@ -4,6 +4,7 @@ import { obtenerSupabaseAdmin } from '@/lib/supabaseAdmin'
 import { obtenerRangoAyerFastLook, obtenerRangoFechasFastLook } from '@/utils/fechas'
 import { consolidarCorte } from '@/utils/corteConsolidado'
 import { normalizarMetodoCorte } from '@/utils/corte'
+import { etiquetarVentasVoz } from '@/utils/ventaVoz'
 import type { Devolucion } from '@/types/devoluciones'
 
 type Fila = Record<string, unknown>
@@ -37,7 +38,13 @@ async function obtenerReporte(inicio: string, fin: string, busqueda = '', pagina
     if (error) throw error
     devolucionesDetalle.push(...((data || []) as Fila[]))
   }
-  return consolidarCorte({ tickets, ventas, personalizadas, devoluciones: devoluciones as unknown as Devolucion[], devolucionesDetalle, inicio, fin, busqueda, pagina })
+  const idsServicio = [...new Set(personalizadas.filter(p => p.tipo_personalizado === 'SERVICIO_MOTO' && p.ticket_id).map(p => String(p.ticket_id)))], ticketsVoz = new Set<string>()
+  for (let i = 0; i < idsServicio.length; i += 100) {
+    const { data, error } = await obtenerSupabaseAdmin().from('ventas_voz_operaciones').select('ticket_id').in('ticket_id', idsServicio.slice(i, i + 100))
+    if (error) break // sólo afecta la etiqueta; los importes del corte no dependen de esta tabla
+    for (const fila of data || []) ticketsVoz.add(String(fila.ticket_id))
+  }
+  return consolidarCorte({ tickets, ventas, personalizadas: etiquetarVentasVoz(personalizadas, ticketsVoz), devoluciones: devoluciones as unknown as Devolucion[], devolucionesDetalle, inicio, fin, busqueda, pagina })
 }
 
 export async function GET(request: Request) {
