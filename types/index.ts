@@ -117,6 +117,13 @@ export interface MovimientoInventario {
   nota?: string
   ticket_id?: string | null
   folio?: string | null
+  metodo_pago?: string | null
+  total?: number | string | null
+  efectivo_recibido?: number | string | null
+  cambio?: number | string | null
+  es_ticket?: boolean
+  pendiente_conciliacion?: boolean
+  lineas_ticket?: Array<{ id: string; nombre: string; codigo?: string | null; cantidad: number | string; personalizada: boolean }>
   [key: string]: unknown
 }
 

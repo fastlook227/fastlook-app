@@ -88,6 +88,7 @@ import CargarMasProductos from '@/components/CargarMasProductos'
 import useListaProgresiva from '@/hooks/useListaProgresiva'
 import TarjetaProducto from '@/components/TarjetaProducto'
 import useNavegacionPOS from '@/hooks/useNavegacionPOS'
+import { construirMovimientosCompletos } from '@/utils/movimientos'
 
 export default function Home() {
   const [tab, setTab] = useState<Tab>('venta')
@@ -427,23 +428,18 @@ export default function Home() {
   }
 
   const fetchMovimientos = async () => {
-    const { data, error } = await supabase
-      .from('movimientos_inventario')
-      .select('*')
-      .order('created_at', { ascending: false })
-
+    const [inventario, cabeceras, normales, personalizadas] = await Promise.all([
+      supabase.from('movimientos_inventario').select('*').order('created_at', { ascending: false }),
+      supabase.from('ventas_tickets').select('ticket_id,folio,created_at,total,metodo_pago,efectivo_recibido,cambio').order('created_at', { ascending: false }),
+      supabase.from('ventas').select('id,ticket_id,nombre,codigo,cantidad'),
+      supabase.from('ventas_personalizadas').select('id,ticket_id,created_at,nombre,tipo_personalizado,cantidad,total,metodo_pago'),
+    ])
+    const error = inventario.error || cabeceras.error || normales.error || personalizadas.error
     if (error) {
       alert('Error al cargar movimientos: ' + error.message)
       return
     }
-
-    const movimientosCargados = (data || []) as MovimientoInventario[]
-    const ticketsIds = [...new Set(movimientosCargados.map((movimiento) => movimiento.ticket_id).filter((id): id is string => Boolean(id)))]
-    if (!ticketsIds.length) { setMovimientos(movimientosCargados); return }
-    const cabeceras = await supabase.from('ventas_tickets').select('ticket_id,total,metodo_pago,efectivo_recibido,cambio').in('ticket_id', ticketsIds)
-    if (cabeceras.error) { setMovimientos(movimientosCargados); return }
-    const porId = new Map((cabeceras.data || []).map((ticket) => [ticket.ticket_id, ticket]))
-    setMovimientos(movimientosCargados.map((movimiento) => ({ ...movimiento, ...(movimiento.ticket_id ? porId.get(movimiento.ticket_id) : {}) })))
+    setMovimientos(construirMovimientosCompletos((inventario.data || []) as MovimientoInventario[], cabeceras.data || [], normales.data || [], personalizadas.data || []))
   }
 
 
@@ -788,6 +784,8 @@ const fetchMovimientosClientes = async () => {
     abandonarIntentoVenta(ventaId)
     establecerEstadoVentas(agregarPersonalizadoAVenta(estadoVentasRef.current, ventaId, linea))
     setNotificacionOperacion({ tipo: 'ok', mensaje: `${linea.nombre} agregado a la venta activa.` })
+    setTab('venta')
+    setSolicitudFocoVenta((valor) => valor + 1)
   }
 
 
@@ -1862,12 +1860,8 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
       onFiltros={setFiltrosVenta}
       onEnter={() => manejarCodigoDetectado(busquedaVenta, 'venta')}
       accionesBusqueda={<>{usuarioRol === 'Admin' && <button type="button" className="fl-custom-product-shortcut" onClick={() => setTab('productos-personalizados')}><PackagePlus size={18} />Producto personalizado</button>}<div className="fl-sale-mode" role="group" aria-label="Modo de venta"><button type="button" onClick={() => setModoVenta('rapida')}>Venta rápida</button><button type="button" className="is-active" onClick={() => setModoVenta('normal')}>Venta normal</button></div></>}
+      accionesFiltros={<><button type="button" className="fl-filter-scanner" onClick={(evento) => abrirScanner('venta', evento.currentTarget)}><ScanLine size={17} />Cámara</button><label className="fl-filter-continuous"><input type="checkbox" checked={scannerContinuo} onChange={(evento) => setScannerContinuo(evento.target.checked)} />Continuo</label></>}
     />
-
-    <div className="fl-scanner-actions">
-      <button type="button" onClick={(evento) => abrirScanner('venta', evento.currentTarget)}><ScanLine size={18} />Escanear producto</button>
-      <label><input type="checkbox" checked={scannerContinuo} onChange={(evento) => setScannerContinuo(evento.target.checked)} />Escáner continuo</label>
-    </div>
 
     {feedbackEscaneo && <section className={`fl-scan-feedback is-${feedbackEscaneo.tipo}`} role="status">
       <strong>{feedbackEscaneo.tipo === 'ok' ? '✓ ' : ''}{feedbackEscaneo.mensaje}</strong>

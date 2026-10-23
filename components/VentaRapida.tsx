@@ -46,8 +46,7 @@ export default function VentaRapida(props: Props) {
   const agregar = (producto: Producto) => { props.onAgregar(producto); enfocarBuscador() }
   return <div className="fl-quick-sale">
     <div className="fl-quick-sale-main">
-      <FiltrosProductos contexto="venta" productos={props.productos} busqueda={props.busqueda} filtros={props.filtros} totalResultados={props.resultados.length} esAdmin={props.esAdmin} inputRef={buscadorRef} onBusqueda={props.onBusqueda} onFiltros={props.onFiltros} onEnter={props.onEnter} accionesBusqueda={props.accionesBusqueda} />
-      <div className="fl-quick-scanner"><button type="button" onClick={(evento) => props.onEscanear(evento.currentTarget)}><ScanLine size={20} />Escanear con cámara</button><label><input type="checkbox" checked={props.scannerContinuo} onChange={(e) => props.onScannerContinuo(e.target.checked)} />Continuo</label><small>Pistola: escanea y presiona Enter</small></div>
+      <FiltrosProductos contexto="venta" productos={props.productos} busqueda={props.busqueda} filtros={props.filtros} totalResultados={props.resultados.length} esAdmin={props.esAdmin} inputRef={buscadorRef} onBusqueda={props.onBusqueda} onFiltros={props.onFiltros} onEnter={props.onEnter} accionesBusqueda={props.accionesBusqueda} accionesFiltros={<><button type="button" className="fl-filter-scanner" onClick={(evento) => props.onEscanear(evento.currentTarget)}><ScanLine size={17} />Cámara</button><label className="fl-filter-continuous"><input type="checkbox" checked={props.scannerContinuo} onChange={(e) => props.onScannerContinuo(e.target.checked)} />Continuo</label></>} />
 
       {props.feedback && <div className={`fl-quick-feedback is-${props.feedback.tipo}`} role="status"><strong>{props.feedback.mensaje}</strong>{props.feedback.nombre && <span>{props.feedback.nombre}</span>}{props.feedback.cantidad !== undefined && <small>Cantidad: {props.feedback.cantidad}</small>}</div>}
 

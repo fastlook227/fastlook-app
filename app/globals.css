@@ -1256,17 +1256,17 @@ img.fl-image-full { object-fit: contain; object-position: center; background: #f
   .fl-product-card-media { aspect-ratio: 1.15 / 1; }
 }
 /* Ventas pendientes / múltiples clientes */
-.fl-pending-sales { margin: 8px 0 12px; }
+.fl-pending-sales { margin: 4px 0 6px; }
 .fl-pending-sales-heading { margin-bottom: 7px; color: #667085; font-size: .88rem; }
-.fl-pending-sales-tabs { display: flex; align-items: stretch; gap: 8px; overflow-x: auto; padding: 2px 1px 7px; scrollbar-width: thin; }
+.fl-pending-sales-tabs { display: flex; align-items: stretch; gap: 6px; overflow-x: auto; padding: 1px 1px 4px; scrollbar-width: thin; }
 .fl-pending-sale-tab { flex: 0 0 auto; display: flex; overflow: hidden; border: 1px solid #d8dee8; border-radius: 12px; background: #fff; }
 .fl-pending-sale-tab.is-active { border-color: var(--fl-red); box-shadow: 0 0 0 2px rgba(214, 0, 0, 0.12); }
 .fl-pending-sale-tab.is-processing { border-color: #d89614; }
-.fl-pending-sale-tab > button:first-child { min-width: 128px; display: grid; gap: 2px; padding: 9px 10px 9px 13px; border: 0; background: transparent; color: #283142; text-align: left; cursor: pointer; }
+.fl-pending-sale-tab > button:first-child { min-width: 118px; display: grid; gap: 1px; padding: 6px 9px 6px 11px; border: 0; background: transparent; color: #283142; text-align: left; cursor: pointer; }
 .fl-pending-sale-tab > button:first-child small { color: #667085; }
 .fl-pending-sale-tab .is-close { width: 38px; display: grid; place-items: center; border: 0; border-left: 1px solid #e2e6ed; background: #f8f9fb; color: #697386; cursor: pointer; }
 .fl-pending-sale-tab .is-close svg { width: 16px; }
-.fl-pending-sale-new { flex: 0 0 auto; min-height: 52px; display: inline-flex; align-items: center; gap: 7px; padding: 9px 15px; border: 1px dashed #b7beca; border-radius: 12px; background: #fff; color: var(--fl-red-dark); font-weight: 800; cursor: pointer; }
+.fl-pending-sale-new { flex: 0 0 auto; min-height: 44px; display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border: 1px dashed #b7beca; border-radius: 10px; background: #fff; color: var(--fl-red-dark); font-weight: 800; cursor: pointer; }
 .fl-pending-sale-new svg { width: 18px; }
 .fl-pending-close-backdrop { position: fixed; z-index: 1600; inset: 0; display: grid; place-items: center; padding: 18px; background: rgba(15,23,42,.5); }
 .fl-pending-close-dialog { width: min(450px, 100%); padding: 22px; border-radius: 17px; background: #fff; box-shadow: 0 25px 75px rgba(15,23,42,.32); }
@@ -1370,11 +1370,20 @@ body:has([aria-modal="true"]) .fl-global-cart { opacity: 0; pointer-events: none
 
 /* Flujo de venta POS: cabecera compacta, foco visible y tarjetas de movimientos. */
 .fl-sale-pos { display: block; }
-.fl-sale-pos > h2 { margin-bottom: 8px; }
+.fl-sale-pos > h2 { margin: 0 0 4px; font-size: 1.25rem; }
+.fl-sale-pos .fl-product-filters { margin: 4px 0 8px; }
+.fl-sale-pos .fl-product-search-row { grid-template-columns: minmax(260px,1fr) auto; gap: 7px; }
+.fl-sale-pos .fl-product-search input { min-height: 42px; }
+.fl-sale-pos .fl-filter-quick { align-items: center; padding-top: 5px; }
+.fl-sale-pos .fl-filter-count { display: none; }
+.fl-sale-pos .fl-quick-products, .fl-sale-pos .fl-quick-results { margin-top: 8px; }
 .fl-sale-search-actions { display: flex; align-items: stretch; gap: 8px; }
-.fl-sale-search-actions .fl-sale-mode { width: auto; min-width: 260px; margin: 0; padding: 4px; border-radius: 11px; }
-.fl-sale-search-actions .fl-sale-mode button { min-height: 44px; padding: 7px 12px; font-size: .82rem; }
-.fl-custom-product-shortcut { display: inline-flex; min-height: 52px; align-items: center; justify-content: center; gap: 7px; padding: 8px 13px; color: #fff; background: #111; border: 2px solid var(--fl-red); border-radius: 11px; cursor: pointer; font-weight: 900; white-space: nowrap; }
+.fl-sale-search-actions .fl-sale-mode { width: auto; min-width: 230px; margin: 0; padding: 3px; border-radius: 10px; }
+.fl-sale-search-actions .fl-sale-mode button { min-height: 40px; padding: 5px 10px; font-size: .8rem; }
+.fl-custom-product-shortcut { display: inline-flex; min-height: 46px; align-items: center; justify-content: center; gap: 6px; padding: 6px 11px; color: #fff; background: #111; border: 2px solid var(--fl-red); border-radius: 10px; cursor: pointer; font-size: .82rem; font-weight: 900; white-space: nowrap; }
+.fl-filter-scanner { display: inline-flex; align-items: center; gap: 5px; color: #fff!important; background: #171b24!important; border-color: #171b24!important; }
+.fl-filter-continuous { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 5px; min-height: 36px; padding: 5px 9px; border: 1px solid #d8dee8; border-radius: 999px; font-size: .82rem; font-weight: 750; }
+.fl-filter-continuous input { width: 17px; height: 17px; accent-color: var(--fl-red); }
 .fl-sale-pos :is(button, [href], [tabindex]):focus-visible, .fl-cart-panel:focus-visible, .fl-pos-dialog :is(button, input):focus-visible { outline: 4px solid #ffbf00; outline-offset: 3px; box-shadow: 0 0 0 2px #111; }
 .fl-pos-quick { display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); }
 .fl-pos-quick button { min-width: 0; padding-inline: 8px; }
@@ -1386,23 +1395,26 @@ body:has([aria-modal="true"]) .fl-global-cart { opacity: 0; pointer-events: none
 .fl-movement-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,360px),1fr)); gap: 14px; }
 .fl-movement-card { display: grid; align-content: start; overflow: hidden; background: #fff; border: 1px solid #dfe3e9; border-top: 5px solid #687181; border-radius: 14px; box-shadow: 0 7px 22px rgba(15,23,42,.08); }
 .fl-movement-card.is-sale { border-top-color: var(--fl-red); }
+.fl-movement-card.is-pending { border-top-color: #d89614; }
 .fl-movement-card > header { display: grid; grid-template-columns: 42px minmax(0,1fr) auto; align-items: center; gap: 10px; padding: 15px; background: #fafafa; border-bottom: 1px dashed #cbd0d8; }
 .fl-movement-card-icon { display: grid; width: 42px; height: 42px; place-items: center; color: #fff; background: #111; border-radius: 10px; }
 .fl-movement-card > header > div:nth-child(2) { min-width: 0; display: grid; }
 .fl-movement-card > header small { color: var(--fl-red-dark); font-size: .66rem; font-weight: 900; letter-spacing: .09em; }
 .fl-movement-card > header strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fl-movement-card > header em { color: #687181; font-size: .72rem; font-style: normal; }
 .fl-movement-card > header > b { color: var(--fl-red); font-size: 1.2rem; white-space: nowrap; }
 .fl-movement-products { display: grid; padding: 5px 15px; }
 .fl-movement-products > div { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 4px 12px; padding: 11px 0; border-bottom: 1px solid #eceff3; }
 .fl-movement-products span { min-width: 0; display: grid; }
 .fl-movement-products small { color: #687181; }
 .fl-movement-products p { grid-column: 1/-1; margin: 2px 0 0; color: #596273; font-size: .78rem; }
+.fl-movement-products .is-custom { border-left: 3px solid var(--fl-red); padding-left: 9px; }
 .fl-movement-card > footer { display: grid; gap: 12px; margin-top: auto; padding: 14px 15px; background: #fafafa; border-top: 1px dashed #cbd0d8; }
 .fl-movement-meta { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 7px 12px; color: #596273; font-size: .78rem; }
 .fl-movement-meta span { display: inline-flex; align-items: center; gap: 5px; }
 .fl-movement-meta svg { width: 15px; }
 .fl-movement-ticket-button { min-height: 42px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 8px 12px; color: #fff; background: #111; border: 0; border-radius: 9px; cursor: pointer; font-weight: 800; }
-@media (max-width: 980px) { .fl-product-search-row { grid-template-columns: minmax(0,1fr) auto; } .fl-sale-search-actions { grid-column: 1/-1; grid-row: 1; } .fl-product-search { grid-column: 1; } }
+@media (max-width: 850px) { .fl-sale-pos .fl-product-search-row { grid-template-columns: minmax(0,1fr); } .fl-sale-search-actions { grid-row: 1; } .fl-product-search { grid-row: 2; } }
 @media (max-width: 600px) { .fl-sale-search-actions { display: grid; grid-template-columns: 1fr; } .fl-sale-search-actions .fl-sale-mode { width: 100%; min-width: 0; } .fl-custom-product-shortcut { width: 100%; } .fl-movement-card > header { grid-template-columns: 38px minmax(0,1fr); } .fl-movement-card > header > b { grid-column: 2; } .fl-movement-meta { display: grid; } }
 
 /* Faltantes */

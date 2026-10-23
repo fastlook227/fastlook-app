@@ -13,8 +13,7 @@ export default function VentasPendientesTabs({ ventas, activaId, procesandoId, o
   onCerrar: (id: string) => void
 }) {
   return <section className="fl-pending-sales" aria-label="Ventas abiertas">
-    <div className="fl-pending-sales-heading"><strong>{ventas.length} venta{ventas.length === 1 ? '' : 's'} abierta{ventas.length === 1 ? '' : 's'}</strong></div>
-    <div className="fl-pending-sales-tabs" role="tablist">{ventas.map((venta) => {
+    <span className="sr-only">{ventas.length} venta{ventas.length === 1 ? '' : 's'} abierta{ventas.length === 1 ? '' : 's'}</span><div className="fl-pending-sales-tabs" role="tablist">{ventas.map((venta) => {
       const resumen = resumirCarritoVenta(venta.carrito)
       const procesando = procesandoId === venta.id
       return <div key={venta.id} className={`fl-pending-sale-tab${activaId === venta.id ? ' is-active' : ''}${procesando ? ' is-processing' : ''}`}>

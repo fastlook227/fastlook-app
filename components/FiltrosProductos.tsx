@@ -24,12 +24,13 @@ interface Props {
   onFiltros: (filtros: FiltrosProductos) => void
   onEnter?: () => void
   accionesBusqueda?: ReactNode
+  accionesFiltros?: ReactNode
 }
 
 const numeroOpcional = (valor: string) => valor.trim() === '' ? null : Number(valor)
 
 export default function FiltrosProductos({
-  contexto, productos, busqueda, filtros, totalResultados, esAdmin, inputRef, onBusqueda, onFiltros, onEnter, accionesBusqueda,
+  contexto, productos, busqueda, filtros, totalResultados, esAdmin, inputRef, onBusqueda, onFiltros, onEnter, accionesBusqueda, accionesFiltros,
 }: Props) {
   const [abierto, setAbierto] = useState(false)
   const opciones = useMemo(() => obtenerOpcionesFiltrosProductos(productos), [productos])
@@ -100,9 +101,9 @@ export default function FiltrosProductos({
         onKeyDown={(evento) => { if (evento.key === 'Enter') { evento.preventDefault(); onEnter?.() } }}
       /></label>
       {accionesBusqueda && <div className="fl-sale-search-actions">{accionesBusqueda}</div>}
-      <button type="button" className={`fl-filter-toggle${activos ? ' is-active' : ''}`} onClick={() => setAbierto(true)} aria-expanded={abierto}>
+      {contexto === 'inventario' && <button type="button" className={`fl-filter-toggle${activos ? ' is-active' : ''}`} onClick={() => setAbierto(true)} aria-expanded={abierto}>
         <Filter size={19} />Filtros{activos ? ` • ${activos}` : ''}
-      </button>
+      </button>}
     </div>
 
     <div className="fl-filter-quick" aria-label="Filtros rápidos">
@@ -117,6 +118,7 @@ export default function FiltrosProductos({
         <button type="button" className={filtros.imagen === 'sin-imagen' ? 'is-active' : ''} onClick={() => actualizar({ imagen: filtros.imagen === 'sin-imagen' ? 'todos' : 'sin-imagen' })}>Sin imagen</button>
       </>}
       {(['Tipo', 'Proveedor', 'Ubicación'] as const).map((texto) => <button type="button" key={texto} onClick={() => setAbierto(true)}>{texto}</button>)}
+      {accionesFiltros}
     </div>
 
     {resumen.length > 0 && <div className="fl-filter-summary" aria-label="Filtros activos">{resumen.map((item) => <button type="button" key={item.clave} onClick={item.quitar}>{item.texto}<X size={14} aria-label="Quitar" /></button>)}</div>}
