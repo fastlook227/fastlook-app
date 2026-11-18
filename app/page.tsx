@@ -92,6 +92,7 @@ import TarjetaProducto from '@/components/TarjetaProducto'
 import TarjetaProductoPersonalizado from '@/components/TarjetaProductoPersonalizado'
 import useNavegacionPOS from '@/hooks/useNavegacionPOS'
 import { construirMovimientosCompletos } from '@/utils/movimientos'
+import { construirPayloadProductoAdmin } from '@/utils/productosAdmin'
 
 export default function Home() {
   const [tab, setTab] = useState<Tab>('venta')
@@ -1134,19 +1135,8 @@ const fetchMovimientosClientes = async () => {
     const tipoFinal = resolverTipoParaGuardar()
     if (!tipoFinal) return
 
-    const crearDatosProducto = (codigo: string) => ({
-      codigo,
-      nombre: form.nombre,
-      tipo: tipoFinal,
-      precio: Number(form.precio),
-      costo: Number(form.costo || 0),
-      stock: Number(form.stock),
-      stock_minimo: Number(form.stock_minimo || 5),
-      ubicacion: form.ubicacion,
-      proveedor: form.proveedor,
-      imagen_url: form.imagen_url,
-      imagen_thumbnail_url: form.imagen_thumbnail_url || null,
-      ...(columnaFuenteImagen ? { usar_imagen_principal: Boolean(form.usar_imagen_principal) } : {}),
+    const crearDatosProducto = (codigo: string) => construirPayloadProductoAdmin({
+      form, codigo, tipo: tipoFinal, editando, preferenciaImagenDisponible: columnaFuenteImagen,
     })
 
     const { data: sesion } = await supabase.auth.getSession()
@@ -1162,7 +1152,7 @@ const fetchMovimientosClientes = async () => {
         ? { operacion: 'EDITAR', productoId: form.id, producto: crearDatosProducto(codigoFinal) }
         : { operacion: 'CREAR', solicitudId: solicitudCreacionProductoRef.current, producto: crearDatosProducto(codigoFinal) }),
     }).catch(() => null)
-    const resultado = respuesta ? await respuesta.json().catch(() => null) as { ok?: boolean; mensaje?: string; producto?: Producto } | null : null
+    const resultado = respuesta ? await respuesta.json().catch(() => null) as { ok?: boolean; codigo?: string; campo?: string; mensaje?: string; producto?: Producto } | null : null
     if (!respuesta || !resultado) {
       alert('No se recibió respuesta del servidor. Reintenta: el alta conserva la misma clave para evitar duplicados.')
       return

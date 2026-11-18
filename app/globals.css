@@ -208,6 +208,10 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .fl-stock-current strong { font-size: 24px; }
 .fl-stock-dialog-body label { display: grid; gap: 6px; color: var(--fl-gray-900); font-size: 12px; font-weight: 800; }
 .fl-stock-dialog-body input { width: 100%; min-height: 46px; padding: 10px 12px; color: var(--fl-black); background: var(--fl-white); border: 1px solid var(--fl-gray-300); border-radius: 10px; font-size: 16px; }
+.fl-stock-new-value { padding: 14px; border: 2px solid var(--fl-red); border-radius: 12px; background: var(--fl-red-soft); }
+.fl-stock-new-value input { min-height: 54px; border-color: var(--fl-red); font-size: 24px; font-weight: 900; }
+.fl-stock-new-value small { justify-self: start !important; color: var(--fl-gray-700); font-weight: 600; }
+.fl-stock-reason { margin-top: 3px; padding-top: 16px; border-top: 1px solid var(--fl-gray-200); }
 .fl-stock-dialog-body label small { justify-self: end; color: var(--fl-gray-700); }
 .fl-stock-dialog-body label small.is-error, .fl-stock-error { color: var(--fl-red-dark); }
 .fl-stock-summary { margin: 0; padding: 11px 13px; background: var(--fl-gray-100); border-radius: 10px; font-weight: 800; }

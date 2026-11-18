@@ -73,12 +73,11 @@ export default function CambiarStockDialog({ producto, onCerrar, onRefrescar }: 
 
   const resumen = useMemo(() => {
     if (diferencia === null) return ''
-    if (diferencia < 0) return `Vas a retirar ${Math.abs(diferencia)} ${Math.abs(diferencia) === 1 ? 'pieza' : 'piezas'}.`
-    if (diferencia > 0) return `Vas a agregar ${diferencia} ${diferencia === 1 ? 'pieza' : 'piezas'}.`
-    return 'Sin cambios.'
-  }, [diferencia])
+    if (diferencia === 0) return 'Sin cambios.'
+    return `De ${stockEsperado} a ${interpretacionStock.numero}: ${diferencia > 0 ? '+' : ''}${diferencia} ${Math.abs(diferencia) === 1 ? 'unidad' : 'unidades'}.`
+  }, [diferencia, interpretacionStock.numero, stockEsperado])
 
-  useEffect(() => { inputRef.current?.focus() }, [])
+  useEffect(() => { inputRef.current?.focus(); inputRef.current?.select() }, [])
 
   useEffect(() => {
     if (!resultado) return
@@ -204,11 +203,12 @@ export default function CambiarStockDialog({ producto, onCerrar, onRefrescar }: 
       </div> : <div className="fl-stock-dialog-body">
         <strong className="fl-stock-product-name">{producto.nombre}</strong>
         <div className="fl-stock-current"><span>Stock actual</span><strong>{stockEsperado}</strong></div>
-        <label>
-          <span>Cambiar stock a</span>
-          <input ref={inputRef} type="text" inputMode="numeric" value={stockNuevo} onChange={(evento) => { setStockNuevo(evento.target.value); setError('') }} aria-invalid={Boolean(error) && !interpretacionStock.valido} />
+        <label className="fl-stock-new-value">
+          <span>Nueva existencia</span>
+          <input ref={inputRef} type="number" inputMode="numeric" min="0" step="1" value={stockNuevo} onChange={(evento) => { setStockNuevo(evento.target.value); setError('') }} aria-invalid={Boolean(error) && !interpretacionStock.valido} />
+          <small>Escribe la cantidad total que debe quedar.</small>
         </label>
-        <label>
+        <label className="fl-stock-reason">
           <span>Motivo opcional</span>
           <input type="text" maxLength={501} placeholder="Conteo físico" value={motivo} onChange={(evento) => { setMotivo(evento.target.value); setError('') }} aria-invalid={!motivoValido} />
           <small className={!motivoValido ? 'is-error' : ''}>{motivo.length}/500</small>
