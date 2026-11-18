@@ -19,7 +19,8 @@ test('Check-in aplica la respuesta confirmada al empleado antes del refresco sil
 })
 
 test('producto guardado actualiza sólo el registro devuelto y conserva protección de doble envío', () => {
-  assert.match(pagina, /\.select\('\*'\)\s*\.single\(\)/)
+  assert.match(pagina, /productoGuardado = resultado\.producto/)
+  assert.match(pagina, /fetch\('\/api\/productos'/)
   assert.match(pagina, /setProductos\(\(actuales\) =>/)
   assert.match(pagina, /if \(guardandoProductoRef\.current\) return/)
   assert.doesNotMatch(pagina, /limpiarFormulario\(\)\s*fetchProductos\(\)/)

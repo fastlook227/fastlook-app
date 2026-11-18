@@ -74,7 +74,6 @@ import ScannerCodigoBarras, { type FeedbackScanner } from '@/components/codigos-
 import { crearMapaCodigosBarras, normalizarCodigoBarras } from '@/utils/codigoBarras'
 import {
   comprobarCodigoProducto,
-  esErrorCodigoDuplicado,
   generarCodigoProductoDisponible,
   normalizarCodigoProducto,
 } from '@/utils/codigosProducto'
@@ -125,6 +124,7 @@ export default function Home() {
   const esDesktopPOS = usePOSDesktop()
   const [guardandoProducto, setGuardandoProducto] = useState(false)
   const guardandoProductoRef = useRef(false)
+  const solicitudCreacionProductoRef = useRef<string | null>(null)
   const [notificacionOperacion, setNotificacionOperacion] = useState<{ tipo: 'ok' | 'error'; mensaje: string } | null>(null)
   const [usuarioRol, setUsuarioRol] = useState<RolUsuario | null>(null)
   const [perfilUsuario, setPerfilUsuario] = useState<PerfilUsuario | null>(null)
@@ -1149,77 +1149,37 @@ const fetchMovimientosClientes = async () => {
       ...(columnaFuenteImagen ? { usar_imagen_principal: Boolean(form.usar_imagen_principal) } : {}),
     })
 
-    if (form.id) {
-      const ocupado = await comprobarCodigoProducto(supabase, codigoFinal, form.id)
-      if (ocupado) {
-        abrirDetallesPorError()
-        setEstadoCodigo('ocupado')
-        setMensajeCodigo('El código ya existe.')
-        return
-      }
-      const { data, error } = await supabase
-        .from('productos')
-        .update(crearDatosProducto(codigoFinal))
-        .eq('id', form.id)
-        .select('*')
-        .single()
-
-      if (error) {
-        if (esErrorCodigoDuplicado(error)) {
-          abrirDetallesPorError()
-          setEstadoCodigo('ocupado')
-          setMensajeCodigo('El código ya existe.')
-          return
-        }
-        alert('Error al editar producto: ' + error.message)
-        return
-      }
-      productoGuardado = data as Producto
-    } else if (!generarCodigoAutomatico) {
-      const ocupado = await comprobarCodigoProducto(supabase, codigoFinal)
-      if (ocupado) {
-        abrirDetallesPorError()
-        setEstadoCodigo('ocupado')
-        setMensajeCodigo('El código ya existe.')
-        return
-      }
-      const { data, error } = await supabase.from('productos').insert([crearDatosProducto(codigoFinal)]).select('*').single()
-      if (error) {
-        if (esErrorCodigoDuplicado(error)) {
-          abrirDetallesPorError()
-          setEstadoCodigo('ocupado')
-          setMensajeCodigo('El código ya existe.')
-          return
-        }
-        alert('Error al agregar producto: ' + error.message)
-        return
-      }
-      productoGuardado = data as Producto
-    } else {
-      let guardado = false
-      for (let intento = 0; intento < 5 && !guardado; intento += 1) {
-        const ocupado = await comprobarCodigoProducto(supabase, codigoFinal)
-        if (ocupado) codigoFinal = await generarCodigoInventario(true) || ''
-        if (!codigoFinal) return
-        const { data, error } = await supabase.from('productos').insert([crearDatosProducto(codigoFinal)]).select('*').single()
-        if (!error) {
-          productoGuardado = data as Producto
-          guardado = true
-          break
-        }
-        if (!esErrorCodigoDuplicado(error)) {
-          alert('Error al agregar producto: ' + error.message)
-          return
-        }
-        codigoFinal = await generarCodigoInventario(true) || ''
-      }
-      if (!guardado) {
-        abrirDetallesPorError()
-        setEstadoCodigo('error')
-        setMensajeCodigo('No fue posible guardar después de varios intentos de código.')
-        return
-      }
+    const { data: sesion } = await supabase.auth.getSession()
+    if (!sesion.session?.access_token) {
+      alert('Tu sesión terminó. Inicia sesión nuevamente.')
+      return
     }
+    if (!editando && !solicitudCreacionProductoRef.current) solicitudCreacionProductoRef.current = crypto.randomUUID()
+    const respuesta = await fetch('/api/productos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${sesion.session.access_token}` },
+      body: JSON.stringify(editando
+        ? { operacion: 'EDITAR', productoId: form.id, producto: crearDatosProducto(codigoFinal) }
+        : { operacion: 'CREAR', solicitudId: solicitudCreacionProductoRef.current, producto: crearDatosProducto(codigoFinal) }),
+    }).catch(() => null)
+    const resultado = respuesta ? await respuesta.json().catch(() => null) as { ok?: boolean; mensaje?: string; producto?: Producto } | null : null
+    if (!respuesta || !resultado) {
+      alert('No se recibió respuesta del servidor. Reintenta: el alta conserva la misma clave para evitar duplicados.')
+      return
+    }
+    if (!respuesta.ok || !resultado.ok || !resultado.producto) {
+      if (respuesta.status === 409) {
+        abrirDetallesPorError()
+        setEstadoCodigo('ocupado')
+        setMensajeCodigo(resultado.mensaje || 'El código ya existe.')
+        if (!editando) solicitudCreacionProductoRef.current = null
+        return
+      }
+      alert(`${editando ? 'Error al editar producto' : 'Error al agregar producto'}: ${resultado.mensaje || 'No fue posible guardar el producto.'}`)
+      return
+    }
+    productoGuardado = resultado.producto
+    if (!editando) solicitudCreacionProductoRef.current = null
 
     if (!productoGuardado) return
     setProductos((actuales) => {
@@ -1259,6 +1219,7 @@ const fetchMovimientosClientes = async () => {
       usar_imagen_principal: false,
     }
     setForm(formularioVacio)
+    solicitudCreacionProductoRef.current = null
     formularioInventarioBaseRef.current = formularioVacio
     setGenerarCodigoAutomatico(true)
     setGenerandoCodigo(false)
