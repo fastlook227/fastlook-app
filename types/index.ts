@@ -30,6 +30,7 @@ export type Tab =
   | 'cajas-tianguis'
   | 'entregas-proximas'
   | 'pos-config'
+  | 'catalogo-proveedores'
 
 export interface Producto {
   id: string
@@ -58,9 +59,11 @@ export interface CarritoItem extends Producto {
 
 export type TipoProductoPersonalizado = 'CADENA' | 'ESTRELLA' | 'PINON' | 'KIT_SPROCKET' | 'SERVICIO_MOTO'
 export type ConfiguracionPersonalizada = Record<string, unknown>
-export interface LineaInventario { tipoLinea: 'inventario'; producto: Producto; cantidad: number }
+export type MotivoPrecio = 'PROMOCION' | 'DESCUENTO_CLIENTE' | 'AJUSTE_COMERCIAL' | 'CANDIDATO_PRECIO_OFICIAL'
+export interface LineaInventario { tipoLinea: 'inventario'; producto: Producto; cantidad: number; precioUnitarioCobrado?: number; motivoPrecio?: MotivoPrecio }
 export interface LineaPersonalizada { tipoLinea: 'personalizado'; idLocal: string; tipoPersonalizado: TipoProductoPersonalizado; nombre: string; resumen: string; configuracion: ConfiguracionPersonalizada; precioUnitarioMostrado: number; cantidad: number }
-export type CarritoLinea = LineaInventario | LineaPersonalizada
+export interface LineaCatalogoProveedor { tipoLinea: 'catalogo'; idLocal: string; catalogoProductoId: string; codigo: string; nombre: string; proveedor: string; imagenUrl?: string | null; imagenThumbnailUrl?: string | null; precioLista: number; precioUnitarioCobrado: number; motivoPrecio?: MotivoPrecio; cantidad: number }
+export type CarritoLinea = LineaInventario | LineaPersonalizada | LineaCatalogoProveedor
 
 export interface VentaPersonalizada {
   id: string
@@ -123,7 +126,8 @@ export interface MovimientoInventario {
   cambio?: number | string | null
   es_ticket?: boolean
   pendiente_conciliacion?: boolean
-  lineas_ticket?: Array<{ id: string; nombre: string; codigo?: string | null; cantidad: number | string; personalizada: boolean }>
+  lineas_ticket?: Array<{ id: string; nombre: string; codigo?: string | null; cantidad: number | string; personalizada: boolean; externa?: boolean }>
+  devoluciones_ticket?: { total: number; operaciones: number }
   [key: string]: unknown
 }
 

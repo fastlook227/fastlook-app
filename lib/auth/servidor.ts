@@ -12,15 +12,22 @@ export class ErrorAutenticacion extends Error {
   }
 }
 
-export async function obtenerPerfilAutenticado(request: Request): Promise<PerfilUsuario> {
+const tokenSolicitud = (request: Request) => {
   const autorizacion = request.headers.get('authorization') || ''
-  const token = autorizacion.startsWith('Bearer ') ? autorizacion.slice(7).trim() : ''
+  return autorizacion.startsWith('Bearer ') ? autorizacion.slice(7).trim() : ''
+}
+
+// Cliente con la sesión del usuario: las consultas pasan por RLS como authenticated, nunca como anon.
+export const clienteSupabaseUsuario = (request: Request) => createClient(supabaseUrl, supabaseAnonKey, {
+  global: { headers: { Authorization: `Bearer ${tokenSolicitud(request)}` } },
+  auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+})
+
+export async function obtenerPerfilAutenticado(request: Request): Promise<PerfilUsuario> {
+  const token = tokenSolicitud(request)
   if (!token) throw new ErrorAutenticacion(401, 'Debes iniciar sesión.')
 
-  const cliente = createClient(supabaseUrl, supabaseAnonKey, {
-    global: { headers: { Authorization: `Bearer ${token}` } },
-    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
-  })
+  const cliente = clienteSupabaseUsuario(request)
   const { data: usuarioData, error: errorUsuario } = await cliente.auth.getUser(token)
   if (errorUsuario || !usuarioData.user) {
     throw new ErrorAutenticacion(401, 'La sesión no es válida o expiró.')

@@ -16,3 +16,11 @@ test('cajón usa pin y pulsos configurados', () => assert.deepEqual([...bytesCaj
 test('cajón deshabilitado no manda pulso', () => assert.throws(() => bytesCajon({ ...config, drawer: { ...config.drawer, enabled: false } }), /DRAWER_NO_CONFIGURADO/))
 test('payload inválido se rechaza', () => assert.throws(() => validarTicket({ folio: 'x' }), /TICKET_/))
 test('config exige token largo y origen explícito', () => assert.throws(() => validarConfig({}), /CONFIG_TOKEN_INVALIDO/))
+test('reimpresión con devolución muestra devuelto y neto; sin devolución el ticket no cambia', () => {
+  const texto = textoTicket58(validarTicket({ ...ticket, devuelto: 130 }), 32)
+  assert.match(texto, /DEVUELTO\s+-\$130\.00/); assert.match(texto, /NETO\s+\$170\.00/)
+  assert.ok(texto.split('\n').every((linea) => linea.length <= 32))
+  assert.doesNotMatch(textoTicket58(ticket, 32), /DEVUELTO|NETO/)
+  assert.throws(() => validarTicket({ ...ticket, devuelto: -1 }), /TICKET_DEVUELTO_INVALIDO/)
+  assert.throws(() => validarTicket({ ...ticket, devuelto: 301 }), /TICKET_DEVUELTO_INVALIDO/)
+})

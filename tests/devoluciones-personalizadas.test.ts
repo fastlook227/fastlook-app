@@ -31,10 +31,10 @@ test('la venta por voz aparece como "Venta rápida por voz"', () => {
   assert.equal(lineasPersonalizadasDevolucion([personalizada('v1', 'voz')], new Set(['voz']))[0].nombre, 'Venta rápida por voz')
   assert.equal(lineasPersonalizadasDevolucion([personalizada('v2', 'otro')], new Set(['voz']))[0].nombre, 'Servicio de moto - Normal')
 })
-test('una sola operación separa líneas de inventario y personalizadas', () => {
-  assert.deepEqual(separarLineasDevolucion([{ venta_id: 'n1', cantidad: 1 }, { venta_id: 'p:v1', cantidad: 2 }]), { normales: [{ venta_id: 'n1', cantidad: 1 }], personalizadas: [{ venta_personalizada_id: 'v1', cantidad: 2 }] })
-  assert.match(componente, /rpc\('procesar_devolucion_mixta', \{ \.\.\.comunes, p_lineas: normales, p_lineas_personalizadas: personalizadas \}\)/)
-  assert.match(componente, /errorRpc\?\.code === 'PGRST202' && !personalizadas\.length/)
+test('una sola operación separa líneas de inventario, proveedor y personalizadas', () => {
+  assert.deepEqual(separarLineasDevolucion([{ venta_id: 'n1', cantidad: 1 }, { venta_id: 'p:v1', cantidad: 2 }, { venta_id: 'e:x1', cantidad: 3 }]), { normales: [{ venta_id: 'n1', cantidad: 1 }], externas: [{ venta_externa_id: 'x1', cantidad: 3 }], personalizadas: [{ venta_personalizada_id: 'v1', cantidad: 2 }] })
+  assert.match(componente, /rpc\('procesar_devolucion_mixta', \{ \.\.\.comunes, p_lineas: \[\.\.\.normales, \.\.\.externas\], p_lineas_personalizadas: personalizadas \}\)/)
+  assert.match(componente, /errorRpc\?\.code === 'PGRST202' && !personalizadas\.length && !externas\.length/)
 })
 test('Devoluciones oculta tickets cancelados y sólo ofrece personalizadas con la tabla nueva', () => {
   assert.match(pagina, /from\('ventas_tickets'\)\.select\('ticket_id'\)\.eq\('estado', 'Cancelado'\)/)

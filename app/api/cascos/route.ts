@@ -47,14 +47,15 @@ const datosCasco = (casco: z.infer<typeof CamposCasco> | z.infer<ReturnType<type
   costo: casco.costo, stock: casco.stock, stock_minimo: casco.stock_minimo, talla: casco.talla.trim(),
   certificacion: casco.certificacion, ubicacion: casco.ubicacion.trim(), proveedor: casco.proveedor.trim(), imagen_url: casco.imagen_url.trim(), imagen_thumbnail_url: casco.imagen_thumbnail_url?.trim() || null, usar_imagen_principal: casco.usar_imagen_principal,
 })
-const registrarMovimiento = async (cliente: SupabaseClient, producto: Record<string, unknown>, tipo: string, cantidad: number, anterior: number, nuevo: number, nota: string) => {
-  const { error } = await cliente.from('movimientos_inventario').insert({
-    producto_id: producto.id, codigo: producto.codigo || '', nombre: producto.nombre || '', tipo_movimiento: tipo,
-    cantidad, stock_anterior: anterior, stock_nuevo: nuevo, nota, valor_anterior: anterior, valor_nuevo: nuevo,
-    origen: 'CASCOS', usuario_rol: 'Admin', created_at: new Date().toISOString(),
-  })
+// Stock/archivado y su movimiento se escriben juntos en el servidor (RLS impide UPDATE directo de productos).
+const operarCasco = async (cliente: SupabaseClient, productoId: string, operacion: 'SUMAR_STOCK' | 'ARCHIVAR', nota: string, cantidad?: number) => {
+  const { data, error } = await cliente.rpc('operar_producto_admin', { p_idempotency_key: crypto.randomUUID(), p_producto_id: productoId, p_operacion: operacion, p_cantidad: cantidad ?? null, p_origen: 'CASCOS', p_nota: nota })
   if (error) throw new Error(mensajeError(error))
+  const { data: producto, error: errorLectura } = await cliente.from('productos').select('*').eq('id', productoId).single()
+  if (errorLectura) throw new Error(mensajeError(errorLectura))
+  return { resultado: data, producto }
 }
+
 
 export async function POST(request: Request) {
   try {
@@ -108,24 +109,13 @@ export async function POST(request: Request) {
 
     if (entrada.data.operacion === 'REPONER') {
       const producto = await obtenerCasco(cliente, entrada.data.productoId)
-      const anterior = Number(producto.stock || 0)
-      const nuevo = anterior + entrada.data.cantidad
-      const { data, error } = await cliente.from('productos').update({ stock: nuevo }).eq('id', producto.id).eq('stock', anterior).select('*').maybeSingle()
-      if (error) throw new Error(mensajeError(error))
-      if (!data) throw new Error('El stock cambió mientras se confirmaba. Intenta nuevamente.')
-      try { await registrarMovimiento(cliente, producto, 'ENTRADA_STOCK', entrada.data.cantidad, anterior, nuevo, 'Reposición de casco') }
-      catch (errorMovimiento) { await cliente.from('productos').update({ stock: anterior }).eq('id', producto.id).eq('stock', nuevo); throw errorMovimiento }
+      const { producto: data } = await operarCasco(cliente, producto.id, 'SUMAR_STOCK', 'Reposición de casco', entrada.data.cantidad)
       return Response.json({ ok: true, mensaje: 'Stock repuesto correctamente.', producto: data })
     }
 
     if (entrada.data.operacion === 'ARCHIVAR') {
       const producto = await obtenerCasco(cliente, entrada.data.productoId)
-      const stock = Number(producto.stock || 0)
-      const { data, error } = await cliente.from('productos').update({ archivado: true }).eq('id', producto.id).or('archivado.is.null,archivado.eq.false').select('*').maybeSingle()
-      if (error) throw new Error(mensajeError(error))
-      if (!data) throw new Error('El casco cambió mientras se confirmaba. Intenta nuevamente.')
-      try { await registrarMovimiento(cliente, producto, 'ARCHIVADO', 0, stock, stock, 'Casco archivado desde el catálogo') }
-      catch (errorMovimiento) { await cliente.from('productos').update({ archivado: false }).eq('id', producto.id).eq('archivado', true); throw errorMovimiento }
+      const { producto: data } = await operarCasco(cliente, producto.id, 'ARCHIVAR', 'Casco archivado desde el catálogo')
       return Response.json({ ok: true, mensaje: 'Casco archivado correctamente.', producto: data })
     }
 
@@ -140,8 +130,7 @@ export async function POST(request: Request) {
     if (errorHistorial) throw new Error(mensajeError(errorHistorial!))
     const tieneHistorial = [ventas.count, movimientos.count, accionesPropuestas.count, accionesConfirmadas.count].some((cantidad) => Number(cantidad || 0) > 0)
     if (tieneHistorial || Number(producto.stock || 0) > 0) {
-      const { data, error } = await cliente.from('productos').update({ archivado: true }).eq('id', producto.id).select('*').single()
-      if (error) throw new Error(mensajeError(error))
+      const { producto: data } = await operarCasco(cliente, producto.id, 'ARCHIVAR', 'Casco con historial archivado al intentar eliminarlo')
       return Response.json({ ok: true, archivado: true, producto: data, mensaje: tieneHistorial ? 'Este casco tiene historial y no puede eliminarse por completo. Se archivará para conservar la información.' : 'Este casco aún tiene existencias y se archivará para conservar la información.' })
     }
     const { error } = await cliente.from('productos').delete().eq('id', producto.id)

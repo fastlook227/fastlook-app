@@ -15,5 +15,6 @@ export interface TicketBridge {
   total: number
   efectivoRecibido: number | null
   cambio: number | null
+  devuelto?: number
   lineas: Array<{ nombre: string; cantidad: number; precio: number; subtotal: number; personalizada: boolean }>
 }

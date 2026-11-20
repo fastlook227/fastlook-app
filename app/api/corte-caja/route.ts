@@ -5,6 +5,7 @@ import { obtenerRangoAyerFastLook, obtenerRangoFechasFastLook } from '@/utils/fe
 import { consolidarCorte } from '@/utils/corteConsolidado'
 import { normalizarMetodoCorte } from '@/utils/corte'
 import { etiquetarVentasVoz } from '@/utils/ventaVoz'
+import { esTablaNoDisponible } from '@/utils/catalogoProveedores'
 import type { Devolucion } from '@/types/devoluciones'
 
 type Fila = Record<string, unknown>
@@ -28,9 +29,9 @@ async function consultarRango(tabla: string, inicioIso: string, finIso: string):
 
 async function obtenerReporte(inicio: string, fin: string, busqueda = '', pagina = 1) {
   const rango = obtenerRangoFechasFastLook(inicio, fin)
-  const [tickets, ventas, personalizadas, devoluciones] = await Promise.all([
+  const [tickets, ventas, personalizadas, externas, devoluciones] = await Promise.all([
     consultarRango('ventas_tickets', rango.inicioIso, rango.finExclusivoIso), consultarRango('ventas', rango.inicioIso, rango.finExclusivoIso),
-    consultarRango('ventas_personalizadas', rango.inicioIso, rango.finExclusivoIso), consultarRango('devoluciones', rango.inicioIso, rango.finExclusivoIso),
+    consultarRango('ventas_personalizadas', rango.inicioIso, rango.finExclusivoIso), consultarRango('ventas_catalogo_proveedores', rango.inicioIso, rango.finExclusivoIso).catch((error) => esTablaNoDisponible(error) ? [] : Promise.reject(error)), consultarRango('devoluciones', rango.inicioIso, rango.finExclusivoIso),
   ])
   const idsDevoluciones = devoluciones.map(d => d.id).filter(Boolean), devolucionesDetalle: Fila[] = []
   for (let i = 0; i < idsDevoluciones.length; i += 100) {
@@ -40,6 +41,8 @@ async function obtenerReporte(inicio: string, fin: string, busqueda = '', pagina
     // Unidades personalizadas devueltas; el dinero ya se resta por la cabecera (total_devuelto).
     const detallePersonalizado = await obtenerSupabaseAdmin().from('devoluciones_personalizadas_detalle').select('devolucion_id,cantidad').in('devolucion_id', idsDevoluciones.slice(i, i + 100))
     if (!detallePersonalizado.error) devolucionesDetalle.push(...((detallePersonalizado.data || []) as Fila[]))
+    const detalleExterno = await obtenerSupabaseAdmin().from('devoluciones_externas_detalle').select('devolucion_id,cantidad').in('devolucion_id', idsDevoluciones.slice(i, i + 100))
+    if (!detalleExterno.error) devolucionesDetalle.push(...((detalleExterno.data || []) as Fila[]))
   }
   const idsServicio = [...new Set(personalizadas.filter(p => p.tipo_personalizado === 'SERVICIO_MOTO' && p.ticket_id).map(p => String(p.ticket_id)))], ticketsVoz = new Set<string>()
   for (let i = 0; i < idsServicio.length; i += 100) {
@@ -47,7 +50,7 @@ async function obtenerReporte(inicio: string, fin: string, busqueda = '', pagina
     if (error) break // sólo afecta la etiqueta; los importes del corte no dependen de esta tabla
     for (const fila of data || []) ticketsVoz.add(String(fila.ticket_id))
   }
-  return consolidarCorte({ tickets, ventas, personalizadas: etiquetarVentasVoz(personalizadas, ticketsVoz), devoluciones: devoluciones as unknown as Devolucion[], devolucionesDetalle, inicio, fin, busqueda, pagina })
+  return consolidarCorte({ tickets, ventas, personalizadas: etiquetarVentasVoz(personalizadas, ticketsVoz), externas, devoluciones: devoluciones as unknown as Devolucion[], devolucionesDetalle, inicio, fin, busqueda, pagina })
 }
 
 export async function GET(request: Request) {

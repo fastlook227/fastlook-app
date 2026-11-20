@@ -17,3 +17,9 @@ test('la isla recibe todas las secciones visibles del arreglo autorizado', () =>
 test('lupa navega a Venta y solicita foco sin setTimeout', () => { assert.match(pagina, /onBuscarProductos=\{\(\) => \{ setModoVenta\('normal'\); setTab\('venta'\); setSolicitudFocoVenta/); assert.match(pagina, /buscadorVentaRef\.current\?\.focus\(\)/); assert.doesNotMatch(navegacion, /onCambiarTab\('precios'\)/) })
 test('configuración POS sólo se ofrece a Admin desktop', () => { assert.match(configuracion, /tab: 'pos-config'.*roles: \['Admin'\].*soloDesktopPOS: true/); assert.match(pagina, /usuarioRol === 'Admin' && esDesktopPOS && <ConfiguracionPOS/) })
 test('Faltantes está disponible para Admin y Vendedor', () => { assert.match(configuracion, /tab: 'faltantes'.*roles: \['Admin', 'Vendedor'\]/); assert.match(pagina, /tab === 'faltantes' && <Faltantes/) })
+test('catálogo y sugerencias permanecen ocultos mientras venta flexible está apagada', () => {
+  assert.match(configuracion, /const VENTA_FLEXIBLE = process\.env\.NEXT_PUBLIC_VENTA_FLEXIBLE === '1'/)
+  assert.match(configuracion, /VENTA_FLEXIBLE \|\| item\.tab !== 'catalogo-proveedores'/)
+  assert.match(pagina, /VENTA_FLEXIBLE && usuarioRol === 'Admin' && <SugerenciasPrecio/)
+  assert.match(pagina, /VENTA_FLEXIBLE && tab === 'catalogo-proveedores' && <CatalogoProveedores/)
+})

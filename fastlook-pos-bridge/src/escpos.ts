@@ -33,6 +33,7 @@ export function textoTicket58(ticket: TicketBridge, ancho = 32, encoding: Bridge
   lineas.push(fino, columnas('TOTAL', dinero(ticket.total), ancho))
   if (ticket.efectivoRecibido !== null) lineas.push(columnas('RECIBIDO', dinero(ticket.efectivoRecibido), ancho))
   if (ticket.cambio !== null) lineas.push(columnas('CAMBIO', dinero(ticket.cambio), ancho))
+  if (ticket.devuelto) lineas.push(fino, columnas('DEVUELTO', `-${dinero(ticket.devuelto)}`, ancho), columnas('NETO', dinero(Math.round((ticket.total - ticket.devuelto) * 100) / 100), ancho))
   lineas.push('', `METODO: ${normalizar(ticket.metodoPago, encoding).toUpperCase()}`, fino, 'GRACIAS POR TU COMPRA'.padStart(Math.floor((ancho + 22) / 2)).padEnd(ancho), separador, '', '', '')
   return lineas.join('\n')
 }

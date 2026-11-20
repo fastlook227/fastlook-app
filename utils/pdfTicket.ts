@@ -16,7 +16,7 @@ const cargarImagenBase64 = async (url: string) => {
   })
 }
 
-export async function generarPdfTicketHistorico(lineas: Venta[]) {
+export async function generarPdfTicketHistorico(lineas: Venta[], devuelto = 0) {
   if (!lineas.length) throw new Error('La venta no contiene productos.')
   const ordenadas = [...lineas].sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at))
   const primera = ordenadas[0]
@@ -55,6 +55,10 @@ export async function generarPdfTicketHistorico(lineas: Venta[]) {
 
   doc.line(5, y, 75, y); y += 6
   doc.setFontSize(12); doc.text('TOTAL:', 5, y); doc.text(`$${total.toFixed(2)}`, 75, y, { align: 'right' }); y += 8
+  if (devuelto > 0) {
+    doc.setFontSize(9); doc.text('DEVUELTO:', 5, y); doc.text(`-$${devuelto.toFixed(2)}`, 75, y, { align: 'right' }); y += 5
+    doc.text('NETO:', 5, y); doc.text(`$${(total - devuelto).toFixed(2)}`, 75, y, { align: 'right' }); y += 7
+  }
   if (primera.efectivo_recibido != null) {
     doc.setFontSize(9); doc.text('RECIBIDO:', 5, y); doc.text(`$${Number(primera.efectivo_recibido).toFixed(2)}`, 75, y, { align: 'right' }); y += 5
   }

@@ -1,5 +1,6 @@
 import 'server-only'
 
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
 import type {
   ProductoAsistente,
@@ -99,12 +100,13 @@ const presentarProducto = (
 
 export async function buscarProductos(
   termino: string,
-  rol: RolUsuario
+  rol: RolUsuario,
+  cliente: SupabaseClient = supabase
 ): Promise<{
   coincidencias: ResultadoBusquedaProducto[]
   productosParecidos: ResultadoBusquedaProducto[]
 }> {
-  const { data: productos, error: errorProductos } = await supabase
+  const { data: productos, error: errorProductos } = await cliente
     .from('productos')
     .select('id,nombre,codigo,codigo_barras,precio,costo,stock,ubicacion,proveedor,tipo,archivado')
     .or('archivado.is.null,archivado.eq.false')
@@ -160,9 +162,10 @@ export async function buscarProductos(
 
 export async function buscarProductoPorId(
   productoId: string,
-  rol: RolUsuario
+  rol: RolUsuario,
+  cliente: SupabaseClient = supabase
 ): Promise<ProductoAsistente | null> {
-  const { data, error } = await supabase
+  const { data, error } = await cliente
     .from('productos')
     .select('id,nombre,codigo,codigo_barras,precio,costo,stock,ubicacion,proveedor,tipo,archivado')
     .eq('id', productoId)
@@ -187,9 +190,10 @@ const contieneFiltro = (valor: string | null, filtro: string | null) => {
 }
 
 export async function buscarProductosMasivos(
-  filtros: FiltroProductosMasivo
+  filtros: FiltroProductosMasivo,
+  cliente: SupabaseClient = supabase
 ): Promise<{ productos: ProductoSeleccionMasiva[]; totalCoincidencias: number }> {
-  const { data, error } = await supabase.from('productos').select('*')
+  const { data, error } = await cliente.from('productos').select('*')
   if (error) {
     throw new Error(`No fue posible consultar productos: ${error.message}`)
   }

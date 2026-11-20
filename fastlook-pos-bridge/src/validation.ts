@@ -9,6 +9,7 @@ export function validarTicket(valor: unknown): TicketBridge {
   if (!texto(ticket.ticketId, 100) || !texto(ticket.folio, 80) || !texto(ticket.fecha, 80) || !texto(ticket.cajero, 120) || !texto(ticket.metodoPago, 40) || !dinero(ticket.total)) throw new Error('TICKET_CABECERA_INVALIDA')
   if (ticket.efectivoRecibido !== null && !dinero(ticket.efectivoRecibido)) throw new Error('TICKET_EFECTIVO_INVALIDO')
   if (ticket.cambio !== null && !dinero(ticket.cambio)) throw new Error('TICKET_CAMBIO_INVALIDO')
+  if (ticket.devuelto !== undefined && (!dinero(ticket.devuelto) || Number(ticket.devuelto) > Number(ticket.total))) throw new Error('TICKET_DEVUELTO_INVALIDO')
   if (!Array.isArray(ticket.lineas) || ticket.lineas.length < 1 || ticket.lineas.length > 200) throw new Error('TICKET_LINEAS_INVALIDAS')
   for (const linea of ticket.lineas) {
     if (!linea || typeof linea !== 'object') throw new Error('TICKET_LINEA_INVALIDA')

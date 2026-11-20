@@ -57,6 +57,7 @@ export interface TicketCorte {
   estado: string
   lineasNormales: LineaCorte[]
   lineasPersonalizadas: LineaCorte[]
+  lineasExternas: LineaCorte[]
 }
 
 export interface LineaCorte {
@@ -68,6 +69,7 @@ export interface LineaCorte {
   total: number
   costoUnitario: number | null
   personalizada: boolean
+  externa?: boolean
 }
 
 export interface OperacionConciliacionCorte {
@@ -80,7 +82,7 @@ export interface OperacionConciliacionCorte {
 }
 
 export interface ReporteCorte {
-  resumen: ResumenCorte & { ventasInventario: number; ventasPersonalizadas: number; ajustesTicket: number; operacionesSinConciliar: number; totalAjustes: number }
+  resumen: ResumenCorte & { ventasInventario: number; ventasPersonalizadas: number; ventasExternas: number; ajustesTicket: number; operacionesSinConciliar: number; totalAjustes: number }
   ventasAgrupadas: VentaAgrupadaFecha[]
   metodos: ResumenMetodoPago[]
   productos: ProductoVendidoResumen[]

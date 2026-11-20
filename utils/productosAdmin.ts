@@ -14,7 +14,8 @@ export const construirPayloadProductoAdmin = ({ form, codigo, tipo, editando, pr
   tipo,
   precio: Number(form.precio),
   costo: editando ? numeroOpcional(form.costo) : Number(form.costo || 0),
-  stock: editando ? numeroOpcional(form.stock) : Number(form.stock || 0),
+  // Al editar nunca se envía stock: las existencias sólo cambian por entrada o ajuste auditado.
+  stock: editando ? null : Number(form.stock || 0),
   stock_minimo: editando ? numeroOpcional(form.stock_minimo) : Number(form.stock_minimo || 5),
   ubicacion: form.ubicacion,
   proveedor: form.proveedor,

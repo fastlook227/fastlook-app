@@ -1,13 +1,16 @@
-import { Boxes, ClipboardList, History, Package, Radio, ScanFace, Settings, Shield, ShoppingCart, SlidersHorizontal, Truck, Undo2, UserCog, Users, WalletCards, type LucideIcon } from 'lucide-react'
+import { BookOpen, Boxes, ClipboardList, History, Package, Radio, ScanFace, Settings, Shield, ShoppingCart, SlidersHorizontal, Truck, Undo2, UserCog, Users, WalletCards, type LucideIcon } from 'lucide-react'
 import type { RolUsuario, Tab } from '@/types'
 import type { NavigationItem } from '@/components/Sidebar'
 
 interface EntradaNavegacion extends NavigationItem { roles: RolUsuario[]; soloDesktopPOS?: boolean; requiereCorte?: boolean }
 
+const VENTA_FLEXIBLE = process.env.NEXT_PUBLIC_VENTA_FLEXIBLE === '1'
+
 export const MODULOS_ARCHIVADOS: Tab[] = ['ia', 'precios', 'dashboard', 'compras', 'proveedores', 'stock']
 
 export const NAVEGACION_FAST_LOOK: EntradaNavegacion[] = [
   { tab: 'venta', label: 'Generar venta', icon: ShoppingCart, roles: ['Admin', 'Vendedor'] },
+  { tab: 'catalogo-proveedores', label: 'Catálogo de proveedores', icon: BookOpen, roles: ['Admin', 'Vendedor'] },
   { tab: 'productos-personalizados', label: 'Productos personalizados', icon: SlidersHorizontal, roles: ['Admin'] },
   { tab: 'cascos', label: 'Cascos', icon: Shield, roles: ['Admin', 'Vendedor'] },
   { tab: 'devoluciones', label: 'Devoluciones', icon: Undo2, roles: ['Admin', 'Vendedor'] },
@@ -26,7 +29,7 @@ export const NAVEGACION_FAST_LOOK: EntradaNavegacion[] = [
 const CAJAS_TIANGUIS: EntradaNavegacion = { tab: 'cajas-tianguis', label: 'Cajas del tianguis', icon: Boxes, roles: ['Admin', 'Vendedor'] }
 
 export function obtenerNavegacionVisible(rol: RolUsuario, accesoCorte: boolean, esDesktopPOS: boolean, fechaLocal?: string): NavigationItem[] {
-  const base = NAVEGACION_FAST_LOOK.filter((item) => item.roles.includes(rol) && (!item.requiereCorte || accesoCorte) && (!item.soloDesktopPOS || esDesktopPOS))
+  const base = NAVEGACION_FAST_LOOK.filter((item) => item.roles.includes(rol) && (!item.requiereCorte || accesoCorte) && (!item.soloDesktopPOS || esDesktopPOS) && (VENTA_FLEXIBLE || item.tab !== 'catalogo-proveedores'))
   const dia = fechaLocal ? new Date(`${fechaLocal}T00:00:00Z`).getUTCDay() : -1
   const items = [0, 6].includes(dia) ? [CAJAS_TIANGUIS, ...base] : [...base, CAJAS_TIANGUIS]
   return items.map(({ tab, label, icon }) => ({ tab, label, icon: icon as LucideIcon }))

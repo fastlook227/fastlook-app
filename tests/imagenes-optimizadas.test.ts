@@ -58,6 +58,7 @@ test('la migración conserva originales y la consulta de huérfanas es sólo lec
 
 const preferencia = readFileSync(new URL('../fastlook_preferencia_imagen_principal.sql', import.meta.url), 'utf8')
 const pagina = readFileSync(new URL('../app/page.tsx', import.meta.url), 'utf8')
+const payloadProducto = readFileSync(new URL('../utils/productosAdmin.ts', import.meta.url), 'utf8')
 const formularioCasco = readFileSync(new URL('../components/cascos/FormularioCasco.tsx', import.meta.url), 'utf8')
 const catalogoCascos = readFileSync(new URL('../components/cascos/CatalogoCascos.tsx', import.meta.url), 'utf8')
 const rutaCascos = readFileSync(new URL('../app/api/cascos/route.ts', import.meta.url), 'utf8')
@@ -93,7 +94,8 @@ test('la opción es manual, sólo para Admin y con vista previa de ambas fuentes
 
 test('sin migración aplicada no se envía la columna ni el parámetro nuevo', () => {
   assert.match(pagina, /productos\.some\(\(producto\) => 'usar_imagen_principal' in producto\)/)
-  assert.match(pagina, /\.\.\.\(columnaFuenteImagen \? \{ usar_imagen_principal: Boolean\(form\.usar_imagen_principal\) \} : \{\}\)/)
+  assert.match(pagina, /preferenciaImagenDisponible: columnaFuenteImagen/)
+  assert.match(payloadProducto, /preferenciaImagenDisponible \? Boolean\(form\.usar_imagen_principal\) : undefined/)
   assert.match(rutaCascos, /usar_imagen_principal: z\.boolean\(\)\.optional\(\)/)
   assert.equal((rutaCascos.match(/datos\.usar_imagen_principal === undefined \? \{\} : \{ p_usar_imagen_principal/g) || []).length, 2)
 })

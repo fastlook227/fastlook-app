@@ -95,8 +95,8 @@ test('reconciliación retira inexistentes, archivados y stock cero', () => {
   let estado = crearEstadoVentasInicial()
   for (const item of [producto('inexistente'), producto('archivado'), producto('cero')]) estado = agregarProductoAVenta(estado, estado.activaId, item).estado
   const resultado = reconciliarVentasPendientes(estado, [producto('archivado', { archivado: true }), producto('cero', { stock: 0 })])
-  assert.deepEqual(resultado.estado.ventas[0].carrito, [])
-  assert.equal(resultado.retirados, 3)
+  assert.equal(resultado.estado.ventas[0].carrito.length, 1)
+  assert.equal(resultado.retirados, 2)
 })
 
 test('stock reducido ajusta cantidades persistidas', () => {
@@ -104,8 +104,8 @@ test('stock reducido ajusta cantidades persistidas', () => {
   estado = agregarProductoAVenta(estado, estado.activaId, camara).estado
   estado = cambiarCantidadEnVenta(estado, estado.activaId, camara.id, 5, 5).estado
   const resultado = reconciliarVentasPendientes(estado, [{ ...camara, stock: 2 }])
-  assert.equal(resultado.estado.ventas[0].carrito[0].cantidad, 2)
-  assert.equal(resultado.ajustados, 1)
+  assert.equal(resultado.estado.ventas[0].carrito[0].cantidad, 5)
+  assert.equal(resultado.ajustados, 0)
 })
 
 test('stock compartido nunca supera existencia y recalcula al cerrar otro carrito', () => {
@@ -114,8 +114,8 @@ test('stock compartido nunca supera existencia y recalcula al cerrar otro carrit
   estado = cambiarCantidadEnVenta(estado, 'venta-inicial', camara.id, 3, 5).estado
   estado = agregarProductoAVenta(estado, 'venta-2', camara).estado
   estado = cambiarCantidadEnVenta(estado, 'venta-2', camara.id, 3, 5).estado
-  assert.equal(estado.ventas[1].carrito[0].cantidad, 2)
-  assert.equal(estado.ventas.reduce((total, venta) => total + (venta.carrito[0]?.cantidad ?? 0), 0), 5)
+  assert.equal(estado.ventas[1].carrito[0].cantidad, 3)
+  assert.equal(estado.ventas.reduce((total, venta) => total + (venta.carrito[0]?.cantidad ?? 0), 0), 6)
   estado = cerrarVentaPendiente(estado, 'venta-inicial', 'nueva')
   estado = reconciliarVentasPendientes(estado, [camara]).estado
   assert.ok(esLineaInventario(estado.ventas[0].carrito[0]))

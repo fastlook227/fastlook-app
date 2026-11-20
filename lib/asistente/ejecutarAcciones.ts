@@ -47,35 +47,16 @@ const obtenerProducto = async (productoId: string, cliente: SupabaseClient = sup
   return producto
 }
 
-const registrarMovimiento = async (datos: {
-  producto: ProductoEjecucion
-  tipo: 'CAMBIO_UBICACION' | 'ENTRADA_STOCK' | 'SALIDA_STOCK'
-  cantidad: number
-  stockAnterior: number
-  stockNuevo: number
-  valorAnterior: string | number | null
-  valorNuevo: string | number | null
-  contexto: ContextoEjecucion
-}) => {
-  const cliente = datos.contexto.cliente || supabase
-  console.log('PASO 5: insertar movimientos_inventario')
-  const { error } = await cliente.from('movimientos_inventario').insert({
-    producto_id: datos.producto.id,
-    codigo: datos.producto.codigo || '',
-    nombre: datos.producto.nombre || '',
-    tipo_movimiento: datos.tipo,
-    cantidad: datos.cantidad,
-    stock_anterior: datos.stockAnterior,
-    stock_nuevo: datos.stockNuevo,
-    nota: `${datos.tipo} ejecutado por el Asistente.`,
-    valor_anterior: datos.valorAnterior,
-    valor_nuevo: datos.valorNuevo,
-    origen: 'ASISTENTE',
-    usuario_rol: datos.contexto.usuarioRol,
-    accion_asistente_id: datos.contexto.accionAsistenteId,
-    created_at: new Date().toISOString(),
+// Stock, ubicación y movimiento se escriben juntos en el servidor (RLS impide UPDATE directo de productos).
+const operarProducto = async (cliente: SupabaseClient, productoId: string, operacion: 'SUMAR_STOCK' | 'RESTAR_STOCK' | 'CAMBIAR_UBICACION', contexto: ContextoEjecucion, valores: { cantidad?: number; ubicacion?: string }) => {
+  const { data, error } = await cliente.rpc('operar_producto_admin', {
+    p_idempotency_key: crypto.randomUUID(), p_producto_id: productoId, p_operacion: operacion,
+    p_cantidad: valores.cantidad ?? null, p_ubicacion: valores.ubicacion ?? null, p_origen: 'ASISTENTE',
+    p_nota: `${operacion === 'CAMBIAR_UBICACION' ? 'CAMBIO_UBICACION' : operacion === 'SUMAR_STOCK' ? 'ENTRADA_STOCK' : 'SALIDA_STOCK'} ejecutado por el Asistente.`,
+    p_accion_asistente_id: contexto.accionAsistenteId,
   })
   if (error) throw new Error(mensajeSupabase(error))
+  return data as { stock_anterior: number; stock_nuevo: number }
 }
 
 const resultadoError = (
@@ -113,26 +94,7 @@ export async function ejecutarCambioUbicacion(
         detalles: [], errores: [],
       }
     }
-    console.log('PASO 4: actualizar productos')
-    let consulta = cliente.from('productos').update({ ubicacion: nuevaUbicacion }).eq('id', producto.id)
-    consulta = producto.ubicacion === null
-      ? consulta.is('ubicacion', null)
-      : consulta.eq('ubicacion', producto.ubicacion)
-    const { data, error } = await consulta.select('id')
-    if (error) throw new Error(mensajeSupabase(error))
-    if (!data?.length) throw new Error('El producto cambió mientras se confirmaba. Intenta nuevamente.')
-
-    try {
-      await registrarMovimiento({
-        producto, tipo: 'CAMBIO_UBICACION', cantidad: 0,
-        stockAnterior: Number(producto.stock || 0), stockNuevo: Number(producto.stock || 0),
-        valorAnterior: producto.ubicacion, valorNuevo: nuevaUbicacion, contexto,
-      })
-    } catch (errorMovimiento) {
-      console.log('PASO ROLLBACK: actualizar productos para restaurar la ubicación')
-      await cliente.from('productos').update({ ubicacion: producto.ubicacion }).eq('id', producto.id).eq('ubicacion', nuevaUbicacion)
-      throw errorMovimiento
-    }
+    await operarProducto(cliente, producto.id, 'CAMBIAR_UBICACION', contexto, { ubicacion: nuevaUbicacion })
 
     return {
       ok: true, mensaje: 'Ubicación actualizada correctamente.', accion: 'CAMBIAR_UBICACION',
@@ -204,23 +166,7 @@ const ejecutarCambioStock = async (
     const stockNuevo = accion === 'SUMAR_STOCK'
       ? stockAnterior + cantidad
       : stockAnterior - cantidad
-    const { data, error } = await cliente
-      .from('productos').update({ stock: stockNuevo })
-      .eq('id', producto.id).eq('stock', stockAnterior).select('id')
-    if (error) throw new Error(mensajeSupabase(error))
-    if (!data?.length) throw new Error('El stock cambió mientras se confirmaba. Intenta nuevamente.')
-
-    try {
-      await registrarMovimiento({
-        producto,
-        tipo: accion === 'SUMAR_STOCK' ? 'ENTRADA_STOCK' : 'SALIDA_STOCK',
-        cantidad, stockAnterior, stockNuevo,
-        valorAnterior: stockAnterior, valorNuevo: stockNuevo, contexto,
-      })
-    } catch (errorMovimiento) {
-      await cliente.from('productos').update({ stock: stockAnterior }).eq('id', producto.id).eq('stock', stockNuevo)
-      throw errorMovimiento
-    }
+    await operarProducto(cliente, producto.id, accion, contexto, { cantidad })
 
     return {
       ok: true, mensaje: 'Stock actualizado correctamente.', accion,

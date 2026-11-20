@@ -6,7 +6,7 @@ import { supabaseAnonKey, supabaseUrl } from '@/lib/supabase'
 const CamposBase = z.object({
   codigo: z.string().trim().min(1).max(80), nombre: z.string().trim().min(1).max(200),
   tipo: z.string().trim().min(1).max(100), precio: z.number().finite().nonnegative(),
-  costo: z.number().finite().nonnegative().nullable(), stock: z.number().int().nonnegative().nullable(),
+  costo: z.number().finite().nonnegative().nullable(), stock: z.number().int().nullable(),
   stock_minimo: z.number().int().nonnegative().nullable(), ubicacion: z.string().trim().max(100).nullable(),
   proveedor: z.string().trim().max(200).nullable(), imagen_url: z.string().trim().max(2000).nullable(),
   imagen_thumbnail_url: z.string().trim().max(2000).nullable(), usar_imagen_principal: z.boolean().optional(),

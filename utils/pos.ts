@@ -25,6 +25,8 @@ export interface TicketPOS {
   total: number
   efectivoRecibido: number | null
   cambio: number | null
+  // Sólo en reimpresiones: total ya devuelto del ticket. Un bridge anterior lo ignora.
+  devuelto?: number
   lineas: Array<{ nombre: string; cantidad: number; precio: number; subtotal: number; personalizada: boolean }>
 }
 

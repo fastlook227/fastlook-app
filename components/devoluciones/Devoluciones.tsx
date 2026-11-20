@@ -86,11 +86,11 @@ export default function Devoluciones({ ventas, productos, devoluciones, detalles
     setProcesando(true)
     setError('')
     try {
-      const { normales, personalizadas } = separarLineasDevolucion(lineas)
+      const { normales, externas, personalizadas } = separarLineasDevolucion(lineas)
       const comunes = { p_idempotency_key: idempotencyKeyRef.current, p_motivo: motivo, p_motivo_otro: motivo === 'Otro' ? motivoOtro.trim() : null }
-      let { data, error: errorRpc } = await supabase.rpc('procesar_devolucion_mixta', { ...comunes, p_lineas: normales, p_lineas_personalizadas: personalizadas })
+      let { data, error: errorRpc } = await supabase.rpc('procesar_devolucion_mixta', { ...comunes, p_lineas: [...normales, ...externas], p_lineas_personalizadas: personalizadas })
       // shortcut: mientras fastlook_devoluciones_personalizadas.sql no esté aplicada (PGRST202), sólo se devuelve inventario con el RPC anterior; quitar al aplicarla.
-      if (errorRpc?.code === 'PGRST202' && !personalizadas.length) ({ data, error: errorRpc } = await supabase.rpc('procesar_devolucion', { ...comunes, p_lineas: normales }))
+      if (errorRpc?.code === 'PGRST202' && !personalizadas.length && !externas.length) ({ data, error: errorRpc } = await supabase.rpc('procesar_devolucion', { ...comunes, p_lineas: normales }))
       if (errorRpc) throw errorRpc
       const respuesta = data as ResultadoDevolucion
       if (!respuesta?.ok) throw new Error('La devolución no fue confirmada.')

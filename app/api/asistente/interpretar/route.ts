@@ -22,7 +22,7 @@ import type {
   FiltroProductosMasivo,
 } from '@/types/asistente'
 import type { RolUsuario } from '@/types'
-import { ErrorAutenticacion, obtenerPerfilAutenticado } from '@/lib/auth/servidor'
+import { ErrorAutenticacion, clienteSupabaseUsuario, obtenerPerfilAutenticado } from '@/lib/auth/servidor'
 
 const ACCIONES_MODIFICACION: AccionAsistente[] = [
   'CREAR_PRODUCTO',
@@ -392,6 +392,7 @@ const responderConProducto = (
 export async function POST(request: Request) {
   try {
     const perfilAutenticado = await obtenerPerfilAutenticado(request)
+    const clienteUsuario = clienteSupabaseUsuario(request)
     const solicitud = EsquemaSolicitudAsistente.safeParse(await request.json())
 
     if (!solicitud.success) {
@@ -502,7 +503,7 @@ export async function POST(request: Request) {
           },
         }))
       }
-      const resultadoMasivo = await buscarProductosMasivos(ordenMasiva.filtros)
+      const resultadoMasivo = await buscarProductosMasivos(ordenMasiva.filtros, clienteUsuario)
       if (resultadoMasivo.totalCoincidencias > 100) {
         return NextResponse.json(respuestaBase(interpretacionMasiva, {
           mensajePrincipal: 'Encontré más de 100 productos. Refina la búsqueda antes de continuar.',
@@ -640,9 +641,9 @@ export async function POST(request: Request) {
       || (!interpretacion.productoBuscado ? contexto.productoSeleccionadoId : null)
 
     if (productoContextualId) {
-      producto = await buscarProductoPorId(productoContextualId, rol)
+      producto = await buscarProductoPorId(productoContextualId, rol, clienteUsuario)
     } else if (interpretacion.productoBuscado) {
-      const resultadoBusqueda = await buscarProductos(interpretacion.productoBuscado, rol)
+      const resultadoBusqueda = await buscarProductos(interpretacion.productoBuscado, rol, clienteUsuario)
       coincidencias = resultadoBusqueda.coincidencias
       productosParecidos = resultadoBusqueda.productosParecidos
 

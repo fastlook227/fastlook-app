@@ -20,13 +20,15 @@ import type {
   Venta,
 } from '@/types'
 import type { Devolucion, DevolucionDetalle } from '@/types/devoluciones'
-import { detallesPersonalizadosDevolucion, lineasPersonalizadasDevolucion } from '@/utils/devoluciones'
+import type { ProductoCatalogoProveedor } from '@/types/catalogoProveedores'
+import { detallesExternosDevolucion, detallesPersonalizadosDevolucion, lineasExternasDevolucion, lineasPersonalizadasDevolucion } from '@/utils/devoluciones'
+import { esTablaNoDisponible } from '@/utils/catalogoProveedores'
 import { obtenerFechaActualFastLook, obtenerFechaLocal } from '@/utils/fechas'
 import { filtrarProductosPorBusqueda } from '@/utils/busqueda'
 import { aplicarFiltrosProductos, crearFiltrosProductosVacios, esProductoStockBajo } from '@/utils/filtrosProductos'
 import { intentarBloquearCobro, liberarBloqueoCobro } from '@/utils/ventaRapida'
-import { agregarPersonalizadoAVenta, agregarProductoAVenta, agregarVentaPendiente, actualizarVenta, cambiarCantidadEnVenta, cerrarVentaPendiente, crearEstadoVentasInicial, eliminarProductoDeVenta, obtenerVentaActiva, reconciliarVentasPendientes, restaurarVentasPendientes, type EstadoVentasPendientes } from '@/utils/ventasPendientes'
-import { claveLinea, construirPayloadVenta, esLineaInventario, obtenerNombreLinea, obtenerPrecioLinea, resumirCarritoMixto, seleccionarRpcVenta, type NuevaLineaPersonalizada } from '@/utils/carritoMixto'
+import { agregarLineaAVenta, agregarPersonalizadoAVenta, agregarProductoAVenta, agregarVentaPendiente, actualizarVenta, cambiarCantidadEnVenta, cerrarVentaPendiente, crearEstadoVentasInicial, eliminarProductoDeVenta, obtenerVentaActiva, reconciliarVentasPendientes, restaurarVentasPendientes, type EstadoVentasPendientes } from '@/utils/ventasPendientes'
+import { cambiarMotivoPrecioLinea, cambiarPrecioLinea, claveLinea, construirPayloadVenta, crearLineaCatalogo, esLineaCatalogo, esLineaInventario, esLineaPersonalizada, lineasSinMotivoPrecio, MOTIVOS_PRECIO, obtenerNombreLinea, obtenerPrecioLinea, precioModificadoLinea, resumirCarritoMixto, seleccionarRpcVenta, type NuevaLineaPersonalizada } from '@/utils/carritoMixto'
 import { puedeAccederCorteCaja } from '@/lib/permisos/corteCaja'
 import { generarTextoTicket } from '@/utils/ticket'
 import { generarPdfTicketHistorico } from '@/utils/pdfTicket'
@@ -93,6 +95,12 @@ import TarjetaProductoPersonalizado from '@/components/TarjetaProductoPersonaliz
 import useNavegacionPOS from '@/hooks/useNavegacionPOS'
 import { construirMovimientosCompletos } from '@/utils/movimientos'
 import { construirPayloadProductoAdmin } from '@/utils/productosAdmin'
+import CatalogoProveedores from '@/components/catalogo-proveedores/CatalogoProveedores'
+import SugerenciasPrecio from '@/components/SugerenciasPrecio'
+import type { MotivoPrecio } from '@/types'
+
+// Interruptor de despliegue/rollback: desactivado, el carrito envía sólo el formato antiguo y la lectura de tickets externos sigue disponible.
+const VENTA_FLEXIBLE = process.env.NEXT_PUBLIC_VENTA_FLEXIBLE === '1'
 
 export default function Home() {
   const [tab, setTab] = useState<Tab>('venta')
@@ -104,6 +112,7 @@ export default function Home() {
   const [devoluciones, setDevoluciones] = useState<Devolucion[]>([])
   const [devolucionesDetalle, setDevolucionesDetalle] = useState<DevolucionDetalle[]>([])
   const [personalizadasDevolucion, setPersonalizadasDevolucion] = useState<Venta[]>([])
+  const [externasDevolucion, setExternasDevolucion] = useState<Venta[]>([])
   const [ticketsCancelados, setTicketsCancelados] = useState<ReadonlySet<string>>(new Set())
   const [busqueda, setBusqueda] = useState('')
   const [busquedaVenta, setBusquedaVenta] = useState('')
@@ -117,7 +126,7 @@ export default function Home() {
   const [modoVenta, setModoVenta] = useState<'normal' | 'rapida'>('rapida')
   const [procesandoVenta, setProcesandoVenta] = useState(false)
   const procesandoVentaRef = useRef(false)
-  const intentosVentaRef = useRef(new Map<string, { idempotencyKey: string; metodoPago: string; efectivoRecibido: number | null; rpc: 'procesar_venta' | 'procesar_venta_mixta' | 'procesar_venta_pos' | 'procesar_venta_mixta_pos'; lineasNormales: Array<{ producto_id: string; cantidad: number }>; lineasPersonalizadas: Array<{ tipo_personalizado: string; cantidad: number; configuracion: Record<string, unknown> }> }>())
+  const intentosVentaRef = useRef(new Map<string, { idempotencyKey: string; metodoPago: string; efectivoRecibido: number | null; rpc: 'procesar_venta' | 'procesar_venta_mixta' | 'procesar_venta_pos' | 'procesar_venta_mixta_pos' } & ReturnType<typeof construirPayloadVenta>>())
   const ventaProcesandoIdRef = useRef<string | null>(null)
   const [resultadoVenta, setResultadoVenta] = useState<{ ticketId: string; folio: string; total: number } | null>(null)
   const [cobroEfectivoPOS, setCobroEfectivoPOS] = useState<{ ventaId: string; total: number } | null>(null)
@@ -194,7 +203,7 @@ export default function Home() {
     return () => { activo = false; window.clearInterval(temporizador) }
   }, [perfilUsuario])
 
-  const ventasDevolucion = useMemo(() => [...ventas, ...personalizadasDevolucion].filter((venta) => !ticketsCancelados.has(String(venta.ticket_id))), [ventas, personalizadasDevolucion, ticketsCancelados])
+  const ventasDevolucion = useMemo(() => [...ventas, ...personalizadasDevolucion, ...externasDevolucion].filter((venta) => !ticketsCancelados.has(String(venta.ticket_id))), [ventas, personalizadasDevolucion, externasDevolucion, ticketsCancelados])
   const ventaActiva = obtenerVentaActiva(estadoVentas)
   const carrito = ventaActiva.carrito
   const metodoPago = ventaActiva.metodoPago
@@ -437,20 +446,22 @@ export default function Home() {
   }
 
   const fetchMovimientos = async () => {
-    const [inventario, cabeceras, normales, personalizadas, ventasVoz] = await Promise.all([
+    const [inventario, cabeceras, normales, personalizadas, ventasVoz, externas, devolucionesTicket] = await Promise.all([
       supabase.from('movimientos_inventario').select('*').order('created_at', { ascending: false }),
       supabase.from('ventas_tickets').select('*').order('created_at', { ascending: false }),
       supabase.from('ventas').select('id,ticket_id,nombre,codigo,cantidad'),
       supabase.from('ventas_personalizadas').select('id,ticket_id,created_at,nombre,tipo_personalizado,cantidad,total,metodo_pago'),
       // Sin fastlook_venta_voz_lectura.sql falla por permisos y sólo se pierde la etiqueta.
       supabase.from('ventas_voz_operaciones').select('ticket_id').not('ticket_id', 'is', null),
+      supabase.from('ventas_catalogo_proveedores').select('id,ticket_id,nombre,codigo,cantidad'),
+      supabase.from('devoluciones').select('id,ticket_id,total_devuelto'),
     ])
-    const error = inventario.error || cabeceras.error || normales.error || personalizadas.error
+    const error = inventario.error || cabeceras.error || normales.error || personalizadas.error || devolucionesTicket.error || (esTablaNoDisponible(externas.error) ? null : externas.error)
     if (error) {
       alert('Error al cargar movimientos: ' + error.message)
       return
     }
-    setMovimientos(construirMovimientosCompletos((inventario.data || []) as MovimientoInventario[], cabeceras.data || [], normales.data || [], etiquetarVentasVoz(personalizadas.data || [], new Set((ventasVoz.data || []).map((v) => String(v.ticket_id))))))
+    setMovimientos(construirMovimientosCompletos((inventario.data || []) as MovimientoInventario[], cabeceras.data || [], normales.data || [], etiquetarVentasVoz(personalizadas.data || [], new Set((ventasVoz.data || []).map((v) => String(v.ticket_id)))), externas.data || [], devolucionesTicket.data || []))
   }
 
 
@@ -473,15 +484,17 @@ export default function Home() {
   }
 
   const fetchDevoluciones = async (silencioso = false) => {
-    const [cabeceras, detalles, detallesPersonalizados, personalizadas, cancelados, ventasVoz] = await Promise.all([
+    const [cabeceras, detalles, detallesPersonalizados, personalizadas, cancelados, ventasVoz, externas, detallesExternos] = await Promise.all([
       supabase.from('devoluciones').select('*').order('created_at', { ascending: false }),
       supabase.from('devoluciones_detalle').select('*').order('created_at', { ascending: false }),
       supabase.from('devoluciones_personalizadas_detalle').select('*').order('created_at', { ascending: false }),
       supabase.from('ventas_personalizadas').select('id,ticket_id,folio,created_at,nombre,tipo_personalizado,precio_unitario,cantidad,total,metodo_pago'),
       supabase.from('ventas_tickets').select('ticket_id').eq('estado', 'Cancelado'),
       supabase.from('ventas_voz_operaciones').select('ticket_id').not('ticket_id', 'is', null),
+      supabase.from('ventas_catalogo_proveedores').select('id,ticket_id,folio,created_at,codigo,nombre,proveedor_nombre,precio,costo_unitario,cantidad,total,metodo_pago'),
+      supabase.from('devoluciones_externas_detalle').select('*').order('created_at', { ascending: false }),
     ])
-    const fallo = cabeceras.error || detalles.error || personalizadas.error || cancelados.error
+    const fallo = cabeceras.error || detalles.error || personalizadas.error || cancelados.error || (esTablaNoDisponible(externas.error) ? null : externas.error) || (esTablaNoDisponible(detallesExternos.error) ? null : detallesExternos.error)
     if (fallo) {
       if (silencioso) throw new Error('No fue posible actualizar las devoluciones: ' + (fallo.message || 'Error desconocido.'))
       return
@@ -489,7 +502,8 @@ export default function Home() {
     // Sin la tabla nueva (migración pendiente) las personalizadas no se ofrecen; ventasVoz sólo aporta la etiqueta.
     const conPersonalizadas = !detallesPersonalizados.error
     setDevoluciones((cabeceras.data || []) as Devolucion[])
-    setDevolucionesDetalle([...((detalles.data || []) as DevolucionDetalle[]), ...detallesPersonalizadosDevolucion(conPersonalizadas ? detallesPersonalizados.data || [] : [])])
+    setDevolucionesDetalle([...((detalles.data || []) as DevolucionDetalle[]), ...detallesPersonalizadosDevolucion(conPersonalizadas ? detallesPersonalizados.data || [] : []), ...detallesExternosDevolucion(detallesExternos.data || [])])
+    setExternasDevolucion(lineasExternasDevolucion(externas.data || []))
     setPersonalizadasDevolucion(conPersonalizadas ? lineasPersonalizadasDevolucion(personalizadas.data || [], new Set((ventasVoz.data || []).map((v) => String(v.ticket_id)))) : [])
     setTicketsCancelados(new Set((cancelados.data || []).map((t) => String(t.ticket_id))))
   }
@@ -691,7 +705,7 @@ const fetchMovimientosClientes = async () => {
     if (producto.archivado === true) return { ok: false, mensaje: 'Este producto fue eliminado y no está disponible para venta.' }
     const ventaId = estadoVentasRef.current.activaId
     abandonarIntentoVenta(ventaId)
-    const resultado = agregarProductoAVenta(estadoVentasRef.current, ventaId, producto)
+    const resultado = agregarProductoAVenta(estadoVentasRef.current, ventaId, producto, Date.now(), !VENTA_FLEXIBLE)
     if (!resultado.ok) {
       if (mostrarAlertas) alert(resultado.mensaje)
       return resultado
@@ -754,7 +768,7 @@ const fetchMovimientosClientes = async () => {
     if (!item) return
     const stockTotal = esLineaInventario(item) ? Number(productosActivos.find((producto) => producto.id === item.producto.id)?.stock ?? 0) : 2147483647
     abandonarIntentoVenta(ventaId)
-    const resultado = cambiarCantidadEnVenta(estado, ventaId, id, item.cantidad + 1, stockTotal)
+    const resultado = cambiarCantidadEnVenta(estado, ventaId, id, item.cantidad + 1, stockTotal, Date.now(), !VENTA_FLEXIBLE)
     establecerVentasReconciliadas(resultado.estado)
     if (resultado.cantidad === item.cantidad) {
       if (mostrarAlerta) alert('No hay más stock disponible')
@@ -770,7 +784,7 @@ const fetchMovimientosClientes = async () => {
     if (!item) return
     const stockTotal = esLineaInventario(item) ? Number(productosActivos.find((producto) => producto.id === item.producto.id)?.stock ?? 0) : 2147483647
     abandonarIntentoVenta(ventaId)
-    establecerVentasReconciliadas(item.cantidad <= 1 ? eliminarProductoDeVenta(estado, ventaId, id) : cambiarCantidadEnVenta(estado, ventaId, id, item.cantidad - 1, stockTotal).estado)
+    establecerVentasReconciliadas(item.cantidad <= 1 ? eliminarProductoDeVenta(estado, ventaId, id) : cambiarCantidadEnVenta(estado, ventaId, id, item.cantidad - 1, stockTotal, Date.now(), !VENTA_FLEXIBLE).estado)
   }
 
   const cambiarCantidad = (id: string, cantidad: number, mostrarAlerta = true) => {
@@ -781,7 +795,7 @@ const fetchMovimientosClientes = async () => {
     if (!item) return
     const stockTotal = esLineaInventario(item) ? Number(productosActivos.find((producto) => producto.id === item.producto.id)?.stock ?? 0) : 2147483647
     abandonarIntentoVenta(ventaId)
-    const resultado = cambiarCantidadEnVenta(estado, ventaId, id, cantidad, stockTotal)
+    const resultado = cambiarCantidadEnVenta(estado, ventaId, id, cantidad, stockTotal, Date.now(), !VENTA_FLEXIBLE)
     if (mostrarAlerta && resultado.cantidad !== Math.trunc(cantidad)) alert('No hay suficiente stock')
     establecerVentasReconciliadas(resultado.estado)
   }
@@ -791,6 +805,40 @@ const fetchMovimientosClientes = async () => {
     const ventaId = estadoVentasRef.current.activaId
     abandonarIntentoVenta(ventaId)
     establecerVentasReconciliadas(eliminarProductoDeVenta(estadoVentasRef.current, ventaId, id))
+  }
+
+  const cambiarPrecioEnCarrito = (id: string, precio: number) => {
+    if (carritoActivoProcesando() || !Number.isFinite(precio) || precio < 0) return
+    const ventaId = estadoVentasRef.current.activaId
+    abandonarIntentoVenta(ventaId)
+    establecerEstadoVentas(actualizarVenta(estadoVentasRef.current, ventaId, (venta) => ({ ...venta, carrito: cambiarPrecioLinea(venta.carrito, id, precio), updatedAt: Date.now() })))
+  }
+
+  const cambiarMotivoEnCarrito = (id: string, motivo: MotivoPrecio | undefined) => {
+    if (carritoActivoProcesando()) return
+    const ventaId = estadoVentasRef.current.activaId
+    abandonarIntentoVenta(ventaId)
+    establecerEstadoVentas(actualizarVenta(estadoVentasRef.current, ventaId, (venta) => ({ ...venta, carrito: cambiarMotivoPrecioLinea(venta.carrito, id, motivo), updatedAt: Date.now() })))
+  }
+
+  const agregarCatalogoAlCarrito = (producto: ProductoCatalogoProveedor) => {
+    if (!VENTA_FLEXIBLE || producto.ambiguo) return
+    // Vinculado: se vende como producto FAST LOOK para descontar su inventario real.
+    if (producto.inventario_producto_id) {
+      const local = productos.find((p) => p.id === producto.inventario_producto_id)
+      if (!local) { setNotificacionOperacion({ tipo: 'error', mensaje: 'El producto vinculado no está disponible en el inventario cargado.' }); return }
+      agregarAlCarrito(local)
+      setTab('venta')
+      return
+    }
+    const precio = producto.precio_venta ?? producto.precio_venta_sugerido
+    if (precio == null) return
+    const ventaId = estadoVentasRef.current.activaId
+    abandonarIntentoVenta(ventaId)
+    const linea = crearLineaCatalogo({ idLocal: `catalogo:${producto.id}`, catalogoProductoId: producto.id, codigo: producto.codigo_original, nombre: producto.nombre, proveedor: producto.proveedor_nombre, imagenUrl: producto.imagen_url, imagenThumbnailUrl: producto.imagen_thumbnail_url, precioLista: Number(precio), precioUnitarioCobrado: Number(precio) })
+    establecerEstadoVentas(agregarLineaAVenta(estadoVentasRef.current, ventaId, linea))
+    setNotificacionOperacion({ tipo: 'ok', mensaje: `${producto.nombre} agregado como artículo externo.` })
+    setTab('venta')
   }
 
   const cancelarTicket = () => {
@@ -808,88 +856,47 @@ const fetchMovimientosClientes = async () => {
   }
 
 
-  const registrarMovimiento = async (
-    producto: Producto,
-    tipo: string,
-    cantidad: number,
-    stockAnterior: number,
-    stockNuevo: number,
-    nota: string
-  ) => {
-    const { error } = await supabase.from('movimientos_inventario').insert([
-      {
-        producto_id: producto.id,
-        codigo: producto.codigo,
-        nombre: producto.nombre,
-        tipo_movimiento: tipo,
-        cantidad,
-        stock_anterior: stockAnterior,
-        stock_nuevo: stockNuevo,
-        nota,
-      },
-    ])
-
-    if (error) {
-      alert('Error al registrar movimiento: ' + error.message)
-      return
-    }
-
-    fetchMovimientos()
-  }
-
   const entradaStock = async (producto: Producto, cantidad: number) => {
     if (usuarioRol !== 'Admin') {
       alert('Solo el administrador puede modificar stock')
       return
     }
 
-    if (cantidad <= 0) {
-      alert('La cantidad debe ser mayor a 0')
+    if (!Number.isInteger(cantidad) || cantidad <= 0) {
+      alert('La cantidad debe ser un número entero mayor a 0')
       return
     }
 
-    const stockAnterior = Number(producto.stock || 0)
-    const stockNuevo = stockAnterior + cantidad
-
-    const { error } = await supabase
-      .from('productos')
-      .update({ stock: stockNuevo })
-      .eq('id', producto.id)
+    // El servidor suma sobre el saldo bloqueado (aunque sea negativo) y registra el movimiento auditado.
+    const { data, error } = await supabase.rpc('recibir_mercancia_producto', { p_idempotency_key: crypto.randomUUID(), p_producto_id: producto.id, p_cantidad: cantidad, p_motivo: 'Entrada manual de inventario' })
 
     if (error) {
-      alert('Error al actualizar stock: ' + error.message)
+      alert(error.code === 'PGRST202' ? 'Falta aplicar fastlook_inventario_stock_negativo.sql para registrar entradas.' : 'Error al actualizar stock: ' + error.message)
       return
     }
 
-    await registrarMovimiento(
-      producto,
-      'Entrada',
-      cantidad,
-      stockAnterior,
-      stockNuevo,
-      'Entrada manual de inventario'
-    )
-
-    fetchProductos()
-    alert('Stock actualizado')
+    const resultado = data as { stock_anterior: number; stock_nuevo: number }
+    await Promise.all([fetchProductos(), fetchMovimientos()])
+    alert(`Stock actualizado: ${resultado.stock_anterior} → ${resultado.stock_nuevo}`)
   }
 
   const totalCarrito = resumirCarritoMixto(carrito).total
 
   const gananciaCarrito = carrito.reduce(
     (total, item) =>
-      total + (esLineaInventario(item) ? (Number(item.producto.precio) - Number(item.producto.costo || 0)) * item.cantidad : 0),
+      total + (esLineaInventario(item) ? (obtenerPrecioLinea(item) - Number(item.producto.costo || 0)) * item.cantidad : 0),
     0
   )
 
   const mensajesVenta: Record<string, string> = {
-    SIN_SESION: 'Tu sesión terminó. Inicia sesión nuevamente.', ROL_NO_PERMITIDO: 'Tu usuario no puede registrar ventas.', USUARIO_INACTIVO: 'Tu usuario está inactivo.', PERFIL_INVALIDO: 'Tu perfil no está completo.', IDEMPOTENCIA_INVALIDA: 'No fue posible identificar la operación.', METODO_INVALIDO: 'Selecciona un método de pago válido.', CARRITO_VACIO: 'Agrega al menos un producto.', LINEAS_INVALIDAS: 'Revisa los productos y cantidades.', PRODUCTO_INEXISTENTE: 'Uno de los productos ya no existe.', PRODUCTO_ARCHIVADO: 'Uno de los productos está archivado.', PRECIO_INVALIDO: 'Uno de los productos no tiene un precio válido.', STOCK_INVALIDO: 'Uno de los productos no tiene un stock válido.', STOCK_INSUFICIENTE: 'No hay stock suficiente. El inventario fue actualizado.', EFECTIVO_INSUFICIENTE: 'El total del servidor supera el efectivo recibido. Revisa el total e ingresa nuevamente el pago.',
+    SIN_SESION: 'Tu sesión terminó. Inicia sesión nuevamente.', ROL_NO_PERMITIDO: 'Tu usuario no puede registrar ventas.', USUARIO_INACTIVO: 'Tu usuario está inactivo.', PERFIL_INVALIDO: 'Tu perfil no está completo.', IDEMPOTENCIA_INVALIDA: 'No fue posible identificar la operación.', METODO_INVALIDO: 'Selecciona un método de pago válido.', CARRITO_VACIO: 'Agrega al menos un producto.', LINEAS_INVALIDAS: 'Revisa los productos y cantidades.', PRODUCTO_INEXISTENTE: 'Uno de los productos ya no existe.', PRODUCTO_ARCHIVADO: 'Uno de los productos está archivado.', PRECIO_INVALIDO: 'Uno de los productos no tiene un precio válido.', STOCK_INVALIDO: 'Uno de los productos no tiene un stock válido.', STOCK_INSUFICIENTE: 'No hay stock suficiente. El inventario fue actualizado.', EFECTIVO_INSUFICIENTE: 'El total del servidor supera el efectivo recibido. Revisa el total e ingresa nuevamente el pago.', MOTIVO_PRECIO_REQUERIDO: 'Indica el motivo de cada precio modificado.', CATALOGO_INEXISTENTE: 'Un artículo de proveedor ya no está publicado.', CATALOGO_VINCULADO: 'Un artículo de proveedor está vinculado al inventario; agrégalo como producto FAST LOOK.', PRECIO_CATALOGO_INVALIDO: 'Un artículo de proveedor no tiene precio vigente.', VERSION_INCOMPATIBLE: 'Esta función está temporalmente deshabilitada. Recarga la aplicación.',
   }
 
   const finalizarVenta = async (metodoSeleccionado = metodoPago, efectivoRecibido?: number): Promise<boolean> => {
     const ventaIdProcesada = estadoVentasRef.current.activaId
     const carritoProcesado = obtenerVentaActiva(estadoVentasRef.current).carrito
     if (carritoProcesado.length === 0) { setNotificacionOperacion({ tipo: 'error', mensaje: 'El carrito está vacío.' }); return false }
+    if (lineasSinMotivoPrecio(carritoProcesado).length) { setNotificacionOperacion({ tipo: 'error', mensaje: mensajesVenta.MOTIVO_PRECIO_REQUERIDO }); return false }
     if (!intentarBloquearCobro(procesandoVentaRef)) return false
     ventaProcesandoIdRef.current = ventaIdProcesada
     setProcesandoVenta(true); setNotificacionOperacion(null)
@@ -917,8 +924,8 @@ const fetchMovimientosClientes = async () => {
       intentosVentaRef.current.delete(ventaIdProcesada)
       establecerEstadoVentas(cerrarVentaPendiente(estadoVentasRef.current, ventaIdProcesada, crypto.randomUUID()))
       setCarritoAbierto(false)
-      const cantidadesVendidas = new Map(intento.lineasNormales.map((linea) => [linea.producto_id, linea.cantidad]))
-      setProductos((actuales) => actuales.map((producto) => cantidadesVendidas.has(producto.id) ? { ...producto, stock: Math.max(0, Number(producto.stock) - (cantidadesVendidas.get(producto.id) || 0)) } : producto))
+      const cantidadesVendidas = new Map(intento.lineasNormales.filter((linea) => linea.producto_id).map((linea) => [linea.producto_id as string, linea.cantidad]))
+      setProductos((actuales) => actuales.map((producto) => cantidadesVendidas.has(producto.id) ? { ...producto, stock: Number(producto.stock) - (cantidadesVendidas.get(producto.id) || 0) } : producto))
       setNotificacionOperacion({ tipo: 'ok', mensaje: `Venta registrada. Folio ${respuesta.folio}.` })
       void Promise.allSettled([fetchProductos(true), fetchVentas(true), fetchMovimientos()]).then((actualizaciones) => {
         if (actualizaciones.some((actualizacion) => actualizacion.status === 'rejected')) setNotificacionOperacion({ tipo: 'error', mensaje: `La venta ${respuesta.folio} está guardada, pero no se pudo actualizar toda la información en segundo plano.` })
@@ -995,16 +1002,21 @@ const fetchMovimientosClientes = async () => {
   }, [])
 
   const cargarTicketHistorico = async (ticketId: string) => {
-    const [normales, personalizadas, cabecera, ventaVoz] = await Promise.all([
+    const [normales, personalizadas, externas, cabecera, ventaVoz, devolucionesTicket] = await Promise.all([
       supabase.from('ventas').select('*').eq('ticket_id', ticketId).order('created_at', { ascending: true }),
       supabase.from('ventas_personalizadas').select('*').eq('ticket_id', ticketId).order('created_at', { ascending: true }),
+      supabase.from('ventas_catalogo_proveedores').select('*').eq('ticket_id', ticketId).order('created_at', { ascending: true }),
       supabase.from('ventas_tickets').select('*').eq('ticket_id', ticketId).maybeSingle(),
       supabase.from('ventas_voz_operaciones').select('ticket_id').eq('ticket_id', ticketId).maybeSingle(),
+      supabase.from('devoluciones').select('total_devuelto').eq('ticket_id', ticketId),
     ])
-    if (normales.error || personalizadas.error || cabecera.error) throw normales.error || personalizadas.error || cabecera.error
+    const errorExternas = esTablaNoDisponible(externas.error) ? null : externas.error
+    if (normales.error || personalizadas.error || errorExternas || cabecera.error || devolucionesTicket.error) throw normales.error || personalizadas.error || errorExternas || cabecera.error || devolucionesTicket.error
     const encabezado = (cabecera.data || {}) as Record<string, unknown>
     const meta = { efectivo_recibido: encabezado.efectivo_recibido ?? null, cambio: encabezado.cambio ?? null }
-    const lineas = [...(normales.data || []), ...etiquetarVentasVoz(personalizadas.data || [], new Set(ventaVoz.data ? [ticketId] : [])).map((linea) => ({ ...linea, precio: linea.precio_unitario, nombre: linea.nombre || linea.tipo_personalizado }))].map((linea) => ({ ...linea, ...meta })) as Venta[]
+    const lineasExternas = (externas.data || []) as Venta[]
+    const devuelto = (devolucionesTicket.data || []).reduce((suma, d) => suma + Number(d.total_devuelto || 0), 0)
+    const lineas = [...(normales.data || []), ...lineasExternas, ...etiquetarVentasVoz(personalizadas.data || [], new Set(ventaVoz.data ? [ticketId] : [])).map((linea) => ({ ...linea, precio: linea.precio_unitario, nombre: linea.nombre || linea.tipo_personalizado }))].map((linea) => ({ ...linea, ...meta })) as Venta[]
     if (!lineas.length) throw new Error('TICKET_SIN_LINEAS')
     const primera = lineas[0]
     const totalLineas = lineas.reduce((suma, linea) => suma + Number(linea.total ?? Number(linea.precio || 0) * Number(linea.cantidad || 0)), 0)
@@ -1017,15 +1029,15 @@ const fetchMovimientosClientes = async () => {
       total: Number(encabezado.total ?? totalLineas),
       efectivoRecibido: encabezado.efectivo_recibido == null ? null : Number(encabezado.efectivo_recibido),
       cambio: encabezado.cambio == null ? null : Number(encabezado.cambio),
-      lineas: lineas.map((linea) => { const precio = Number(linea.precio || 0); const cantidad = Number(linea.cantidad || 0); return { nombre: String(linea.nombre || 'Producto'), cantidad, precio, subtotal: Number(linea.total ?? precio * cantidad), personalizada: !linea.producto_id } }),
+      lineas: lineas.map((linea) => { const precio = Number(linea.precio || 0); const cantidad = Number(linea.cantidad || 0); return { nombre: String(linea.nombre || 'Producto'), cantidad, precio, subtotal: Number(linea.total ?? precio * cantidad), personalizada: !linea.producto_id && !linea.catalogo_producto_id } }),
     }
-    return { lineas, ticket }
+    return { lineas, ticket, devuelto }
   }
 
   const generarTicketPorId = async (ticketId: string) => {
     try {
-      const { lineas } = await cargarTicketHistorico(ticketId)
-      await generarPdfTicketHistorico(lineas)
+      const { lineas, devuelto } = await cargarTicketHistorico(ticketId)
+      await generarPdfTicketHistorico(lineas, devuelto)
       setNotificacionOperacion({ tipo: 'ok', mensaje: 'Ticket generado.' })
     } catch {
       setNotificacionOperacion({ tipo: 'error', mensaje: 'No se pudo generar el ticket.' })
@@ -1034,9 +1046,9 @@ const fetchMovimientosClientes = async () => {
 
   const reimprimirTicketPorId = async (ticketId: string) => {
     try {
-      const { ticket } = await cargarTicketHistorico(ticketId)
+      const { ticket, devuelto } = await cargarTicketHistorico(ticketId)
       const { servicioPOSLocal } = await import('@/lib/pos/servicioPOS')
-      await servicioPOSLocal.imprimirTicket(ticket)
+      await servicioPOSLocal.imprimirTicket(devuelto > 0 ? { ...ticket, devuelto: Math.round(devuelto * 100) / 100 } : ticket)
       setNotificacionOperacion({ tipo: 'ok', mensaje: 'Ticket reimpreso. El cajón no fue abierto.' })
     } catch {
       setNotificacionOperacion({ tipo: 'error', mensaje: 'No se pudo reimprimir. Verifica Fast Look POS Bridge.' })
@@ -1843,7 +1855,7 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
 
     <h3>Productos</h3>
 
-    <div className="fl-product-grid">{usuarioRol === 'Admin' && <TarjetaProductoPersonalizado onSeleccionar={() => setTab('productos-personalizados')} />}{listaVenta.visibles.map((p) => <TarjetaProducto key={p.id} producto={p} accion="Añadir al ticket" disabled={procesandoCarritoActivo || Number(p.stock) <= 0} onSeleccionar={(producto) => { agregarAlCarrito(producto) }} />)}</div>
+    <div className="fl-product-grid">{usuarioRol === 'Admin' && <TarjetaProductoPersonalizado onSeleccionar={() => setTab('productos-personalizados')} />}{listaVenta.visibles.map((p) => <TarjetaProducto key={p.id} producto={p} accion="Añadir al ticket" disabled={procesandoCarritoActivo || (!VENTA_FLEXIBLE && Number(p.stock) <= 0)} onSeleccionar={(producto) => { agregarAlCarrito(producto) }} />)}</div>
     <CargarMasProductos visibles={listaVenta.visibles.length} total={listaVenta.total} onCargarMas={listaVenta.cargarMas} />
 
     </>}
@@ -1853,7 +1865,7 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
           <header className="fl-cart-header"><div><span>FAST LOOK</span><h2 id="titulo-carrito">Venta actual</h2><small>{resumirCarritoMixto(carrito).unidades} artículos</small></div><button type="button" onClick={cerrarCarrito} aria-label="Cerrar carrito"><X /></button></header>
           <div className="fl-cart-lines">
             {carrito.length === 0 && <div className="fl-cart-empty"><ShoppingCart /><strong>Tu ticket está vacío</strong><span>Agrega productos para comenzar la venta.</span></div>}
-            {carrito.map((item) => { const id = claveLinea(item); const nombre = obtenerNombreLinea(item); const precio = obtenerPrecioLinea(item); const inventario = esLineaInventario(item); return <article key={id} className="fl-cart-line"><div className="fl-cart-line-image">{inventario && item.producto.imagen_url ? <ImagenProducto src={item.producto.imagen_url} miniatura={item.producto.imagen_thumbnail_url} usarPrincipal={item.producto.usar_imagen_principal} alt="" /> : <ShoppingCart aria-hidden="true" />}</div><div className="fl-cart-line-copy"><strong title={nombre}>{nombre}</strong><span>${precio.toFixed(2)} c/u</span>{!inventario && <small>Personalizado · Sin reserva de stock</small>}<div className="fl-cart-quantity"><button type="button" disabled={procesandoCarritoActivo} onClick={() => disminuirCantidad(id)} aria-label={`Restar ${nombre}`}><Minus /></button><input type="number" min="1" disabled={procesandoCarritoActivo} value={item.cantidad} onChange={(e) => cambiarCantidad(id, Number(e.target.value))} aria-label={`Cantidad de ${nombre}`} /><button type="button" disabled={procesandoCarritoActivo} onClick={() => aumentarCantidad(id)} aria-label={`Sumar ${nombre}`}><Plus /></button></div></div><div className="fl-cart-line-end"><strong>${(precio * item.cantidad).toFixed(2)}</strong><button type="button" className="fl-cart-remove" disabled={procesandoCarritoActivo} onClick={() => eliminarDelCarrito(id)} aria-label={`Eliminar ${nombre}`}><Trash2 /></button></div></article> })}
+            {carrito.map((item) => { const id = claveLinea(item); const nombre = obtenerNombreLinea(item); const precio = obtenerPrecioLinea(item); const inventario = esLineaInventario(item); return <article key={id} className={`fl-cart-line${esLineaCatalogo(item) ? ' is-supplier' : ''}`}><div className="fl-cart-line-image">{inventario && item.producto.imagen_url ? <ImagenProducto src={item.producto.imagen_url} miniatura={item.producto.imagen_thumbnail_url} usarPrincipal={item.producto.usar_imagen_principal} alt="" /> : <ShoppingCart aria-hidden="true" />}</div><div className="fl-cart-line-copy"><strong title={nombre}>{nombre}</strong>{esLineaPersonalizada(item) || !VENTA_FLEXIBLE ? <span>${precio.toFixed(2)} c/u</span> : <label className="fl-cart-price">Precio unitario<input type="number" inputMode="decimal" min="0" step="0.01" disabled={procesandoCarritoActivo} value={precio} onChange={(e) => cambiarPrecioEnCarrito(id, Number(e.target.value))} /></label>}{!esLineaPersonalizada(item) && precioModificadoLinea(item) && <label className="fl-cart-price">Motivo del precio<select disabled={procesandoCarritoActivo} value={item.motivoPrecio || ''} onChange={(e) => cambiarMotivoEnCarrito(id, (e.target.value || undefined) as MotivoPrecio | undefined)} aria-invalid={!item.motivoPrecio}><option value="">Selecciona…</option>{MOTIVOS_PRECIO.map((m) => <option key={m.valor} value={m.valor}>{m.etiqueta}</option>)}</select></label>}{esLineaCatalogo(item) && <small>Proveedor · Sin movimiento de inventario</small>}{inventario && Number(item.producto.stock) <= 0 && <small>Se venderá con existencia negativa</small>}<div className="fl-cart-quantity"><button type="button" disabled={procesandoCarritoActivo} onClick={() => disminuirCantidad(id)} aria-label={`Restar ${nombre}`}><Minus /></button><input type="number" min="1" disabled={procesandoCarritoActivo} value={item.cantidad} onChange={(e) => cambiarCantidad(id, Number(e.target.value))} aria-label={`Cantidad de ${nombre}`} /><button type="button" disabled={procesandoCarritoActivo} onClick={() => aumentarCantidad(id)} aria-label={`Sumar ${nombre}`}><Plus /></button></div></div><div className="fl-cart-line-end"><strong>${(precio * item.cantidad).toFixed(2)}</strong><button type="button" className="fl-cart-remove" disabled={procesandoCarritoActivo} onClick={() => eliminarDelCarrito(id)} aria-label={`Eliminar ${nombre}`}><Trash2 /></button></div></article> })}
           </div>
           <footer className="fl-cart-summary"><fieldset disabled={procesandoCarritoActivo}><legend>Método de pago</legend><div className="fl-cart-payments">{([{ valor: 'Efectivo', icono: Banknote }, { valor: 'Transferencia', icono: Landmark }, { valor: 'Tarjeta', icono: CreditCard }] as const).map(({ valor, icono: Icono }) => <button type="button" key={valor} className={metodoPago === valor ? 'is-selected' : ''} aria-pressed={metodoPago === valor} onClick={() => { abandonarIntentoVenta(); setMetodoPago(valor) }}><Icono /><span>{valor}</span></button>)}</div></fieldset><div className="fl-cart-total"><span>Total</span><strong>${totalCarrito.toFixed(2)}</strong>{usuarioRol === 'Admin' && <small>Ganancia estimada: ${gananciaCarrito.toFixed(2)}</small>}</div><button type="button" className="fl-cart-charge" onClick={() => void solicitarFinalizarVenta()} disabled={procesandoCarritoActivo || carrito.length === 0}>{procesandoCarritoActivo ? 'Guardando venta…' : `Cobrar $${totalCarrito.toFixed(2)}`}</button><div className="fl-cart-secondary"><button type="button" onClick={enviarWhatsApp} disabled={procesandoCarritoActivo || carrito.length === 0}>Enviar por WhatsApp</button><button type="button" className="is-danger" onClick={cancelarTicket} disabled={procesandoCarritoActivo || carrito.length === 0}>Cancelar ticket</button></div></footer>
         </div>
@@ -1865,6 +1877,7 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
 
         {tab === 'inventario' && (
           <>
+            {VENTA_FLEXIBLE && usuarioRol === 'Admin' && <SugerenciasPrecio onAprobado={() => fetchProductos()} />}
             <div ref={formRef} className="fl-inventory-form-card" tabIndex={-1}>
               <div className="fl-inventory-form-header">
                 <button
@@ -1903,7 +1916,7 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
               <label><span>Nombre</span><input ref={primerCampoInventarioRef} style={styles.input} placeholder="Nombre" value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} /></label>
               <label><span>Tipo de producto</span><select style={styles.input} value={form.tipo} onChange={(e) => { setForm({ ...form, tipo: e.target.value }); setTipoModificadoManualmente(true); if (e.target.value !== 'OTROS') setTipoPersonalizado('') }}><option value="">Selecciona un tipo</option>{tiposProducto.map((tipo) => <option key={tipo} value={tipo}>{tipo}</option>)}</select></label>
               <label><span>Precio de venta</span><input style={styles.input} placeholder="Precio de venta" value={form.precio} onChange={(e) => setForm({ ...form, precio: e.target.value })} /></label>
-              <label><span>Stock</span><input style={styles.input} placeholder="Stock" value={form.stock} onChange={(e) => setForm({ ...form, stock: e.target.value })} /></label>
+              <label><span>Stock</span><input style={styles.input} placeholder="Stock" value={form.stock} disabled={Boolean(form.id)} title={form.id ? 'Usa "Añadir stock" o "Cambiar stock a…" para modificar existencias.' : undefined} onChange={(e) => setForm({ ...form, stock: e.target.value })} /></label>
               <div className="fl-product-photo-field"><span>Foto</span><SelectorImagen imagenUrl={form.imagen_url} deshabilitado={subiendoImagen} onSeleccionar={subirImagenProducto} onEliminar={() => setForm((actual) => ({ ...actual, imagen_url: '', imagen_thumbnail_url: '', usar_imagen_principal: false }))} />{subiendoImagen && <div className="fl-image-notice" role="status">{faseImagen}</div>}{notificacionImagen && <div className={`fl-image-notice is-${notificacionImagen.tipo}`} role="status">{notificacionImagen.mensaje}</div>}</div>
               {usuarioRol === 'Admin' && columnaFuenteImagen && form.id && form.imagen_url && form.imagen_thumbnail_url && <fieldset className="fl-image-source-picker"><legend>Imagen para tarjetas</legend><div><label><input type="radio" name="fuente-producto" checked={!form.usar_imagen_principal} onChange={() => setForm({ ...form, usar_imagen_principal: false })} /><span>Miniatura</span><span className="fl-image-source-preview"><ImagenProducto src={form.imagen_thumbnail_url} alt="Vista previa de la miniatura" /></span></label><label><input type="radio" name="fuente-producto" checked={Boolean(form.usar_imagen_principal)} onChange={() => setForm({ ...form, usar_imagen_principal: true })} /><span>Imagen principal</span><span className="fl-image-source-preview"><ImagenProducto src={form.imagen_url} alt="Vista previa de la imagen principal" /></span></label></div><small>Elige la principal si la miniatura existente está recortada.</small></fieldset>}
             </div>
@@ -2117,6 +2130,7 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
         {tab === 'entregas-proximas' && <EntregasProximas />}
         {tab === 'usuarios' && <GestionUsuarios />}
         {tab === 'productos-personalizados' && usuarioRol === 'Admin' && <CalculadorasPersonalizadas onAgregar={agregarPersonalizado} />}
+        {VENTA_FLEXIBLE && tab === 'catalogo-proveedores' && <CatalogoProveedores onAgregar={agregarCatalogoAlCarrito} ventaHabilitada />}
         {tab === 'interphone' && <Interphone usuarioId={perfilUsuario.id} usuarioNombre={perfilUsuario.nombre} usuarioRol={usuarioRol} />}
         {tab === 'faltantes' && <Faltantes />}
         {tab === 'pos-config' && usuarioRol === 'Admin' && esDesktopPOS && <ConfiguracionPOS />}

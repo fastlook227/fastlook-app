@@ -28,8 +28,23 @@ export const detallesPersonalizadosDevolucion = (filas: Fila[]): DevolucionDetal
   codigo: 'Personalizado', nombre: String(fila.nombre || 'Producto personalizado'), cantidad: numero(fila.cantidad), precio_unitario_original: numero(fila.precio_unitario_original), subtotal_devuelto: numero(fila.subtotal_devuelto), created_at: String(fila.created_at),
 }))
 
+// Las líneas de proveedor usan "e:"; viajan en p_lineas como {venta_externa_id} y nunca reponen stock.
+export const PREFIJO_EXTERNA = 'e:'
+
+export const lineasExternasDevolucion = (filas: Fila[]): Venta[] => filas.map((fila) => ({
+  id: `${PREFIJO_EXTERNA}${fila.id}`, created_at: String(fila.created_at), ticket_id: fila.ticket_id ? String(fila.ticket_id) : null, folio: fila.folio ? String(fila.folio) : null,
+  producto_id: null, codigo: String(fila.codigo || 'Proveedor'), nombre: `${String(fila.nombre || 'Artículo de proveedor')} · ${String(fila.proveedor_nombre || 'Proveedor')}`,
+  precio: numero(fila.precio), costo_unitario: fila.costo_unitario == null ? null : numero(fila.costo_unitario), cantidad: numero(fila.cantidad), total: numero(fila.total), metodo_pago: fila.metodo_pago ? String(fila.metodo_pago) : undefined,
+}))
+
+export const detallesExternosDevolucion = (filas: Fila[]): DevolucionDetalle[] => filas.map((fila) => ({
+  id: String(fila.id), devolucion_id: String(fila.devolucion_id), venta_id: `${PREFIJO_EXTERNA}${fila.venta_externa_id}`, producto_id: `${PREFIJO_EXTERNA}${fila.catalogo_producto_id}`,
+  codigo: String(fila.codigo || 'Proveedor'), nombre: String(fila.nombre || 'Artículo de proveedor'), cantidad: numero(fila.cantidad), precio_unitario_original: numero(fila.precio_unitario_original), subtotal_devuelto: numero(fila.subtotal_devuelto), created_at: String(fila.created_at),
+}))
+
 export const separarLineasDevolucion = (lineas: Array<{ venta_id: string; cantidad: number }>) => ({
-  normales: lineas.filter((linea) => !linea.venta_id.startsWith(PREFIJO_PERSONALIZADA)),
+  normales: lineas.filter((linea) => !linea.venta_id.startsWith(PREFIJO_PERSONALIZADA) && !linea.venta_id.startsWith(PREFIJO_EXTERNA)),
+  externas: lineas.filter((linea) => linea.venta_id.startsWith(PREFIJO_EXTERNA)).map((linea) => ({ venta_externa_id: linea.venta_id.slice(PREFIJO_EXTERNA.length), cantidad: linea.cantidad })),
   personalizadas: lineas.filter((linea) => linea.venta_id.startsWith(PREFIJO_PERSONALIZADA)).map((linea) => ({ venta_personalizada_id: linea.venta_id.slice(PREFIJO_PERSONALIZADA.length), cantidad: linea.cantidad })),
 })
 
