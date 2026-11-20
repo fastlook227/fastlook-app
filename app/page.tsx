@@ -27,7 +27,7 @@ import { obtenerFechaActualFastLook, obtenerFechaLocal } from '@/utils/fechas'
 import { filtrarProductosPorBusqueda } from '@/utils/busqueda'
 import { aplicarFiltrosProductos, crearFiltrosProductosVacios, esProductoStockBajo } from '@/utils/filtrosProductos'
 import { intentarBloquearCobro, liberarBloqueoCobro } from '@/utils/ventaRapida'
-import { agregarLineaAVenta, agregarPersonalizadoAVenta, agregarProductoAVenta, agregarVentaPendiente, actualizarVenta, cambiarCantidadEnVenta, cerrarVentaPendiente, crearEstadoVentasInicial, eliminarProductoDeVenta, obtenerVentaActiva, reconciliarVentasPendientes, restaurarVentasPendientes, type EstadoVentasPendientes } from '@/utils/ventasPendientes'
+import { agregarLineaAVenta, agregarPersonalizadoAVenta, agregarProductoAVenta, agregarVentaPendiente, motivoProductoNoVendible, actualizarVenta, cambiarCantidadEnVenta, cerrarVentaPendiente, crearEstadoVentasInicial, eliminarProductoDeVenta, obtenerVentaActiva, reconciliarVentasPendientes, restaurarVentasPendientes, type EstadoVentasPendientes } from '@/utils/ventasPendientes'
 import { cambiarMotivoPrecioLinea, cambiarPrecioLinea, claveLinea, construirPayloadVenta, crearLineaCatalogo, esLineaCatalogo, esLineaInventario, esLineaPersonalizada, lineasSinMotivoPrecio, MOTIVOS_PRECIO, obtenerNombreLinea, obtenerPrecioLinea, precioModificadoLinea, resumirCarritoMixto, seleccionarRpcVenta, type NuevaLineaPersonalizada } from '@/utils/carritoMixto'
 import { puedeAccederCorteCaja } from '@/lib/permisos/corteCaja'
 import { generarTextoTicket } from '@/utils/ticket'
@@ -948,7 +948,7 @@ const fetchMovimientosClientes = async () => {
     const resultado = agregarAlCarrito(producto, false)
     mostrarFeedbackEscaneo(resultado.ok
       ? { tipo: 'ok', mensaje: 'Agregado', nombre: producto.nombre, cantidad: resultado.cantidad }
-      : { tipo: 'error', mensaje: Number(producto.stock) <= 0 ? 'Producto sin stock' : resultado.mensaje.includes('máximo') ? `Stock máximo disponible: ${producto.stock}` : resultado.mensaje, nombre: producto.nombre })
+      : { tipo: 'error', mensaje: !VENTA_FLEXIBLE && Number(producto.stock) <= 0 ? 'Producto sin stock' : !VENTA_FLEXIBLE && resultado.mensaje.includes('máximo') ? `Stock máximo disponible: ${producto.stock}` : resultado.mensaje, nombre: producto.nombre })
   }
 
   const solicitarFinalizarVenta = async () => {
@@ -1822,6 +1822,7 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
       onBusqueda={setBusquedaVenta}
       onFiltros={setFiltrosVenta}
       onAgregar={agregarProductoVentaRapida}
+      limitarStock={!VENTA_FLEXIBLE}
       onEscanear={(elemento) => abrirScanner('venta', elemento)}
       onScannerContinuo={setScannerContinuo}
       onEnter={() => manejarCodigoDetectado(busquedaVenta, 'venta')}
@@ -1855,7 +1856,7 @@ const abrirWhatsAppCliente = (cliente: Cliente) => {
 
     <h3>Productos</h3>
 
-    <div className="fl-product-grid">{usuarioRol === 'Admin' && <TarjetaProductoPersonalizado onSeleccionar={() => setTab('productos-personalizados')} />}{listaVenta.visibles.map((p) => <TarjetaProducto key={p.id} producto={p} accion="Añadir al ticket" disabled={procesandoCarritoActivo || (!VENTA_FLEXIBLE && Number(p.stock) <= 0)} onSeleccionar={(producto) => { agregarAlCarrito(producto) }} />)}</div>
+    <div className="fl-product-grid">{usuarioRol === 'Admin' && <TarjetaProductoPersonalizado onSeleccionar={() => setTab('productos-personalizados')} />}{listaVenta.visibles.map((p) => <TarjetaProducto key={p.id} producto={p} accion="Añadir al ticket" disabled={procesandoCarritoActivo || motivoProductoNoVendible(p, !VENTA_FLEXIBLE) !== null} onSeleccionar={(producto) => { agregarAlCarrito(producto) }} />)}</div>
     <CargarMasProductos visibles={listaVenta.visibles.length} total={listaVenta.total} onCargarMas={listaVenta.cargarMas} />
 
     </>}

@@ -6,6 +6,7 @@ import type { Producto, Venta } from '@/types'
 import type { FiltrosProductos as EstadoFiltrosProductos } from '@/utils/filtrosProductos'
 import { contarFiltrosActivos } from '@/utils/filtrosProductos'
 import { obtenerProductosFrecuentes, obtenerUltimosProductosVendidos } from '@/utils/ventaRapida'
+import { motivoProductoNoVendible } from '@/utils/ventasPendientes'
 import FiltrosProductos from '@/components/FiltrosProductos'
 import TarjetaProducto from '@/components/TarjetaProducto'
 import TarjetaProductoPersonalizado from '@/components/TarjetaProductoPersonalizado'
@@ -25,6 +26,7 @@ interface Props {
   onBusqueda: (valor: string) => void
   onFiltros: (filtros: EstadoFiltrosProductos) => void
   onAgregar: (producto: Producto) => void
+  limitarStock: boolean
   onEscanear: (elemento: HTMLElement) => void
   onScannerContinuo: (activo: boolean) => void
   onEnter: () => void
@@ -52,15 +54,15 @@ export default function VentaRapida(props: Props) {
 
       {props.feedback && <div className={`fl-quick-feedback is-${props.feedback.tipo}`} role="status"><strong>{props.feedback.mensaje}</strong>{props.feedback.nombre && <span>{props.feedback.nombre}</span>}{props.feedback.cantidad !== undefined && <small>Cantidad: {props.feedback.cantidad}</small>}</div>}
 
-      {!hayExploracion && frecuentes.length > 0 && <CarruselProductos titulo="Frecuentes" productos={frecuentes} onAgregar={agregar} mostrarPersonalizado={props.esAdmin} onAbrirPersonalizado={props.onAbrirPersonalizado} />}
-      {!hayExploracion && ultimos.length > 0 && <CarruselProductos titulo="Últimos vendidos" productos={ultimos} onAgregar={agregar} mostrarPersonalizado={props.esAdmin && frecuentes.length === 0} onAbrirPersonalizado={props.onAbrirPersonalizado} />}
+      {!hayExploracion && frecuentes.length > 0 && <CarruselProductos titulo="Frecuentes" productos={frecuentes} onAgregar={agregar} limitarStock={props.limitarStock} procesando={props.procesando} mostrarPersonalizado={props.esAdmin} onAbrirPersonalizado={props.onAbrirPersonalizado} />}
+      {!hayExploracion && ultimos.length > 0 && <CarruselProductos titulo="Últimos vendidos" productos={ultimos} onAgregar={agregar} limitarStock={props.limitarStock} procesando={props.procesando} mostrarPersonalizado={props.esAdmin && frecuentes.length === 0} onAbrirPersonalizado={props.onAbrirPersonalizado} />}
       {!hayExploracion && frecuentes.length === 0 && ultimos.length === 0 && props.esAdmin && <section className="fl-quick-products"><h3>Productos</h3><div><TarjetaProductoPersonalizado onSeleccionar={props.onAbrirPersonalizado} /></div></section>}
 
-      {hayExploracion && <section className="fl-quick-results"><header><h3>Resultados</h3><span>{props.resultados.length}</span></header><div className="fl-product-grid">{props.esAdmin && <TarjetaProductoPersonalizado onSeleccionar={props.onAbrirPersonalizado} />}{listaResultados.visibles.map((producto) => <TarjetaProducto key={producto.id} producto={producto} mostrarCodigo accion="Agregar" disabled={Number(producto.stock) <= 0 || props.procesando} onSeleccionar={agregar} />)}</div>{props.resultados.length > 0 ? <CargarMasProductos visibles={listaResultados.visibles.length} total={listaResultados.total} onCargarMas={listaResultados.cargarMas} /> : <div className="fl-quick-empty"><strong>No encontramos productos para: “{props.busqueda}”</strong><button type="button" onClick={() => props.onBusqueda('')}>Limpiar búsqueda</button></div>}</section>}
+      {hayExploracion && <section className="fl-quick-results"><header><h3>Resultados</h3><span>{props.resultados.length}</span></header><div className="fl-product-grid">{props.esAdmin && <TarjetaProductoPersonalizado onSeleccionar={props.onAbrirPersonalizado} />}{listaResultados.visibles.map((producto) => <TarjetaProducto key={producto.id} producto={producto} mostrarCodigo accion="Agregar" disabled={motivoProductoNoVendible(producto, props.limitarStock) !== null || props.procesando} onSeleccionar={agregar} />)}</div>{props.resultados.length > 0 ? <CargarMasProductos visibles={listaResultados.visibles.length} total={listaResultados.total} onCargarMas={listaResultados.cargarMas} /> : <div className="fl-quick-empty"><strong>No encontramos productos para: “{props.busqueda}”</strong><button type="button" onClick={() => props.onBusqueda('')}>Limpiar búsqueda</button></div>}</section>}
     </div>
   </div>
 }
 
-function CarruselProductos({ titulo, productos, onAgregar, mostrarPersonalizado, onAbrirPersonalizado }: { titulo: string; productos: readonly Producto[]; onAgregar: (producto: Producto) => void; mostrarPersonalizado: boolean; onAbrirPersonalizado: () => void }) {
-  return <section className="fl-quick-products"><h3>{titulo}</h3><div>{mostrarPersonalizado && <TarjetaProductoPersonalizado onSeleccionar={onAbrirPersonalizado} />}{productos.map((producto) => <TarjetaProducto key={producto.id} producto={producto} disabled={Number(producto.stock) <= 0} onSeleccionar={onAgregar} />)}</div></section>
+function CarruselProductos({ titulo, productos, onAgregar, limitarStock, procesando, mostrarPersonalizado, onAbrirPersonalizado }: { titulo: string; productos: readonly Producto[]; onAgregar: (producto: Producto) => void; limitarStock: boolean; procesando: boolean; mostrarPersonalizado: boolean; onAbrirPersonalizado: () => void }) {
+  return <section className="fl-quick-products"><h3>{titulo}</h3><div>{mostrarPersonalizado && <TarjetaProductoPersonalizado onSeleccionar={onAbrirPersonalizado} />}{productos.map((producto) => <TarjetaProducto key={producto.id} producto={producto} disabled={motivoProductoNoVendible(producto, limitarStock) !== null || procesando} onSeleccionar={onAgregar} />)}</div></section>
 }

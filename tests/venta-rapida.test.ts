@@ -74,3 +74,51 @@ test('venta exitosa limpia carrito y error lo conserva', () => {
   assert.deepEqual(carritoDespuesDeCobro(carrito, true), [])
   assert.deepEqual(carritoDespuesDeCobro(carrito, false), carrito)
 })
+
+// --- Regresión: Venta rápida y Generar venta comparten la misma regla de stock según NEXT_PUBLIC_VENTA_FLEXIBLE ---
+// @ts-expect-error Node ejecuta TypeScript nativo y requiere la extensión explícita.
+import { agregarProductoAVenta, cambiarCantidadEnVenta, crearEstadoVentasInicial, motivoProductoNoVendible } from '../utils/ventasPendientes.ts'
+import { readFileSync } from 'node:fs'
+
+test('interruptor activado: stock positivo, cero y negativo se pueden agregar e incrementar sin tope', () => {
+  for (const stock of [5, 0, -3]) {
+    const p = producto(`flex${stock}`, { stock })
+    assert.equal(motivoProductoNoVendible(p, false), null)
+    let estado = crearEstadoVentasInicial()
+    for (let i = 1; i <= 7; i++) {
+      const r = agregarProductoAVenta(estado, estado.activaId, p, 1, false)
+      assert.equal(r.ok, true); assert.equal(r.cantidad, i); estado = r.estado
+    }
+    const subida = cambiarCantidadEnVenta(estado, estado.activaId, p.id, 50, stock, 1, false)
+    assert.equal(subida.cantidad, 50)
+  }
+})
+
+test('interruptor desactivado: conserva el comportamiento antiguo (cero y negativo bloquean, tope por existencias)', () => {
+  assert.equal(motivoProductoNoVendible(producto('a', { stock: 0 }), true), 'Producto sin stock')
+  assert.equal(motivoProductoNoVendible(producto('b', { stock: -2 }), true), 'Producto sin stock')
+  assert.equal(motivoProductoNoVendible(producto('c', { stock: 2 }), true), null)
+  const p = producto('d', { stock: 1 })
+  const primera = agregarProductoAVenta(crearEstadoVentasInicial(), 'venta-inicial', p, 1, true)
+  assert.equal(primera.ok, true)
+  assert.equal(agregarProductoAVenta(primera.estado, 'venta-inicial', p, 1, true).ok, false)
+  assert.equal(agregarProductoAVenta(crearEstadoVentasInicial(), 'venta-inicial', producto('e', { stock: 0 }), 1, true).ok, false)
+})
+
+test('archivados y datos inválidos nunca se agregan, con o sin interruptor', () => {
+  const invalidos = [producto('f', { archivado: true }), producto('g', { precio: -1 }), producto('h', { precio: Number.NaN }), producto('i', { stock: Number.NaN }), producto('j', { stock: null as unknown as number })]
+  for (const limitar of [false, true]) for (const p of invalidos) {
+    assert.notEqual(motivoProductoNoVendible(p, limitar), null)
+    assert.equal(agregarProductoAVenta(crearEstadoVentasInicial(), 'venta-inicial', p, 1, limitar).ok, false)
+  }
+})
+
+test('Venta rápida usa la regla única y ya no bloquea por stock de forma fija', () => {
+  const rapida = readFileSync(new URL('../components/VentaRapida.tsx', import.meta.url), 'utf8')
+  const pagina = readFileSync(new URL('../app/page.tsx', import.meta.url), 'utf8')
+  assert.doesNotMatch(rapida, /Number\(producto\.stock\)\s*<=\s*0/)
+  assert.equal((rapida.match(/motivoProductoNoVendible\(producto, (props\.)?limitarStock\) !== null/g) || []).length, 2)
+  assert.match(pagina, /limitarStock=\{!VENTA_FLEXIBLE\}/)
+  assert.match(pagina, /motivoProductoNoVendible\(p, !VENTA_FLEXIBLE\) !== null/)
+  assert.match(pagina, /!VENTA_FLEXIBLE && Number\(producto\.stock\) <= 0 \? 'Producto sin stock'/)
+})
