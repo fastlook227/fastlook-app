@@ -3,7 +3,10 @@ import { z } from 'zod'
 import { ErrorAutenticacion, exigirAdministrador, obtenerPerfilAutenticado } from '@/lib/auth/servidor'
 import { supabaseAnonKey, supabaseUrl } from '@/lib/supabase'
 
+// Única forma aceptada de foto de proveedor (la base de datos repite la validación en _imagen_catalogo_valida).
+const UrlImagen = z.string().max(500).regex(/^https:\/\/[a-z0-9.-]+\/storage\/v1\/object\/public\/catalogo-proveedores\/(CEDIS|REMO|AQUILA)\/[0-9a-f]{16}-(principal|miniatura)\.webp$/)
 const Registro = z.object({
+  imagenUrl: UrlImagen.nullable().optional(), imagenThumbnailUrl: UrlImagen.nullable().optional(),
   codigoOriginal: z.string().trim().min(1).max(160), codigoBarras: z.string().trim().max(160).nullable().optional(),
   nombre: z.string().trim().min(1).max(300), descripcion: z.string().max(4000).optional(), categoria: z.string().max(160).optional(),
   marca: z.string().max(160).optional(), compatibilidades: z.array(z.string().max(160)).max(200).optional(),
@@ -19,6 +22,10 @@ const Operacion = z.discriminatedUnion('operacion', [
   z.object({ operacion: z.literal('PUBLICAR'), importacionId: z.string().uuid() }),
   z.object({ operacion: z.literal('NIVEL'), proveedor: z.enum(['REMO','CEDIS','AQUILA']), nivel: z.string().trim().max(100) }),
   z.object({ operacion: z.literal('VINCULAR'), catalogoProductoId: z.string().uuid(), productoId: z.string().uuid() }),
+  // productoId null = el artículo del proveedor es distinto de lo que hay en inventario (puede venderse como externo).
+  z.object({ operacion: z.literal('RESOLVER'), registroId: z.string().uuid(), productoId: z.string().uuid().nullable() }),
+  z.object({ operacion: z.literal('REVISION'), importacionId: z.string().uuid() }),
+  z.object({ operacion: z.literal('IMAGEN'), proveedor: z.enum(['REMO','CEDIS','AQUILA']), codigo: z.string().trim().min(1).max(160), imagenUrl: UrlImagen, imagenThumbnailUrl: UrlImagen.nullable() }),
 ])
 
 const cliente = (request: Request) => createClient(supabaseUrl, supabaseAnonKey, {
@@ -66,7 +73,13 @@ export async function POST(request: Request) {
           ? cliente(request).rpc('publicar_importacion_catalogo', { p_importacion_id: entrada.data.importacionId })
           : entrada.data.operacion === 'NIVEL'
             ? cliente(request).rpc('configurar_nivel_catalogo_proveedor', { p_proveedor: entrada.data.proveedor, p_nivel: entrada.data.nivel })
-            : cliente(request).rpc('vincular_catalogo_inventario', { p_catalogo_producto_id: entrada.data.catalogoProductoId, p_producto_id: entrada.data.productoId })
+            : entrada.data.operacion === 'RESOLVER'
+              ? cliente(request).rpc('resolver_coincidencia_revision_catalogo', { p_registro_id: entrada.data.registroId, p_producto_id: entrada.data.productoId })
+              : entrada.data.operacion === 'REVISION'
+                ? cliente(request).rpc('obtener_revision_importacion_catalogo', { p_importacion_id: entrada.data.importacionId })
+              : entrada.data.operacion === 'IMAGEN'
+                ? cliente(request).rpc('asignar_imagen_catalogo', { p_proveedor: entrada.data.proveedor, p_codigo: entrada.data.codigo, p_imagen_url: entrada.data.imagenUrl, p_miniatura_url: entrada.data.imagenThumbnailUrl })
+                : cliente(request).rpc('vincular_catalogo_inventario', { p_catalogo_producto_id: entrada.data.catalogoProductoId, p_producto_id: entrada.data.productoId })
     const { data, error } = await solicitud
     if (error) throw error
     return Response.json({ ok: true, resultado: data })

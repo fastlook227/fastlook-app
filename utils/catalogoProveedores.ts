@@ -2,7 +2,8 @@ import type { ProductoCatalogoProveedor, RegistroImportacionProveedor } from '..
 
 export const aCentavosProveedor = (valor: number) => Math.round((Number(valor) + Number.EPSILON) * 100)
 export const desdeCentavosProveedor = (centavos: number) => centavos / 100
-export const precioSugeridoProveedor = (costo: number) => desdeCentavosProveedor(Math.round(aCentavosProveedor(costo) * 130 / 100))
+// Política decimal única con el servidor (numeric) y los scripts: centavos enteros, mitad hacia arriba (16.15 → 21.00, no 20.99).
+export const precioSugeridoProveedor = (costo: number) => desdeCentavosProveedor(Math.floor((aCentavosProveedor(costo) * 130 + 50) / 100))
 export const costoConDescuentoProveedor = (precioBase: number, descuento: number) =>
   desdeCentavosProveedor(Math.round(aCentavosProveedor(precioBase) * (100 - descuento) / 100))
 
@@ -53,6 +54,11 @@ export const buscarCodigoCatalogoExacto = (productos: readonly ProductoCatalogoP
   return productos.filter((producto) => !producto.ambiguo && [producto.codigo_barras, producto.codigo_original]
     .some((valor) => valor && normalizarCodigoProveedor(valor) === buscado))
 }
+
+// Columnas que el navegador puede leer (fastlook_catalogo_piloto_seguro.sql retira costo_unitario a authenticated).
+// Nunca usar select('*') en estas tablas: con privilegios por columna PostgREST lo rechaza. El Corte lee costos en el servidor.
+export const COLUMNAS_VENTA_EXTERNA = 'id,ticket_id,folio,created_at,catalogo_producto_id,proveedor_id,codigo,nombre,proveedor_nombre,precio_lista,precio,precio_modificado,motivo_precio,nota_precio,descuento_conjunto,cantidad,total,metodo_pago'
+export const COLUMNAS_DEVOLUCION_EXTERNA = 'id,devolucion_id,ticket_id,venta_externa_id,catalogo_producto_id,codigo,nombre,cantidad,precio_unitario_original,subtotal_devuelto,usuario_id,created_at'
 
 // Antes de aplicar la migración de venta flexible las tablas externas no existen: se tratan como vacías.
 export const esTablaNoDisponible = (error: { code?: string } | null | undefined) => error?.code === 'PGRST205' || error?.code === '42P01'
